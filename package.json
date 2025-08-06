@@ -1,11 +1,11 @@
 {
-  "name": "ethora-mcp-server",
+  "name": "@ethora/mcp-server",
   "version": "1.0.0",
-  "description": "ethora-mcp-server",
+  "description": "@ethora/mcp-server",
   "main": "index.js",
   "type": "module",
   "bin": {
-    "ethora-mcp-server": "dist/index.js"
+    "@ethora/mcp-server": "dist/index.js"
   },
   "files": [
     "dist"

@@ -28,7 +28,7 @@ Before you begin, ensure you have the following:
   "mcpServers": {
     "ethora-mcp-server": {
       "command": "npx",
-      "args": ["-y", "ethora-mcp-server"]
+      "args": ["-y", "@ethora/mcp-server"]
     }
   }
 }
@@ -49,7 +49,7 @@ You should now see a green active status after the server successfully connects!
       "ethora-mcp-server": {
         "command": "npx",
         "args": [
-          "-y", "ethora-mcp-server"
+          "-y", "@ethora/mcp-server"
         ]
       }
     }
@@ -72,7 +72,7 @@ Ethora MCP is now ready to use in VS Code.
   "mcpServers": {
     "ethora-mcp-server": {
       "command": "npx",
-      "args": ["-y", "ethora-mcp-server"]
+      "args": ["-y", "@ethora/mcp-server"]
     }
   }
 }
@@ -83,19 +83,19 @@ Ethora MCP is now ready to use in VS Code.
 To install ethora-mcp-server in Windsurf IDE application, Cline should use NPX:
 
 ```bash
-npx -y ethora-mcp-server
+npx -y @ethora/mcp-server
 ```
 
 Your mcp_config.json file should be configured similar to:
 
-```
+```json
 {
     "mcpServers": {
         "ethora-mcp-server": {
             "command": "npx",
             "args": [
                 "-y",
-                "ethora-mcp-server"
+                "@ethora/mcp-server"
             ]
         }
     }
