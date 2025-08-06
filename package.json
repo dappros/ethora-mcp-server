@@ -4,6 +4,7 @@
   "description": "@ethora/mcp-server",
   "main": "index.js",
   "type": "module",
+  "access": "public",
   "bin": {
     "@ethora/mcp-server": "dist/index.js"
   },
