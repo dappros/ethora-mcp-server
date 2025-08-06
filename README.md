@@ -8,7 +8,7 @@ The Model Context Protocol (MCP) Server enables integration between MCP clients 
 - Register user
 - Create application
 - Delete application
-- Upldate application
+- Update application
 - List applications
 
 Before you begin, ensure you have the following:
