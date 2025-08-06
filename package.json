@@ -1,6 +1,6 @@
 {
   "name": "@ethora/mcp-server",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "@ethora/mcp-server",
   "main": "index.js",
   "type": "module",
