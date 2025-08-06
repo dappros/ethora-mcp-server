@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "esnext", // ESM output
+    "moduleResolution": "node",
+    "outDir": "dist",
+    "declaration": true,
+    "strict": true,
+    "noImplicitAny": false,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "lib": ["ES2022", "esnext.intl"]
+  },
+  "include": ["src/**/*"]
+}

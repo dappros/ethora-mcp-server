@@ -1,0 +1,46 @@
+{
+  "name": "ethora-mcp-server",
+  "version": "1.0.0",
+  "description": "ethora-mcp-server",
+  "main": "index.js",
+  "type": "module",
+  "bin": {
+    "ethora-mcp-server": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "start": "node ./dist/index.js",
+    "dev": "ts-node ./src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "watch": "tsc --watch",
+    "check": "tsc --noEmit --incremental",
+    "format": "prettier --write .",
+    "inspector": "npx @modelcontextprotocol/inspector node dist/index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dappros/ethora-mcp-server.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "bugs": {
+    "url": "https://github.com/dappros/ethora-mcp-server/issues"
+  },
+  "homepage": "https://github.com/dappros/ethora-mcp-server#readme",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.16.0",
+    "axios": "^1.11.0",
+    "express": "^5.1.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "@types/node": "^24.2.0"
+  }
+}
