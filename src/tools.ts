@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp"
 import { CallToolResult } from "@modelcontextprotocol/sdk/types"
 import z from "zod"
-import { appCreate, appCreateChat, appDelete, appDeleteChat, appGetDefaultRooms, appGetDefaultRoomsWithAppId, appList, appUpdate, userLogin, userRegistration, walletGetBalance } from "./apiClientDappros.js"
+import { appCreate, appCreateChat, appDelete, appDeleteChat, appGetDefaultRooms, appGetDefaultRoomsWithAppId, appList, appUpdate, userLogin, userRegistration, walletERC20Transfer, walletGetBalance } from "./apiClientDappros.js"
 
 function userLoginWithEmailTool(server: McpServer) {
     server.registerTool(
@@ -309,6 +309,33 @@ function walletGetBalanceTool(server: McpServer) {
     )
 }
 
+function walletERC20TransferTool(server: McpServer) {
+    server.registerTool(
+        'ethora-wallet-erc20-transfer',
+        {
+            description: 'Transfer ERC20 tokens to another wallet',
+            inputSchema: {
+                toWallet: z.string().describe("to address for transfer"),
+                amount: z.number().describe("amount for transfer"),
+            }
+        },
+        async function ({ toWallet, amount }) {
+            try {
+                let result = await walletERC20Transfer(toWallet, amount)
+                let toolRes: CallToolResult = {
+                    content: [{ type: "text", text: JSON.stringify(result.data) }]
+                }
+                return toolRes
+            } catch (error) {
+                let toolRes: CallToolResult = {
+                    content: [{ type: "text", text: "error: network error" }]
+                }
+                return toolRes
+            }
+        }
+    )
+}
+
 export function registerTools(server: McpServer) {
     userLoginWithEmailTool(server);
     userRegisterWithEmailTool(server);
@@ -321,4 +348,5 @@ export function registerTools(server: McpServer) {
     appDeleteChatTool(server);
     getDefaultRoomsWithAppIdTool(server);
     walletGetBalanceTool(server);
+    walletERC20TransferTool(server);
 }

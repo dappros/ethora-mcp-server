@@ -176,3 +176,15 @@ export function walletGetBalance() {
     `/wallets/balance`
   )
 }
+
+export function walletERC20Transfer(toWallet: string, amount: number) {
+  return httpClientDappros.post(
+    `/tokens/transfer`,
+    {
+      toWallet,
+      amount,
+      "tokenId": "ERC20",
+      "tokenName": "Dappros Platform Token"
+    }
+  )
+}
