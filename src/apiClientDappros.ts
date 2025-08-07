@@ -148,6 +148,12 @@ export function appGetDefaultRooms() {
   )
 }
 
+export function appGetDefaultRoomsWithAppId(appId: string) {
+  return httpClientDappros.get(
+    `/apps/get-default-rooms/app-id/${appId}`
+  )
+}
+
 export function appCreateChat(appId: string, title: string, pinned: boolean) {
   return httpClientDappros.post(
     `/apps/create-app-chat/${appId}`,
@@ -162,5 +168,11 @@ export function appDeleteChat(appId: string, chatJid: string) {
   return httpClientDappros.delete(
     `/apps/delete-app-chat/${appId}`,
     { data: { chatJid: chatJid } }
+  )
+}
+
+export function walletGetBalance() {
+  return httpClientDappros.get(
+    `/wallets/balance`
   )
 }

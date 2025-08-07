@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp"
 import { CallToolResult } from "@modelcontextprotocol/sdk/types"
 import z from "zod"
-import { appCreate, appCreateChat, appDelete, appDeleteChat, appGetDefaultRooms, appList, appUpdate, userLogin, userRegistration } from "./apiClientDappros.js"
+import { appCreate, appCreateChat, appDelete, appDeleteChat, appGetDefaultRooms, appGetDefaultRoomsWithAppId, appList, appUpdate, userLogin, userRegistration, walletGetBalance } from "./apiClientDappros.js"
 
 function userLoginWithEmailTool(server: McpServer) {
     server.registerTool(
@@ -205,6 +205,32 @@ function appGetDefaultRoomsTool(server: McpServer) {
     )
 }
 
+function getDefaultRoomsWithAppIdTool(server: McpServer) {
+    server.registerTool(
+        'ethora-app-get-default-rooms-with-app-id',
+        {
+            description: 'Get the default rooms for the application by appId. You should have read access to the application.',
+            inputSchema: {
+                appId: z.string().describe("appId for app"),
+            }
+        },
+        async function ({ appId }) {
+            try {
+                let result = await appGetDefaultRoomsWithAppId(appId)
+                let toolRes: CallToolResult = {
+                    content: [{ type: "text", text: JSON.stringify(result.data) }]
+                }
+                return toolRes
+            } catch (error) {
+                let toolRes: CallToolResult = {
+                    content: [{ type: "text", text: "error: network error" }]
+                }
+                return toolRes
+            }
+        }
+    )
+}
+
 function craeteAppChatTool(server: McpServer) {
     server.registerTool(
         'ethora-app-create-chat',
@@ -260,6 +286,29 @@ function appDeleteChatTool(server: McpServer) {
     )
 }
 
+function walletGetBalanceTool(server: McpServer) {  
+    server.registerTool(
+        'ethora-wallet-get-balance',
+        {
+            description: 'Retrieve the cryptocurrency wallet balance of the authenticated user'
+        },
+        async function () {
+            try {
+                let result = await walletGetBalance()
+                let toolRes: CallToolResult = {
+                    content: [{ type: "text", text: JSON.stringify(result.data) }]
+                }
+                return toolRes
+            } catch (error) {
+                let toolRes: CallToolResult = {
+                    content: [{ type: "text", text: "error: network error" }]
+                }
+                return toolRes
+            }
+        }
+    )
+}
+
 export function registerTools(server: McpServer) {
     userLoginWithEmailTool(server);
     userRegisterWithEmailTool(server);
@@ -270,4 +319,6 @@ export function registerTools(server: McpServer) {
     appGetDefaultRoomsTool(server);
     craeteAppChatTool(server);
     appDeleteChatTool(server);
+    getDefaultRoomsWithAppIdTool(server);
+    walletGetBalanceTool(server);
 }
