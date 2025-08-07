@@ -141,3 +141,26 @@ export function appUpdate(appId: string, changes: any) {
     changes
   )
 }
+
+export function appGetDefaultRooms() {
+  return httpClientDappros.get(
+    `/apps/get-default-rooms`
+  )
+}
+
+export function appCreateChat(appId: string, title: string, pinned: boolean) {
+  return httpClientDappros.post(
+    `/apps/create-app-chat/${appId}`,
+    {
+      title,
+      pinned
+    }
+  )
+}
+
+export function appDeleteChat(appId: string, chatJid: string) {
+  return httpClientDappros.delete(
+    `/apps/delete-app-chat/${appId}`,
+    { data: { chatJid: chatJid } }
+  )
+}

@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp"
 import { CallToolResult } from "@modelcontextprotocol/sdk/types"
 import z from "zod"
-import { appCreate, appDelete, appList, appUpdate, userLogin, userRegistration } from "./apiClientDappros.js"
+import { appCreate, appCreateChat, appDelete, appDeleteChat, appGetDefaultRooms, appList, appUpdate, userLogin, userRegistration } from "./apiClientDappros.js"
 
 function userLoginWithEmailTool(server: McpServer) {
     server.registerTool(
@@ -182,6 +182,84 @@ function appUpdateTool(server: McpServer) {
     )
 }
 
+function appGetDefaultRoomsTool(server: McpServer) {
+    server.registerTool(
+        'ethora-app-get-default-rooms',
+        {
+            description: 'Get the default rooms for Ethora application',
+        },
+        async function () {
+            try {
+                let result = await appGetDefaultRooms()
+                let toolRes: CallToolResult = {
+                    content: [{ type: "text", text: JSON.stringify(result.data) }]
+                }
+                return toolRes
+            } catch (error) {
+                let toolRes: CallToolResult = {
+                    content: [{ type: "text", text: "error: network error" }]
+                }
+                return toolRes
+            }
+        }
+    )
+}
+
+function craeteAppChatTool(server: McpServer) {
+    server.registerTool(
+        'ethora-app-create-chat',
+        {
+            description: 'Create a new chat for the logged-in user who has created the app.',
+            inputSchema: {
+                appId: z.string().describe("appId for app"),
+                title: z.string().describe("title for chat"),
+                pinned: z.boolean().describe("pinned for chat"),
+            }
+        },
+        async function ({ appId, title, pinned }) {
+            try {
+                let result = await appCreateChat(appId, title, pinned)
+                let toolRes: CallToolResult = {
+                    content: [{ type: "text", text: JSON.stringify(result.data) }]
+                }
+                return toolRes
+            } catch (error) {
+                let toolRes: CallToolResult = {
+                    content: [{ type: "text", text: "error: network error" }]
+                }
+                return toolRes
+            }
+        }
+    )
+}
+
+function appDeleteChatTool(server: McpServer) {
+    server.registerTool(
+        'ethora-app-delete-chat',
+        {
+            description: 'Delete a chat for the logged-in user who has created the app.',
+            inputSchema: {
+                appId: z.string().describe("appId for app"),
+                chatJid: z.string().describe("title for chat"),
+            }
+        },
+        async function ({ appId, chatJid }) {
+            try {
+                let result = await appDeleteChat(appId, chatJid)
+                let toolRes: CallToolResult = {
+                    content: [{ type: "text", text: JSON.stringify(result.data) }]
+                }
+                return toolRes
+            } catch (error) {
+                let toolRes: CallToolResult = {
+                    content: [{ type: "text", text: "error: network error" }]
+                }
+                return toolRes
+            }
+        }
+    )
+}
+
 export function registerTools(server: McpServer) {
     userLoginWithEmailTool(server);
     userRegisterWithEmailTool(server);
@@ -189,4 +267,7 @@ export function registerTools(server: McpServer) {
     appCreateTool(server);
     appDeleteTool(server);
     appUpdateTool(server);
+    appGetDefaultRoomsTool(server);
+    craeteAppChatTool(server);
+    appDeleteChatTool(server);
 }

@@ -14,14 +14,14 @@ registerTools(server);
 
 async function runServer() {
   try {
-    console.error("Attempting to start Graphlit MCP Server.");
+    console.error("Attempting to start Ethora MCP Server.");
 
     const transport = new StdioServerTransport();
     await server.connect(transport);
 
-    console.error("Successfully started Graphlit MCP Server.");
+    console.error("Successfully started Ethora MCP Server.");
   } catch (error) {
-    console.error("Failed to start Graphlit MCP Server.", error);
+    console.error("Failed to start Ethora MCP Server.", error);
 
     process.exit(1);
   }
