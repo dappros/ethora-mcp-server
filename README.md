@@ -10,6 +10,12 @@ The Model Context Protocol (MCP) Server enables integration between MCP clients 
 - Delete application
 - Update application
 - List applications
+- get-default-rooms
+- app-get-default-rooms-with-app-id
+- create-app-chat
+- delete-app-chat
+- get-wallet-balance
+- wallet-erc20-transfer
 
 Before you begin, ensure you have the following:
 
