@@ -4,6 +4,7 @@ The Model Context Protocol (MCP) Server enables integration between MCP clients 
 
 
 <img width="1670" height="995" alt="settings" src="https://github.com/user-attachments/assets/5a3e98da-5362-4ed2-9080-473510ad2837" />
+<img width="1691" height="1011" alt="login" src="https://github.com/user-attachments/assets/c70fc2d7-4686-4619-aaad-0ca966ac2912" />
 
 ## Tools
 
