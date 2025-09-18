@@ -110,4 +110,3 @@ Your mcp_config.json file should be configured similar to:
     }
 }
 ```
-<img width="1670" height="995" alt="settings" src="https://github.com/user-attachments/assets/d5597421-7e05-4b5d-8206-5d4a138a23c6" />
