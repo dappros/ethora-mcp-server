@@ -2,6 +2,9 @@
 ## Overview
 The Model Context Protocol (MCP) Server enables integration between MCP clients and the Ethora service.
 
+
+<img width="1670" height="995" alt="settings" src="https://github.com/user-attachments/assets/5a3e98da-5362-4ed2-9080-473510ad2837" />
+
 ## Tools
 
 - Login user
@@ -107,3 +110,4 @@ Your mcp_config.json file should be configured similar to:
     }
 }
 ```
+<img width="1670" height="995" alt="settings" src="https://github.com/user-attachments/assets/d5597421-7e05-4b5d-8206-5d4a138a23c6" />
