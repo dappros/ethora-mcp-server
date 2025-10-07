@@ -58,13 +58,7 @@ No global install is required.
 
 ## 🔐 Configuration (env vars)
 
-Set these as environment variables in your MCP client configuration (or OS):
-
-- `ETHORA_BASE_URL` – Base URL of your Ethora backend (e.g. `https://api.ethora.com`)
-- `ETHORA_API_KEY` – (Optional) Server/API key if your deployment requires it
-- `ETHORA_CLIENT_ID` / `ETHORA_CLIENT_SECRET` – (Optional) OAuth-style credentials if applicable
-
-> Names are provided as common patterns; use the variables your deployment actually expects. Keep secrets out of plaintext configs.
+The current implementation has no configuration through environment variables.
 
 ---
 
