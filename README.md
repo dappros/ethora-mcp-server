@@ -2,6 +2,10 @@
 ## Overview
 The Model Context Protocol (MCP) Server enables integration between MCP clients and the Ethora service.
 
+<a href="https://glama.ai/mcp/servers/@dappros/ethora-mcp-server">
+  <img width="380" height="200" src="https://glama.ai/mcp/servers/@dappros/ethora-mcp-server/badge" alt="Ethora Server MCP server" />
+</a>
+
 ## Tools
 
 - Login user
