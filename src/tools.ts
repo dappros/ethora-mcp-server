@@ -1228,6 +1228,147 @@ function b2bAppBootstrapAiTool(server: McpServer) {
     )
 }
 
+function generateChatComponentAppTsxTool(server: McpServer) {
+    server.registerTool(
+        "ethora-generate-chat-component-app-tsx",
+        {
+            description: "Generate a ready-to-paste React App.tsx snippet for @ethora/chat-component (no file writes).",
+            inputSchema: {
+                apiUrl: z.string().optional().describe("Ethora API base URL (example: https://api.ethoradev.com/v1)"),
+                appToken: z.string().optional().describe("Ethora appToken (JWT ...) - DO NOT hardcode in production apps"),
+                roomJid: z.string().optional().describe("Optional room JID to open directly"),
+            },
+        },
+        async function ({ apiUrl, appToken, roomJid }) {
+            const meta = getDefaultMeta("ethora-generate-chat-component-app-tsx")
+            try {
+                const snippet = [
+                    `import { Chat } from \"@ethora/chat-component\";`,
+                    `import \"./App.css\";`,
+                    ``,
+                    `export default function App() {`,
+                    `  return (`,
+                    `    <Chat`,
+                    `      config={{`,
+                    `        // Replace with your Ethora API base URL`,
+                    `        baseUrl: ${JSON.stringify(apiUrl || "https://api.ethoradev.com/v1")},`,
+                    `        // SECURITY: do not hardcode tokens in production. Prefer your own backend/session.`,
+                    `        appToken: ${JSON.stringify(appToken || "JWT <YOUR_APP_TOKEN_HERE>")},`,
+                    `      }}`,
+                    roomJid ? `      roomJID=${JSON.stringify(roomJid)}` : `      // roomJID=\"...\"`,
+                    `    />`,
+                    `  );`,
+                    `}`,
+                    ``,
+                ].join("\n")
+                return asToolResult(ok({ filename: "App.tsx", snippet }, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
+function generateEnvExamplesTool(server: McpServer) {
+    server.registerTool(
+        "ethora-generate-env-examples",
+        {
+            description: "Generate .env.example templates for frontend, backend SDK integration, and MCP usage (no file writes).",
+            inputSchema: {
+                target: z.enum(["frontend-chat-component", "backend-sdk", "mcp"]).optional(),
+            },
+        },
+        async function ({ target }) {
+            const meta = getDefaultMeta("ethora-generate-env-examples")
+            try {
+                const templates: any = {
+                    "frontend-chat-component": [
+                        `# @ethora/chat-component (Vite example)`,
+                        `# Use VITE_ vars in Vite projects`,
+                        `VITE_APP_API_URL=https://api.ethoradev.com/v1`,
+                        `VITE_APP_DOMAIN_NAME=ethoradev.com`,
+                        `VITE_APP_XMPP_BASEDOMAIN=xmpp.ethoradev.com`,
+                        ``,
+                        `# SECURITY NOTE: do NOT hardcode appToken/user tokens in frontend source for production.`,
+                        `# Prefer your backend issuing short-lived credentials or using your own session.`,
+                        ``,
+                    ].join("\n"),
+                    "backend-sdk": [
+                        `# @ethora/sdk-backend integration`,
+                        `ETHORA_CHAT_API_URL=https://api.ethoradev.com`,
+                        `ETHORA_CHAT_APP_ID=<APP_ID>`,
+                        `ETHORA_CHAT_APP_SECRET=<APP_SECRET>`,
+                        `# Optional: bot JID for some flows`,
+                        `# ETHORA_CHAT_BOT_JID=<bot_jid@xmpp.domain>`,
+                        ``,
+                    ].join("\n"),
+                    "mcp": [
+                        `# @ethora/mcp-server`,
+                        `ETHORA_API_URL=https://api.ethoradev.com/v1`,
+                        `# Needed for login/register tools`,
+                        `ETHORA_APP_JWT=JWT <APP_JWT_FOR_LOGIN_REGISTER>`,
+                        `# Needed for partner automation (x-custom-token)`,
+                        `ETHORA_B2B_TOKEN=JWT <B2B_SERVER_TOKEN>`,
+                        ``,
+                    ].join("\n"),
+                }
+
+                if (target) {
+                    return asToolResult(ok({ target, template: templates[target] }, meta))
+                }
+                return asToolResult(ok({ templates }, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
+function generateB2BBootstrapRunbookTool(server: McpServer) {
+    server.registerTool(
+        "ethora-generate-b2b-bootstrap-runbook",
+        {
+            description: "Generate a minimal runbook (script-like steps) that calls MCP tools in the right order for B2B bootstrap.",
+            inputSchema: {
+                apiUrl: z.string().optional(),
+                displayName: z.string().optional(),
+                crawlUrl: z.string().optional(),
+            },
+        },
+        async function ({ apiUrl, displayName, crawlUrl }) {
+            const meta = getDefaultMeta("ethora-generate-b2b-bootstrap-runbook")
+            try {
+                const runbook = [
+                    `# B2B bootstrap runbook (MCP tool call order)`,
+                    ``,
+                    `## 1) Configure`,
+                    `Call: ethora-configure`,
+                    `Payload: ${JSON.stringify({ apiUrl: apiUrl || "https://api.ethoradev.com/v1", b2bToken: "JWT <B2B_SERVER_TOKEN>" }, null, 2)}`,
+                    ``,
+                    `## 2) Switch to B2B auth`,
+                    `Call: ethora-auth-use-b2b`,
+                    `Payload: {}`,
+                    ``,
+                    `## 3) Bootstrap app + AI`,
+                    `Call: ethora-b2b-app-bootstrap-ai`,
+                    `Payload: ${JSON.stringify({ displayName: displayName || "Acme AI Demo", crawlUrl: crawlUrl || "https://example.com", enableBot: true }, null, 2)}`,
+                    ``,
+                    `## 4) Optional: tune bot`,
+                    `Call: ethora-auth-use-app`,
+                    `Payload: {}`,
+                    ``,
+                    `Call: ethora-bot-update-v2`,
+                    `Payload: ${JSON.stringify({ trigger: "/bot", prompt: "You are a helpful assistant.", greetingMessage: "Hello! Ask me anything." }, null, 2)}`,
+                    ``,
+                ].join("\n")
+                return asToolResult(ok({ runbook }, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
 function sourcesSiteCrawlV2AppTool(server: McpServer) {
     server.registerTool(
         "ethora-sources-site-crawl-v2",
@@ -1414,4 +1555,7 @@ export function registerTools(server: McpServer) {
     botDisableV2Tool(server);
     b2bAliases(server);
     b2bAppBootstrapAiTool(server);
+    generateChatComponentAppTsxTool(server);
+    generateEnvExamplesTool(server);
+    generateB2BBootstrapRunbookTool(server);
 }

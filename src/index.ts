@@ -2,6 +2,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { registerTools } from "./tools.js";
+import { registerPromptsAndResources } from "./prompts.js";
 
 export const server = new McpServer(
   {
@@ -11,6 +12,7 @@ export const server = new McpServer(
 );
 
 registerTools(server);
+registerPromptsAndResources(server);
 
 async function runServer() {
   try {

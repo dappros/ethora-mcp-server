@@ -11,6 +11,29 @@ Use it from **Cursor**, **VS Code MCP**, **Claude Desktop**, or **Windsurf/Cline
 
 ## ✨ What you get
 
+### Prompts & Resources (P2: dev-facing docs)
+
+- **Resources** (loadable docs into context)
+  - `ethora://docs/auth-map` — appJwt vs appToken vs b2bToken
+  - `ethora://docs/chat-component/quickstart` — Vite/Next quickstart + replacing demo tokens
+  - `ethora://docs/sdk-backend/quickstart` — backend integration quickstart
+  - `ethora://docs/recipes` — common tool sequences (broadcast/sources/files/bot)
+- **Prompts**
+  - `ethora-auth-map`
+  - `ethora-vite-quickstart`
+  - `ethora-nextjs-quickstart`
+  - `ethora-backend-sdk-quickstart`
+  - `ethora-recipes`
+
+### Generators (no shell, no file writes)
+
+- `ethora-generate-chat-component-app-tsx` — ready-to-paste `App.tsx` snippet for `@ethora/chat-component`
+- `ethora-generate-env-examples` — `.env.example` templates for:
+  - frontend chat component
+  - backend SDK integration
+  - MCP usage (`ETHORA_API_URL`, `ETHORA_APP_JWT`, `ETHORA_B2B_TOKEN`)
+- `ethora-generate-b2b-bootstrap-runbook` — minimal “call these MCP tools in order” runbook for B2B bootstrap
+
 - **Session / Config**
   - `ethora-configure` — set API URL + App JWT (in-memory for this MCP session)
   - `ethora-status` — show configured API URL + whether auth tokens are present
