@@ -149,6 +149,19 @@ You can provide these either:
 
 ---
 
+## 🧱 Standard response envelope (tools)
+
+All tools return JSON in a consistent envelope:
+
+- Success: `{ ok: true, ts, meta, data }`
+- Error: `{ ok: false, ts, meta, error }`, where `error` includes:
+  - `code`: stable string (prefer API `code`, otherwise inferred)
+  - `httpStatus`: HTTP status when the failure came from an API call
+  - `requestId`: request/correlation id if returned by API
+  - `hint`: 1-line “what to do next”
+
+---
+
 ## 🚀 Using with MCP Clients
 
 ### Cursor
