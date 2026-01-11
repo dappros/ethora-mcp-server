@@ -34,6 +34,8 @@ Use it from **Cursor**, **VS Code MCP**, **Claude Desktop**, or **Windsurf/Cline
   - MCP usage (`ETHORA_API_URL`, `ETHORA_APP_JWT`, `ETHORA_B2B_TOKEN`)
 - `ethora-generate-b2b-bootstrap-runbook` — minimal “call these MCP tools in order” runbook for B2B bootstrap
 
+Tip: to list runnable recipes without calling `ethora-help`, call `ethora-run-recipe` with `goal: "auto"` and omit `recipeId`.
+
 - **Session / Config**
   - `ethora-configure` — set API URL + App JWT (in-memory for this MCP session)
   - `ethora-status` — show configured API URL + whether auth tokens are present

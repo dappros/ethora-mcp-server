@@ -517,7 +517,7 @@ function runRecipeTool(server: McpServer) {
         {
             description: "Execute a built-in ethora-help recipe by id (sequential steps, no shell, no file writes).",
             inputSchema: {
-                recipeId: z.string().min(1),
+                recipeId: z.string().min(1).optional().describe("Recipe id. If omitted, lists runnable recipes for the selected goal."),
                 goal: z.enum(["auto", "b2b-bootstrap-ai", "broadcast", "sources-ingest", "files-upload", "bot-manage", "user-login"]).optional()
                     .describe("Optional goal scope to look up recipes; defaults to auto."),
                 vars: z.record(z.any()).optional().describe("Variables to substitute (appId, appToken, b2bToken, appJwt, email, password, apiUrl, etc)."),
@@ -536,12 +536,15 @@ function runRecipeTool(server: McpServer) {
                     // Minimal subset of recipes: these IDs match ethora-help.
                     const out: any = { recipes: [] as any[] }
                     const apiUrl = String(state.apiUrl || "https://api.ethoradev.com/v1")
-                    if (effectiveGoal === "b2b-bootstrap-ai") {
+                    const includeAll = effectiveGoal === "auto"
+
+                    if (includeAll || effectiveGoal === "b2b-bootstrap-ai") {
                         out.recipes.push(
                             {
                                 id: "b2b-bootstrap-ai",
                                 title: "B2B bootstrap: create app → ingest → enable bot",
                                 description: "Best for partner automation and repeatable provisioning.",
+                                requiredVars: ["b2bToken"],
                                 steps: [
                                     { tool: "ethora-configure", args: { apiUrl, b2bToken: "<B2B_TOKEN>" } },
                                     { tool: "ethora-auth-use-b2b" },
@@ -552,6 +555,7 @@ function runRecipeTool(server: McpServer) {
                                 id: "b2b-create-app-only",
                                 title: "B2B: create app only",
                                 description: "Create an app via B2B token (no sources/bot).",
+                                requiredVars: ["b2bToken"],
                                 steps: [
                                     { tool: "ethora-configure", args: { apiUrl, b2bToken: "<B2B_TOKEN>" } },
                                     { tool: "ethora-auth-use-b2b" },
@@ -560,11 +564,12 @@ function runRecipeTool(server: McpServer) {
                             }
                         )
                     }
-                    if (effectiveGoal === "broadcast") {
+                    if (includeAll || effectiveGoal === "broadcast") {
                         out.recipes.push({
                             id: "broadcast-v2",
                             title: "Broadcast to chat rooms (v2 job)",
                             description: "Select app + appToken, switch to app auth, enqueue broadcast, then poll for completion.",
+                            requiredVars: ["appId", "appToken"],
                             steps: [
                                 { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: "<APP_TOKEN>" } },
                                 { tool: "ethora-auth-use-app" },
@@ -573,12 +578,13 @@ function runRecipeTool(server: McpServer) {
                             ],
                         })
                     }
-                    if (effectiveGoal === "sources-ingest") {
+                    if (includeAll || effectiveGoal === "sources-ingest") {
                         out.recipes.push(
                             {
                                 id: "sources-site-crawl-v2",
                                 title: "Ingest website (Sources v2 crawl)",
                                 description: "Crawl a website for RAG ingestion using app-token auth.",
+                                requiredVars: ["appId", "appToken"],
                                 steps: [
                                     { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: "<APP_TOKEN>" } },
                                     { tool: "ethora-auth-use-app" },
@@ -591,6 +597,7 @@ function runRecipeTool(server: McpServer) {
                                 id: "sources-docs-upload-v2",
                                 title: "Upload docs for ingestion (Sources v2 docs)",
                                 description: "Upload documents for parsing + embeddings using app-token auth.",
+                                requiredVars: ["appId", "appToken", "base64Content"],
                                 steps: [
                                     { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: "<APP_TOKEN>" } },
                                     { tool: "ethora-auth-use-app" },
@@ -599,11 +606,12 @@ function runRecipeTool(server: McpServer) {
                             }
                         )
                     }
-                    if (effectiveGoal === "bot-manage") {
+                    if (includeAll || effectiveGoal === "bot-manage") {
                         out.recipes.push({
                             id: "bot-enable-and-tune",
                             title: "Enable bot + tune settings (v2)",
                             description: "Enable a bot for an app and update its prompt/greeting.",
+                            requiredVars: ["appId", "appToken"],
                             steps: [
                                 { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: "<APP_TOKEN>" } },
                                 { tool: "ethora-auth-use-app" },
@@ -612,12 +620,13 @@ function runRecipeTool(server: McpServer) {
                             ],
                         })
                     }
-                    if (effectiveGoal === "user-login" || effectiveGoal === "files-upload") {
+                    if (includeAll || effectiveGoal === "user-login" || effectiveGoal === "files-upload") {
                         out.recipes.push(
                             {
                                 id: "user-login",
                                 title: "User login (for user-auth tools like files)",
                                 description: "Configure appJwt (if needed), switch to user auth, and login.",
+                                requiredVars: ["appJwt", "email", "password"],
                                 steps: [
                                     { tool: "ethora-configure", args: { apiUrl, appJwt: "<APP_JWT>" } },
                                     { tool: "ethora-auth-use-user" },
@@ -628,6 +637,7 @@ function runRecipeTool(server: McpServer) {
                                 id: "files-upload-v2",
                                 title: "Upload files (v2)",
                                 description: "Login a user, then call the v2 files upload tool.",
+                                requiredVars: ["email", "password", "base64Content"],
                                 steps: [
                                     { tool: "ethora-auth-use-user" },
                                     { tool: "ethora-user-login", args: { email: "<EMAIL>", password: "<PASSWORD>" } },
@@ -639,9 +649,14 @@ function runRecipeTool(server: McpServer) {
                     return out
                 })()
 
+                // List available runnable recipes when recipeId is omitted.
+                if (!recipeId) {
+                    return asToolResult(ok({ goal: effectiveGoal, recipes: helpRes?.recipes || [] }, meta))
+                }
+
                 const recipe = (helpRes?.recipes || []).find((r: any) => r.id === String(recipeId))
                 if (!recipe) {
-                    return asToolResult(fail(new Error(`Unknown recipeId '${recipeId}' for goal '${effectiveGoal}'. Try ethora-help first.`), meta))
+                    return asToolResult(fail(new Error(`Unknown recipeId '${recipeId}' for goal '${effectiveGoal}'. Call ethora-run-recipe without recipeId to list available recipes.`), meta))
                 }
 
                 const v = (vars && typeof vars === "object") ? (vars as any) : {}
