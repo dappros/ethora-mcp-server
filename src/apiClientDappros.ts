@@ -309,6 +309,31 @@ export function sourcesDocsDelete(appId: string, docId: string) {
   return httpClientDappros.delete(`/sources/docs/${appId}/${docId}`)
 }
 
+// sources (v2 app-token endpoints)
+export function sourcesSiteCrawlV2(payload: { url: string; followLink?: boolean }) {
+  return httpClientDappros.post(`/v2/sources/site-crawl`, payload)
+}
+
+export function sourcesSiteReindexV2(payload: { urlId: string }) {
+  return httpClientDappros.post(`/v2/sources/site-crawl-reindex`, payload)
+}
+
+export function sourcesSiteDeleteUrlV2Single(payload: { url: string }) {
+  return httpClientDappros.delete(`/v2/sources/site-crawl/url`, { data: payload })
+}
+
+export function sourcesSiteDeleteUrlV2Batch(payload: { urls: string[] }) {
+  return httpClientDappros.delete(`/v2/sources/site-crawl-v2/url`, { data: payload })
+}
+
+export function sourcesDocsUploadV2(formData: any, headers?: any) {
+  return httpClientDappros.post(`/v2/sources/docs`, formData, { headers })
+}
+
+export function sourcesDocsDeleteV2(docId: string) {
+  return httpClientDappros.delete(`/v2/sources/docs/${docId}`)
+}
+
 // files v2 (user auth)
 export function filesUploadV2(formData: any, headers?: any) {
   return httpClientDappros.post(`/v2/files`, formData, { headers })

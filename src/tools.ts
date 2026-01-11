@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp"
 import { CallToolResult } from "@modelcontextprotocol/sdk/types"
 import z from "zod"
-import { appCreate, appCreateChat, appDelete, appDeleteChat, appGetDefaultRooms, appGetDefaultRoomsWithAppId, appList, appUpdate, chatsBroadcastJobV2, chatsBroadcastV2, configureClient, filesDeleteV2, filesGetV2, filesUploadV2, getClientState, selectApp, setAuthMode, sourcesDocsDelete, sourcesDocsUpload, sourcesSiteCrawl, sourcesSiteDeleteUrl, sourcesSiteDeleteUrlV2, sourcesSiteReindex, userLogin, userRegistration, walletERC20Transfer, walletGetBalance } from "./apiClientDappros.js"
+import { appCreate, appCreateChat, appDelete, appDeleteChat, appGetDefaultRooms, appGetDefaultRoomsWithAppId, appList, appUpdate, chatsBroadcastJobV2, chatsBroadcastV2, configureClient, filesDeleteV2, filesGetV2, filesUploadV2, getClientState, selectApp, setAuthMode, sourcesDocsDelete, sourcesDocsDeleteV2, sourcesDocsUpload, sourcesDocsUploadV2, sourcesSiteCrawl, sourcesSiteCrawlV2, sourcesSiteDeleteUrl, sourcesSiteDeleteUrlV2, sourcesSiteDeleteUrlV2Batch, sourcesSiteDeleteUrlV2Single, sourcesSiteReindex, sourcesSiteReindexV2, userLogin, userRegistration, walletERC20Transfer, walletGetBalance } from "./apiClientDappros.js"
 
 function errorToText(error: unknown) {
     // axios-style errors
@@ -766,6 +766,146 @@ function walletERC20TransferTool(server: McpServer) {
     )
 }
 
+function sourcesSiteCrawlV2AppTool(server: McpServer) {
+    server.registerTool(
+        "ethora-sources-site-crawl-v2",
+        {
+            description: "Crawl a site URL via /v2/sources/site-crawl (app-token auth; no user credentials).",
+            inputSchema: {
+                url: z.string().min(1),
+                followLink: z.boolean().optional(),
+            },
+        },
+        async function ({ url, followLink }) {
+            try {
+                ensureAppAuthForTool()
+                const res = await sourcesSiteCrawlV2({ url, followLink })
+                return { content: [{ type: "text", text: JSON.stringify(res.data) }] }
+            } catch (error) {
+                return { content: [{ type: "text", text: errorToText(error) }] }
+            }
+        }
+    )
+}
+
+function sourcesSiteReindexV2AppTool(server: McpServer) {
+    server.registerTool(
+        "ethora-sources-site-reindex-v2",
+        {
+            description: "Reindex a crawled URL by urlId via /v2/sources/site-crawl-reindex (app-token auth).",
+            inputSchema: {
+                urlId: z.string().min(1),
+            },
+        },
+        async function ({ urlId }) {
+            try {
+                ensureAppAuthForTool()
+                const res = await sourcesSiteReindexV2({ urlId })
+                return { content: [{ type: "text", text: JSON.stringify(res.data) }] }
+            } catch (error) {
+                return { content: [{ type: "text", text: errorToText(error) }] }
+            }
+        }
+    )
+}
+
+function sourcesSiteDeleteUrlV2AppTool(server: McpServer) {
+    server.registerTool(
+        "ethora-sources-site-delete-url-v2",
+        {
+            description: "Delete a crawled site URL via /v2/sources/site-crawl/url (app-token auth).",
+            inputSchema: {
+                url: z.string().min(1),
+            },
+        },
+        async function ({ url }) {
+            try {
+                ensureAppAuthForTool()
+                const res = await sourcesSiteDeleteUrlV2Single({ url })
+                return { content: [{ type: "text", text: JSON.stringify(res.data) }] }
+            } catch (error) {
+                return { content: [{ type: "text", text: errorToText(error) }] }
+            }
+        }
+    )
+}
+
+function sourcesSiteDeleteUrlV2BatchAppTool(server: McpServer) {
+    server.registerTool(
+        "ethora-sources-site-delete-url-v2-batch",
+        {
+            description: "Batch delete crawled URLs via /v2/sources/site-crawl-v2/url (app-token auth).",
+            inputSchema: {
+                urls: z.array(z.string().min(1)).min(1).max(100),
+            },
+        },
+        async function ({ urls }) {
+            try {
+                ensureAppAuthForTool()
+                const res = await sourcesSiteDeleteUrlV2Batch({ urls })
+                return { content: [{ type: "text", text: JSON.stringify(res.data) }] }
+            } catch (error) {
+                return { content: [{ type: "text", text: errorToText(error) }] }
+            }
+        }
+    )
+}
+
+function sourcesDocsUploadV2AppTool(server: McpServer) {
+    server.registerTool(
+        "ethora-sources-docs-upload-v2",
+        {
+            description: "Upload docs for ingestion via /v2/sources/docs (app-token auth). Input is base64.",
+            inputSchema: {
+                files: z.array(z.object({
+                    name: z.string().min(1),
+                    mimeType: z.string().min(1),
+                    base64: z.string().min(1),
+                })).min(1).max(5),
+            },
+        },
+        async function ({ files }) {
+            try {
+                ensureAppAuthForTool()
+                const form = new FormData()
+                for (const f of files) {
+                    const buf = normalizeBase64ToBuffer(f.base64)
+                    if (buf.length > 50 * 1024 * 1024) {
+                        throw new Error(`File '${f.name}' exceeds 50MB limit`)
+                    }
+                    const blob = new Blob([buf], { type: f.mimeType })
+                    form.append("files", blob, f.name)
+                }
+                const res = await sourcesDocsUploadV2(form, { "Content-Type": "multipart/form-data" })
+                return { content: [{ type: "text", text: JSON.stringify(res.data) }] }
+            } catch (error) {
+                return { content: [{ type: "text", text: errorToText(error) }] }
+            }
+        }
+    )
+}
+
+function sourcesDocsDeleteV2AppTool(server: McpServer) {
+    server.registerTool(
+        "ethora-sources-docs-delete-v2",
+        {
+            description: "Delete an ingested doc by docId via /v2/sources/docs/:docId (app-token auth).",
+            inputSchema: {
+                docId: z.string().min(1),
+            },
+        },
+        async function ({ docId }) {
+            try {
+                ensureAppAuthForTool()
+                const res = await sourcesDocsDeleteV2(docId)
+                return { content: [{ type: "text", text: JSON.stringify(res.data) }] }
+            } catch (error) {
+                return { content: [{ type: "text", text: errorToText(error) }] }
+            }
+        }
+    )
+}
+
 export function registerTools(server: McpServer) {
     configureTool(server);
     statusTool(server);
@@ -783,6 +923,12 @@ export function registerTools(server: McpServer) {
     sourcesSiteDeleteUrlV2Tool(server);
     sourcesDocsUploadTool(server);
     sourcesDocsDeleteTool(server);
+    sourcesSiteCrawlV2AppTool(server);
+    sourcesSiteReindexV2AppTool(server);
+    sourcesSiteDeleteUrlV2AppTool(server);
+    sourcesSiteDeleteUrlV2BatchAppTool(server);
+    sourcesDocsUploadV2AppTool(server);
+    sourcesDocsDeleteV2AppTool(server);
     userLoginWithEmailTool(server);
     userRegisterWithEmailTool(server);
     appListTool(server);

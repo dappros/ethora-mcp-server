@@ -34,6 +34,12 @@ Use it from **Cursor**, **VS Code MCP**, **Claude Desktop**, or **Windsurf/Cline
   - `ethora-sources-site-delete-url-v2` — batch delete URLs (requires user auth)
   - `ethora-sources-docs-upload` — upload docs for ingestion (requires user auth)
   - `ethora-sources-docs-delete` — delete ingested doc by id (requires user auth)
+  - `ethora-sources-site-crawl-v2` — crawl a URL (requires app-token auth; no user creds)
+  - `ethora-sources-site-reindex-v2` — reindex URL by urlId (requires app-token auth)
+  - `ethora-sources-site-delete-url-v2` — delete by URL (requires app-token auth)
+  - `ethora-sources-site-delete-url-v2-batch` — batch delete (requires app-token auth)
+  - `ethora-sources-docs-upload-v2` — upload docs (requires app-token auth)
+  - `ethora-sources-docs-delete-v2` — delete doc by id (requires app-token auth)
 
 - **Auth & Accounts**
   - `ethora-user-login` — login user (email + password)
