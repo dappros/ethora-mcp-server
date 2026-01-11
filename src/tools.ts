@@ -135,6 +135,10 @@ function helpTool(server: McpServer) {
                 type NextCall = { tool: string; args?: any; why: string }
                 const nextCalls: NextCall[] = []
 
+                type RecipeStep = { tool: string; args?: any }
+                type Recipe = { id: string; title: string; description: string; steps: RecipeStep[] }
+                const recipes: Recipe[] = []
+
                 // Always-start recommendations
                 if (!checks.hasApiUrl) {
                     nextCalls.push({
@@ -165,6 +169,28 @@ function helpTool(server: McpServer) {
                             why: "Authenticate a user session token for user-auth endpoints (e.g. files).",
                         })
                     }
+
+                    recipes.push({
+                        id: "user-login",
+                        title: "User login (for user-auth tools like files)",
+                        description: "Configure appJwt (if needed), switch to user auth, and login.",
+                        steps: [
+                            { tool: "ethora-configure", args: { apiUrl: String(state.apiUrl || "https://api.ethoradev.com/v1"), appJwt: "JWT <APP_JWT_FOR_LOGIN_REGISTER>" } },
+                            { tool: "ethora-auth-use-user" },
+                            { tool: "ethora-user-login", args: { email: "user@example.com", password: "<password>" } },
+                        ],
+                    })
+
+                    recipes.push({
+                        id: "files-upload-v2",
+                        title: "Upload files (v2)",
+                        description: "Login a user, then call the v2 files upload tool.",
+                        steps: [
+                            { tool: "ethora-auth-use-user" },
+                            { tool: "ethora-user-login", args: { email: "user@example.com", password: "<password>" } },
+                            { tool: "ethora-files-upload-v2", args: { files: [{ name: "example.txt", mimeType: "text/plain", base64: "<BASE64_CONTENT>" }] } },
+                        ],
+                    })
                 }
 
                 // Goal: B2B bootstrap AI
@@ -184,6 +210,28 @@ function helpTool(server: McpServer) {
                         args: { displayName: "Acme AI Demo", crawlUrl: "https://example.com", enableBot: true },
                         why: "Create app → ingest sources → enable bot in one flow.",
                     })
+
+                    recipes.push({
+                        id: "b2b-bootstrap-ai",
+                        title: "B2B bootstrap: create app → ingest → enable bot",
+                        description: "Best for partner automation and repeatable provisioning.",
+                        steps: [
+                            { tool: "ethora-configure", args: { apiUrl: String(state.apiUrl || "https://api.ethoradev.com/v1"), b2bToken: "JWT <B2B_SERVER_TOKEN>" } },
+                            { tool: "ethora-auth-use-b2b" },
+                            { tool: "ethora-b2b-app-bootstrap-ai", args: { displayName: "Acme AI Demo", crawlUrl: "https://example.com", enableBot: true } },
+                        ],
+                    })
+
+                    recipes.push({
+                        id: "b2b-create-app-only",
+                        title: "B2B: create app only",
+                        description: "Create an app via B2B token (no sources/bot).",
+                        steps: [
+                            { tool: "ethora-configure", args: { apiUrl: String(state.apiUrl || "https://api.ethoradev.com/v1"), b2bToken: "JWT <B2B_SERVER_TOKEN>" } },
+                            { tool: "ethora-auth-use-b2b" },
+                            { tool: "ethora-b2b-app-create", args: { displayName: "My App" } },
+                        ],
+                    })
                 }
 
                 // Goal: app-token operations (broadcast/sources/bot)
@@ -197,6 +245,58 @@ function helpTool(server: McpServer) {
                     }
                     if (state.authMode !== "app") {
                         nextCalls.push({ tool: "ethora-auth-use-app", why: "Switch to app-token auth mode for B2B app operations." })
+                    }
+
+                    if (effectiveGoal === "broadcast") {
+                        recipes.push({
+                            id: "broadcast-v2",
+                            title: "Broadcast to chat rooms (v2 job)",
+                            description: "Select app + appToken, switch to app auth, enqueue broadcast, then poll for completion.",
+                            steps: [
+                                { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: "JWT <APP_TOKEN>" } },
+                                { tool: "ethora-auth-use-app" },
+                                { tool: "ethora-chats-broadcast-v2", args: { text: "Hello from MCP!", allRooms: true } },
+                                { tool: "ethora-wait-broadcast-job-v2", args: { jobId: "<JOB_ID_FROM_PREVIOUS_STEP>", timeoutMs: 60000, intervalMs: 2000 } },
+                            ],
+                        })
+                    }
+
+                    if (effectiveGoal === "sources-ingest") {
+                        recipes.push({
+                            id: "sources-site-crawl-v2",
+                            title: "Ingest website (Sources v2 crawl)",
+                            description: "Crawl a website for RAG ingestion using app-token auth.",
+                            steps: [
+                                { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: "JWT <APP_TOKEN>" } },
+                                { tool: "ethora-auth-use-app" },
+                                { tool: "ethora-sources-site-crawl-v2", args: { url: "https://example.com", followLink: true } },
+                            ],
+                        })
+
+                        recipes.push({
+                            id: "sources-docs-upload-v2",
+                            title: "Upload docs for ingestion (Sources v2 docs)",
+                            description: "Upload documents for parsing + embeddings using app-token auth.",
+                            steps: [
+                                { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: "JWT <APP_TOKEN>" } },
+                                { tool: "ethora-auth-use-app" },
+                                { tool: "ethora-sources-docs-upload-v2", args: { files: [{ name: "doc.pdf", mimeType: "application/pdf", base64: "<BASE64_CONTENT>" }] } },
+                            ],
+                        })
+                    }
+
+                    if (effectiveGoal === "bot-manage") {
+                        recipes.push({
+                            id: "bot-enable-and-tune",
+                            title: "Enable bot + tune settings (v2)",
+                            description: "Enable a bot for an app and update its prompt/greeting.",
+                            steps: [
+                                { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: "JWT <APP_TOKEN>" } },
+                                { tool: "ethora-auth-use-app" },
+                                { tool: "ethora-bot-enable-v2", args: {} },
+                                { tool: "ethora-bot-update-v2", args: { trigger: "/bot", prompt: "You are a helpful assistant.", greetingMessage: "Hello! Ask me anything." } },
+                            ],
+                        })
                     }
                 }
 
@@ -231,6 +331,20 @@ function helpTool(server: McpServer) {
                     } else {
                         nextCalls.push({ tool: "ethora-doctor", why: "Run connectivity checks and get fix suggestions." })
                     }
+
+                    // Auto: include a couple of broadly useful recipes.
+                    recipes.push({
+                        id: "auto-auth-map",
+                        title: "Auth map (quick reference)",
+                        description: "Load the auth map into context (appJwt vs appToken vs b2bToken).",
+                        steps: [{ tool: "ethora-auth-map" }],
+                    })
+                    recipes.push({
+                        id: "auto-generate-env",
+                        title: "Generate .env templates",
+                        description: "Get copy/paste .env.example templates for MCP and SDK usage.",
+                        steps: [{ tool: "ethora-generate-env-examples", args: {} }],
+                    })
                 }
 
                 return asToolResult(ok({
@@ -238,6 +352,7 @@ function helpTool(server: McpServer) {
                     currentAuthMode: state.authMode,
                     checks,
                     recommendedNextCalls: nextCalls,
+                    recipes,
                     notes: [
                         "Tip: use goal='broadcast' or goal='b2b-bootstrap-ai' to tailor recommendations.",
                         "Dangerous tools are deny-by-default; see ETHORA_MCP_ENABLE_DANGEROUS_TOOLS in README.",
