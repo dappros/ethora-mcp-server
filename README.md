@@ -229,6 +229,45 @@ It will:
 - index sources via `/v2/sources/*` (app-token auth)
 - enable bot (best-effort)
 
+### Example payloads
+
+Minimal (create app only):
+
+```json
+{
+  "displayName": "Acme AI Demo",
+  "setAsCurrent": true
+}
+```
+
+Create app + crawl a website + enable bot:
+
+```json
+{
+  "displayName": "Acme AI Demo",
+  "crawlUrl": "https://example.com",
+  "followLink": true,
+  "enableBot": true,
+  "botTrigger": "/bot"
+}
+```
+
+Create app + upload docs + enable bot:
+
+```json
+{
+  "displayName": "Acme AI Demo",
+  "docs": [
+    {
+      "name": "faq.pdf",
+      "mimeType": "application/pdf",
+      "base64": "BASE64_PDF_CONTENT_HERE"
+    }
+  ],
+  "enableBot": true
+}
+```
+
 ---
 
 ## 🛡️ Security notes
