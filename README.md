@@ -11,25 +11,29 @@ Use it from **Cursor**, **VS Code MCP**, **Claude Desktop**, or **Windsurf/Cline
 
 ## ✨ What you get
 
+- **Session / Config**
+  - `ethora-configure` — set API URL + App JWT (in-memory for this MCP session)
+  - `ethora-status` — show configured API URL + whether auth tokens are present
+
 - **Auth & Accounts**
-  - `login` — login user
-  - `register` — register user
+  - `ethora-user-login` — login user (email + password)
+  - `ethora-user-register` — register user (email + first/last name)
 
 - **Applications**
-  - `create-application` — create app
-  - `update-application` — update app
-  - `delete-application` — delete app
-  - `list-applications` — list apps
+  - `ethora-app-create` — create app
+  - `ethora-app-update` — update app
+  - `ethora-app-delete` — delete app
+  - `ethora-app-list` — list apps
 
 - **Chat & Rooms**
-  - `get-default-rooms` — list default rooms
-  - `app-get-default-rooms-with-app-id` — rooms for a given app
-  - `create-app-chat` — create chat for app
-  - `delete-app-chat` — delete chat
+  - `ethora-app-get-default-rooms` — list default rooms
+  - `ethora-app-get-default-rooms-with-app-id` — rooms for a given app
+  - `ethora-app-create-chat` — create chat for app
+  - `ethora-app-delete-chat` — delete chat
 
 - **Wallet**
-  - `get-wallet-balance` — get balance
-  - `wallet-erc20-transfer` — send ERC-20 tokens
+  - `ethora-wallet-get-balance` — get balance
+  - `ethora-wallet-erc20-transfer` — send ERC-20 tokens
 
 > Tool names above reflect the functional areas exposed by the server. Your exact tool names may vary slightly by version; run the client’s “list tools” to confirm.
 
@@ -58,7 +62,22 @@ No global install is required.
 
 ## 🔐 Configuration (env vars)
 
-The current implementation has no configuration through environment variables.
+This MCP server needs:
+- **Ethora API URL** (where to send requests)
+- **Ethora App JWT** (used for login/register endpoints)
+
+You can provide these either:
+- via **env vars**, or
+- at runtime via the **`ethora-configure`** tool (in-memory; resets when MCP process restarts)
+
+### Supported env vars
+
+- `ETHORA_API_URL`: full API URL (example: `https://api.ethora.com/v1`, `http://localhost:8080/v1`)
+- `ETHORA_BASE_URL`: base host URL (example: `https://api.ethora.com`, `http://localhost:8080`)  
+  If provided, the server will default to `.../v1`.
+- `ETHORA_APP_JWT` (or `ETHORA_APP_TOKEN`): App JWT string, usually starting with `JWT ...`
+
+> Security: **never** commit App JWTs to git. Configure them via env vars or the client’s secret store.
 
 ---
 
@@ -150,18 +169,11 @@ The current implementation has no configuration through environment variables.
 After the server shows as **connected** in your client:
 
 - Run `list tools` (client command) to verify Ethora tools are available.
-- Try a login:
-  ```
-  Use the "login" tool with your Ethora credentials.
-  ```
-- List applications:
-  ```
-  Call "list-applications" to verify connectivity.
-  ```
-- Check wallet:
-  ```
-  Call "get-wallet-balance".
-  ```
+- Check config: call `ethora-status`
+- Configure (optional): call `ethora-configure` with `apiUrl` / `appJwt`
+- Try a login: call `ethora-user-login`
+- List applications: call `ethora-app-list`
+- Check wallet: call `ethora-wallet-get-balance`
 
 ---
 

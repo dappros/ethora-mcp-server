@@ -28,7 +28,7 @@ async function runServer() {
 }
 
 runServer().catch((error) => {
-  console.error("Failed to start Graphlit MCP Server.", error);
+  console.error("Failed to start Ethora MCP Server.", error);
 
   process.exit(1);
 });

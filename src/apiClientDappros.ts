@@ -1,5 +1,5 @@
-import axios from 'axios'
-import { appConfig } from './config.js';
+import axios from "axios"
+import { appConfig, normalizeApiUrl } from "./config.js"
 
 export const httpTokens = {
   appJwt: appConfig.appJwt,
@@ -24,6 +24,9 @@ export const httpClientDappros = axios.create({
 });
 
 httpClientDappros.interceptors.request.use((config) => {
+  // If the user provides a full URL, don't attempt to mutate headers.
+  if (!config.url) return config
+
   if (config.url === '/users/login/refresh') {
     return config;
   }
@@ -38,11 +41,19 @@ httpClientDappros.interceptors.request.use((config) => {
     config.url === '/users/forgot' ||
     config.url === '/users/reset'
   ) {
+    if (!httpTokens.appJwt) {
+      throw new Error(
+        "ETHORA_APP_JWT is not configured. Set env ETHORA_APP_JWT (or ETHORA_APP_TOKEN) or call the `ethora-configure` tool."
+      )
+    }
     config.headers.Authorization = httpTokens.appJwt;
 
     return config;
   }
 
+  if (!httpTokens.token) {
+    throw new Error("Not logged in. Call `ethora-user-login` first.")
+  }
   config.headers.Authorization = httpTokens.token;
 
   return config;
@@ -88,6 +99,29 @@ export const refreshToken = async () => {
     throw error;
   }
 };
+
+export function configureClient(params: { apiUrl?: string; appJwt?: string }) {
+  const { apiUrl, appJwt } = params
+  if (apiUrl) {
+    const normalized = normalizeApiUrl(apiUrl)
+    appConfig.apiUrl = normalized
+    httpClientDappros.defaults.baseURL = normalized
+  }
+  if (typeof appJwt === "string") {
+    httpTokens.appJwt = appJwt
+    appConfig.appJwt = appJwt
+  }
+  return getClientState()
+}
+
+export function getClientState() {
+  return {
+    apiUrl: String(httpClientDappros.defaults.baseURL || ""),
+    hasAppJwt: Boolean(httpTokens.appJwt),
+    hasUserToken: Boolean(httpTokens.token),
+    hasRefreshToken: Boolean(httpTokens.refreshToken),
+  }
+}
 
 export function userRegistration(email: string, firstName: string, lastName: string) {
   return httpClientDappros.post(

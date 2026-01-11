@@ -1,7 +1,57 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp"
 import { CallToolResult } from "@modelcontextprotocol/sdk/types"
 import z from "zod"
-import { appCreate, appCreateChat, appDelete, appDeleteChat, appGetDefaultRooms, appGetDefaultRoomsWithAppId, appList, appUpdate, userLogin, userRegistration, walletERC20Transfer, walletGetBalance } from "./apiClientDappros.js"
+import { appCreate, appCreateChat, appDelete, appDeleteChat, appGetDefaultRooms, appGetDefaultRoomsWithAppId, appList, appUpdate, configureClient, getClientState, userLogin, userRegistration, walletERC20Transfer, walletGetBalance } from "./apiClientDappros.js"
+
+function errorToText(error: unknown) {
+    // axios-style errors
+    if (error && typeof error === "object" && "response" in error) {
+        const e = error as any
+        const status = e.response?.status
+        const data = e.response?.data
+        const msg = e.message
+        return `error: ${msg || "request failed"}${status ? ` (status=${status})` : ""}${data ? ` data=${JSON.stringify(data)}` : ""}`
+    }
+    if (error instanceof Error) return `error: ${error.message}`
+    return `error: ${String(error)}`
+}
+
+function configureTool(server: McpServer) {
+    server.registerTool(
+        "ethora-configure",
+        {
+            description: "Configure Ethora API base URL and App JWT for this MCP session (in-memory).",
+            inputSchema: {
+                apiUrl: z.string().optional().describe("Ethora API URL (e.g. https://api.ethora.com/v1 or http://localhost:8080/v1)"),
+                appJwt: z.string().optional().describe("Ethora App JWT (used for login/register endpoints)."),
+            },
+        },
+        async function ({ apiUrl, appJwt }) {
+            try {
+                const state = configureClient({ apiUrl, appJwt })
+                return { content: [{ type: "text", text: JSON.stringify(state) }] }
+            } catch (error) {
+                return { content: [{ type: "text", text: errorToText(error) }] }
+            }
+        }
+    )
+}
+
+function statusTool(server: McpServer) {
+    server.registerTool(
+        "ethora-status",
+        {
+            description: "Show current Ethora MCP client state (configured base URL + auth presence).",
+        },
+        async function () {
+            try {
+                return { content: [{ type: "text", text: JSON.stringify(getClientState()) }] }
+            } catch (error) {
+                return { content: [{ type: "text", text: errorToText(error) }] }
+            }
+        }
+    )
+}
 
 function userLoginWithEmailTool(server: McpServer) {
     server.registerTool(
@@ -19,7 +69,7 @@ function userLoginWithEmailTool(server: McpServer) {
                 return toolRes
             } catch (error) {
                 let toolRes: CallToolResult = {
-                    content: [{ type: "text", text: "error: network error" }]
+                    content: [{ type: "text", text: errorToText(error) }]
                 }
                 return toolRes
             }
@@ -78,7 +128,7 @@ function appListTool(server: McpServer) {
                 return toolRes
             } catch (error) {
                 let toolRes: CallToolResult = {
-                    content: [{ type: "text", text: "error: network error" }]
+                    content: [{ type: "text", text: errorToText(error) }]
                 }
                 return toolRes
             }
@@ -102,7 +152,7 @@ function appCreateTool(server: McpServer) {
                 return toolRes
             } catch (error) {
                 let toolRes: CallToolResult = {
-                    content: [{ type: "text", text: "error: network error" }]
+                    content: [{ type: "text", text: errorToText(error) }]
                 }
                 return toolRes
             }
@@ -126,7 +176,7 @@ function appDeleteTool(server: McpServer) {
                 return toolRes
             } catch (error) {
                 let toolRes: CallToolResult = {
-                    content: [{ type: "text", text: "error: network error" }]
+                    content: [{ type: "text", text: errorToText(error) }]
                 }
                 return toolRes
             }
@@ -174,7 +224,7 @@ function appUpdateTool(server: McpServer) {
                 return toolRes
             } catch (error) {
                 let toolRes: CallToolResult = {
-                    content: [{ type: "text", text: "error: network error" }]
+                    content: [{ type: "text", text: errorToText(error) }]
                 }
                 return toolRes
             }
@@ -197,7 +247,7 @@ function appGetDefaultRoomsTool(server: McpServer) {
                 return toolRes
             } catch (error) {
                 let toolRes: CallToolResult = {
-                    content: [{ type: "text", text: "error: network error" }]
+                    content: [{ type: "text", text: errorToText(error) }]
                 }
                 return toolRes
             }
@@ -223,7 +273,7 @@ function getDefaultRoomsWithAppIdTool(server: McpServer) {
                 return toolRes
             } catch (error) {
                 let toolRes: CallToolResult = {
-                    content: [{ type: "text", text: "error: network error" }]
+                    content: [{ type: "text", text: errorToText(error) }]
                 }
                 return toolRes
             }
@@ -251,7 +301,7 @@ function craeteAppChatTool(server: McpServer) {
                 return toolRes
             } catch (error) {
                 let toolRes: CallToolResult = {
-                    content: [{ type: "text", text: "error: network error" }]
+                    content: [{ type: "text", text: errorToText(error) }]
                 }
                 return toolRes
             }
@@ -278,7 +328,7 @@ function appDeleteChatTool(server: McpServer) {
                 return toolRes
             } catch (error) {
                 let toolRes: CallToolResult = {
-                    content: [{ type: "text", text: "error: network error" }]
+                    content: [{ type: "text", text: errorToText(error) }]
                 }
                 return toolRes
             }
@@ -301,7 +351,7 @@ function walletGetBalanceTool(server: McpServer) {
                 return toolRes
             } catch (error) {
                 let toolRes: CallToolResult = {
-                    content: [{ type: "text", text: "error: network error" }]
+                    content: [{ type: "text", text: errorToText(error) }]
                 }
                 return toolRes
             }
@@ -328,7 +378,7 @@ function walletERC20TransferTool(server: McpServer) {
                 return toolRes
             } catch (error) {
                 let toolRes: CallToolResult = {
-                    content: [{ type: "text", text: "error: network error" }]
+                    content: [{ type: "text", text: errorToText(error) }]
                 }
                 return toolRes
             }
@@ -337,6 +387,8 @@ function walletERC20TransferTool(server: McpServer) {
 }
 
 export function registerTools(server: McpServer) {
+    configureTool(server);
+    statusTool(server);
     userLoginWithEmailTool(server);
     userRegisterWithEmailTool(server);
     appListTool(server);
