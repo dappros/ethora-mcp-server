@@ -118,6 +118,7 @@ function doctorTool(server: McpServer) {
                     hasApiUrl: Boolean(state.apiUrl),
                     hasAppJwt: Boolean(state.hasAppJwt),
                     hasAppToken: Boolean(state.hasAppToken),
+                    hasB2BToken: Boolean(state.hasB2BToken),
                     hasUserToken: Boolean(state.hasUserToken),
                 }
                 const suggestions: Array<{ severity: "info" | "warn"; message: string; action: string }> = []
@@ -144,6 +145,14 @@ function doctorTool(server: McpServer) {
                         severity: "warn",
                         message: "Auth mode is app-token but appToken is not configured.",
                         action: "Call `ethora-app-select` with { appId, appToken } or switch to user auth via `ethora-auth-use-user`.",
+                    })
+                }
+
+                if (state.authMode === "b2b" && !checks.hasB2BToken) {
+                    suggestions.push({
+                        severity: "warn",
+                        message: "Auth mode is B2B but b2bToken is not configured.",
+                        action: "Set env ETHORA_B2B_TOKEN or call `ethora-configure` with b2bToken, or switch auth mode.",
                     })
                 }
 
@@ -912,6 +921,90 @@ function b2bBotEnableTool(server: McpServer) {
     )
 }
 
+async function runB2BAppBootstrapAi(args: {
+    displayName: string
+    setAsCurrent?: boolean
+    crawlUrl?: string
+    followLink?: boolean
+    docs?: Array<{ name: string; mimeType: string; base64: string }>
+    enableBot?: boolean
+    botTrigger?: string
+}) {
+    const { displayName, setAsCurrent, crawlUrl, followLink, docs, enableBot, botTrigger } = args
+
+    ensureB2BAuthForTool()
+
+    const steps: any[] = []
+
+    // 1) Create app (B2B)
+    setAuthMode("b2b")
+    const created = await appCreate(displayName)
+    const app = created?.data?.app
+    const appId = String(app?._id || app?.id || "").trim()
+    const appToken = String(app?.appToken || "").trim()
+    steps.push({ step: "appCreate", ok: true, appId })
+    if (!appId) throw new Error("Create app succeeded but no appId found in response")
+    if (!appToken) {
+        // appToken is needed for v2 sources app-token endpoints
+        steps.push({ step: "warning", ok: false, message: "No appToken returned; app-token sources endpoints may not work" })
+    }
+
+    // 2) Optionally set context to this app (app-token auth)
+    const shouldSetCurrent = setAsCurrent !== false
+    if (shouldSetCurrent && appToken) {
+        selectApp({ appId, appToken, authMode: "app" })
+        steps.push({ step: "appSelect", ok: true, authMode: "app" })
+    } else if (shouldSetCurrent) {
+        // at least set current appId, even without token
+        selectApp({ appId, authMode: "b2b" })
+        steps.push({ step: "appSelect", ok: true, authMode: "b2b" })
+    }
+
+    // 3) Index website (app-token sources v2)
+    let crawlResult: any = null
+    if (crawlUrl) {
+        if (!appToken) throw new Error("crawlUrl requested but no appToken available for app-token auth")
+        setAuthMode("app")
+        const r = await sourcesSiteCrawlV2({ url: crawlUrl, followLink: typeof followLink === "boolean" ? followLink : true })
+        crawlResult = r.data
+        steps.push({ step: "sourcesSiteCrawlV2", ok: true })
+    }
+
+    // 4) Ingest docs (app-token sources v2)
+    let docsResult: any = null
+    if (Array.isArray(docs) && docs.length) {
+        if (!appToken) throw new Error("docs requested but no appToken available for app-token auth")
+        setAuthMode("app")
+        const form = new FormData()
+        for (const f of docs) {
+            const buf = normalizeBase64ToBuffer(f.base64)
+            if (buf.length > 50 * 1024 * 1024) throw new Error(`File '${f.name}' exceeds 50MB limit`)
+            const blob = new Blob([buf], { type: f.mimeType })
+            form.append("files", blob, f.name)
+        }
+        const r = await sourcesDocsUploadV2(form, { "Content-Type": "multipart/form-data" })
+        docsResult = r.data
+        steps.push({ step: "sourcesDocsUploadV2", ok: true, files: docs.length })
+    }
+
+    // 5) Enable bot (B2B)
+    let botEnableResult: any = null
+    if (enableBot) {
+        setAuthMode("b2b")
+        const changes: any = { botStatus: "on" }
+        if (botTrigger) changes.botTrigger = botTrigger
+        const r = await appUpdate(appId, changes)
+        botEnableResult = r.data
+        steps.push({ step: "botEnable", ok: true })
+    }
+
+    // Final: set default auth mode for next steps
+    if (shouldSetCurrent && appToken) setAuthMode("app")
+    else setAuthMode("b2b")
+
+    return { appId, appToken: appToken || undefined, app, crawl: crawlResult, docs: docsResult, bot: botEnableResult, steps, state: getClientState() }
+}
+
 // Minimal namespace aliases to reduce auth-mode mistakes for agents.
 function b2bAliases(server: McpServer) {
     server.registerTool(
@@ -980,6 +1073,67 @@ function b2bAliases(server: McpServer) {
                 }
                 return asToolResult(ok({ done: false, reason: "timeout", job: last }, meta))
             } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+
+    server.registerTool(
+        "ethora.b2b.app.bootstrap-ai",
+        {
+            description: "Alias for ethora-b2b-app-bootstrap-ai",
+            inputSchema: {
+                displayName: z.string().min(1),
+                setAsCurrent: z.boolean().optional(),
+                crawlUrl: z.string().optional(),
+                followLink: z.boolean().optional(),
+                docs: z.array(z.object({ name: z.string().min(1), mimeType: z.string().min(1), base64: z.string().min(1) })).optional(),
+                enableBot: z.boolean().optional(),
+                botTrigger: z.string().optional(),
+            },
+        },
+        async function (args) {
+            const meta = getDefaultMeta("ethora.b2b.app.bootstrap-ai")
+            const prev = (getClientState() as any).authMode as any
+            try {
+                const res = await runB2BAppBootstrapAi(args as any)
+                return asToolResult(ok(res, meta))
+            } catch (error) {
+                try { setAuthMode(prev) } catch (_) {}
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
+function b2bAppBootstrapAiTool(server: McpServer) {
+    server.registerTool(
+        "ethora-b2b-app-bootstrap-ai",
+        {
+            description: "One-call B2B flow: create app → set context → index sources → enable bot (best-effort).",
+            inputSchema: {
+                displayName: z.string().min(1).describe("New app display name"),
+                setAsCurrent: z.boolean().optional().describe("If true (default), sets current app context + app-token auth"),
+                crawlUrl: z.string().optional().describe("Optional website URL to crawl/index"),
+                followLink: z.boolean().optional().describe("For crawlUrl: follow links (default true)"),
+                docs: z.array(z.object({
+                    name: z.string().min(1),
+                    mimeType: z.string().min(1),
+                    base64: z.string().min(1),
+                })).optional().describe("Optional docs to ingest (base64)"),
+                enableBot: z.boolean().optional().describe("If true, enables botStatus=on (best-effort AI service activation)"),
+                botTrigger: z.string().optional().describe("Optional bot trigger (e.g. '/bot' or 'any_message')"),
+            },
+        },
+        async function ({ displayName, setAsCurrent, crawlUrl, followLink, docs, enableBot, botTrigger }) {
+            const meta = getDefaultMeta("ethora-b2b-app-bootstrap-ai")
+            const prev = (getClientState() as any).authMode as any
+            try {
+                const res = await runB2BAppBootstrapAi({ displayName, setAsCurrent, crawlUrl, followLink, docs, enableBot, botTrigger })
+                return asToolResult(ok(res, meta))
+            } catch (error) {
+                // restore previous mode best-effort
+                try { setAuthMode(prev) } catch (_) {}
                 return asToolResult(fail(error, meta))
             }
         }
@@ -1167,4 +1321,5 @@ export function registerTools(server: McpServer) {
     b2bAppCreateTool(server);
     b2bBotEnableTool(server);
     b2bAliases(server);
+    b2bAppBootstrapAiTool(server);
 }

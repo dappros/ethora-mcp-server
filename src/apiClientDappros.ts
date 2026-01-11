@@ -164,7 +164,7 @@ export function getClientState() {
   }
 }
 
-export function selectApp(params: { appId: string; appToken?: string; authMode?: "app" | "user" }) {
+export function selectApp(params: { appId: string; appToken?: string; authMode?: "app" | "user" | "b2b" }) {
   const { appId, appToken, authMode } = params
   ethoraContext.currentAppId = String(appId || "").trim()
   if (!ethoraContext.currentAppId) {

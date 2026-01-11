@@ -18,6 +18,7 @@ Use it from **Cursor**, **VS Code MCP**, **Claude Desktop**, or **Windsurf/Cline
   - `ethora-app-select` — select current appId and optionally set appToken (B2B)
   - `ethora-auth-use-app` — switch to app-token auth mode (B2B)
   - `ethora-auth-use-user` — switch to user-session auth mode
+  - `ethora-auth-use-b2b` — switch to B2B `x-custom-token` auth mode (server token)
 
 - **Chats (v2)**
   - `ethora-chats-broadcast-v2` — enqueue broadcast job (requires app-token auth)
@@ -51,6 +52,8 @@ Use it from **Cursor**, **VS Code MCP**, **Claude Desktop**, or **Windsurf/Cline
   - `ethora-app-update` — update app
   - `ethora-app-delete` — delete app
   - `ethora-app-list` — list apps
+  - `ethora-b2b-app-create` — create app using B2B auth (x-custom-token)
+  - `ethora-b2b-app-bootstrap-ai` — create app → index sources → enable bot (B2B automation)
 
 - **Chat & Rooms**
   - `ethora-app-get-default-rooms` — list default rooms
@@ -202,6 +205,29 @@ After the server shows as **connected** in your client:
 - Try a login: call `ethora-user-login`
 - List applications: call `ethora-app-list`
 - Check wallet: call `ethora-wallet-get-balance`
+
+---
+
+## 🧭 P1: B2B “create app → index sources → deploy bot” in one call
+
+Pre-reqs:
+- Configure `ETHORA_API_URL` (or call `ethora-configure`)
+- Configure `ETHORA_B2B_TOKEN` (or call `ethora-configure` with `b2bToken`)
+- Ensure your Ethora backend is configured with AI service URL/secret (for bot activation)
+
+Suggested flow:
+- Call `ethora-auth-use-b2b`
+- Call `ethora-b2b-app-bootstrap-ai` with:
+  - `displayName`
+  - optional `crawlUrl`
+  - optional `docs[]` (base64)
+  - `enableBot: true`
+
+It will:
+- create the app (B2B)
+- set current app context (best-effort)
+- index sources via `/v2/sources/*` (app-token auth)
+- enable bot (best-effort)
 
 ---
 
