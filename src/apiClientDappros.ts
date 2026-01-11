@@ -306,6 +306,24 @@ export function chatsBroadcastJobV2(jobId: string) {
   return httpClientDappros.get(`/v2/chats/broadcast/${jobId}`)
 }
 
+// v2 bot management (app-token auth)
+export function botGetV2() {
+  return httpClientDappros.get(`/v2/bot`)
+}
+
+export function botUpdateV2(payload: {
+  status?: "on" | "off"
+  trigger?: "any_message" | "/bot"
+  prompt?: string
+  greetingMessage?: string
+  chatId?: string
+  isRAG?: boolean
+  botFirstName?: string
+  botLastName?: string
+}) {
+  return httpClientDappros.put(`/v2/bot`, payload)
+}
+
 // sources (v1-style routes, user auth)
 export function sourcesSiteCrawl(appId: string, url: string, followLink: boolean) {
   return httpClientDappros.post(`/sources/site-crawl/${appId}`, { url, followLink })

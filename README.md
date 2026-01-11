@@ -25,6 +25,12 @@ Use it from **Cursor**, **VS Code MCP**, **Claude Desktop**, or **Windsurf/Cline
   - `ethora-chats-broadcast-job-v2` — get broadcast job status/results (requires app-token auth)
 
 - **Files (v2)**
+- **Bot / Agent (v2)**
+  - `ethora-bot-get-v2` — get bot status/settings (app-token auth)
+  - `ethora-bot-update-v2` — update bot settings (app-token auth)
+  - `ethora-bot-enable-v2` — enable bot (app-token auth)
+  - `ethora-bot-disable-v2` — disable bot (app-token auth)
+
   - `ethora-files-upload-v2` — upload files (requires user auth)
   - `ethora-files-get-v2` — list/get files (requires user auth)
   - `ethora-files-delete-v2` — delete file by id (requires user auth)

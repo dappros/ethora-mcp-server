@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp"
 import { CallToolResult } from "@modelcontextprotocol/sdk/types"
 import z from "zod"
-import { appCreate, appCreateChat, appDelete, appDeleteChat, appGetDefaultRooms, appGetDefaultRoomsWithAppId, appList, appUpdate, apiPing, chatsBroadcastJobV2, chatsBroadcastV2, configureB2BToken, configureClient, filesDeleteV2, filesGetV2, filesUploadV2, getClientState, selectApp, setAuthMode, sourcesDocsDelete, sourcesDocsDeleteV2, sourcesDocsUpload, sourcesDocsUploadV2, sourcesSiteCrawl, sourcesSiteCrawlV2, sourcesSiteDeleteUrl, sourcesSiteDeleteUrlV2, sourcesSiteDeleteUrlV2Batch, sourcesSiteDeleteUrlV2Single, sourcesSiteReindex, sourcesSiteReindexV2, userLogin, userRegistration, walletERC20Transfer, walletGetBalance } from "./apiClientDappros.js"
+import { appCreate, appCreateChat, appDelete, appDeleteChat, appGetDefaultRooms, appGetDefaultRoomsWithAppId, appList, appUpdate, apiPing, botGetV2, botUpdateV2, chatsBroadcastJobV2, chatsBroadcastV2, configureB2BToken, configureClient, filesDeleteV2, filesGetV2, filesUploadV2, getClientState, selectApp, setAuthMode, sourcesDocsDelete, sourcesDocsDeleteV2, sourcesDocsUpload, sourcesDocsUploadV2, sourcesSiteCrawl, sourcesSiteCrawlV2, sourcesSiteDeleteUrl, sourcesSiteDeleteUrlV2, sourcesSiteDeleteUrlV2Batch, sourcesSiteDeleteUrlV2Single, sourcesSiteReindex, sourcesSiteReindexV2, userLogin, userRegistration, walletERC20Transfer, walletGetBalance } from "./apiClientDappros.js"
 import { fail, ok } from "./mcpResponse.js"
 
 function errorToText(error: unknown) {
@@ -921,6 +921,93 @@ function b2bBotEnableTool(server: McpServer) {
     )
 }
 
+function botGetV2Tool(server: McpServer) {
+    server.registerTool(
+        "ethora-bot-get-v2",
+        {
+            description: "Get bot status/settings via GET /v2/bot (app-token auth).",
+        },
+        async function () {
+            const meta = getDefaultMeta("ethora-bot-get-v2")
+            try {
+                ensureAppAuthForTool()
+                const res = await botGetV2()
+                return asToolResult(ok(res.data, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
+function botUpdateV2Tool(server: McpServer) {
+    server.registerTool(
+        "ethora-bot-update-v2",
+        {
+            description: "Update bot settings via PUT /v2/bot (app-token auth).",
+            inputSchema: {
+                status: z.enum(["on", "off"]).optional(),
+                trigger: z.enum(["any_message", "/bot"]).optional(),
+                prompt: z.string().optional(),
+                greetingMessage: z.string().optional(),
+                chatId: z.string().optional(),
+                isRAG: z.boolean().optional(),
+                botFirstName: z.string().optional(),
+                botLastName: z.string().optional(),
+            },
+        },
+        async function (payload) {
+            const meta = getDefaultMeta("ethora-bot-update-v2")
+            try {
+                ensureAppAuthForTool()
+                const res = await botUpdateV2(payload as any)
+                return asToolResult(ok(res.data, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
+function botEnableV2Tool(server: McpServer) {
+    server.registerTool(
+        "ethora-bot-enable-v2",
+        {
+            description: "Enable bot via PUT /v2/bot (app-token auth).",
+            inputSchema: { trigger: z.enum(["any_message", "/bot"]).optional() },
+        },
+        async function ({ trigger }) {
+            const meta = getDefaultMeta("ethora-bot-enable-v2")
+            try {
+                ensureAppAuthForTool()
+                const res = await botUpdateV2({ status: "on", trigger } as any)
+                return asToolResult(ok(res.data, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
+function botDisableV2Tool(server: McpServer) {
+    server.registerTool(
+        "ethora-bot-disable-v2",
+        {
+            description: "Disable bot via PUT /v2/bot (app-token auth).",
+        },
+        async function () {
+            const meta = getDefaultMeta("ethora-bot-disable-v2")
+            try {
+                ensureAppAuthForTool()
+                const res = await botUpdateV2({ status: "off" } as any)
+                return asToolResult(ok(res.data, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
 async function runB2BAppBootstrapAi(args: {
     displayName: string
     setAsCurrent?: boolean
@@ -990,10 +1077,11 @@ async function runB2BAppBootstrapAi(args: {
     // 5) Enable bot (B2B)
     let botEnableResult: any = null
     if (enableBot) {
-        setAuthMode("b2b")
-        const changes: any = { botStatus: "on" }
-        if (botTrigger) changes.botTrigger = botTrigger
-        const r = await appUpdate(appId, changes)
+        if (!appToken) throw new Error("enableBot requested but no appToken available for app-token bot management")
+        setAuthMode("app")
+        const payload: any = { status: "on" }
+        if (botTrigger) payload.trigger = botTrigger
+        const r = await botUpdateV2(payload)
         botEnableResult = r.data
         steps.push({ step: "botEnable", ok: true })
     }
@@ -1320,6 +1408,10 @@ export function registerTools(server: McpServer) {
     walletERC20TransferTool(server);
     b2bAppCreateTool(server);
     b2bBotEnableTool(server);
+    botGetV2Tool(server);
+    botUpdateV2Tool(server);
+    botEnableV2Tool(server);
+    botDisableV2Tool(server);
     b2bAliases(server);
     b2bAppBootstrapAiTool(server);
 }
