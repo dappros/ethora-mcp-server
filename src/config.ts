@@ -20,4 +20,7 @@ export const appConfig = {
   // For login/register endpoints Ethora expects an App JWT. Never hardcode it in repo.
   // Provide it via env or via the `ethora-configure` tool.
   appJwt: process.env.ETHORA_APP_JWT ?? process.env.ETHORA_APP_TOKEN ?? "",
+
+  // For B2B/server flows Ethora expects x-custom-token (JWT with type=server).
+  b2bToken: process.env.ETHORA_B2B_TOKEN ?? "",
 }

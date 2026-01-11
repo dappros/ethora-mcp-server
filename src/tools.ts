@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp"
 import { CallToolResult } from "@modelcontextprotocol/sdk/types"
 import z from "zod"
-import { appCreate, appCreateChat, appDelete, appDeleteChat, appGetDefaultRooms, appGetDefaultRoomsWithAppId, appList, appUpdate, apiPing, chatsBroadcastJobV2, chatsBroadcastV2, configureClient, filesDeleteV2, filesGetV2, filesUploadV2, getClientState, selectApp, setAuthMode, sourcesDocsDelete, sourcesDocsDeleteV2, sourcesDocsUpload, sourcesDocsUploadV2, sourcesSiteCrawl, sourcesSiteCrawlV2, sourcesSiteDeleteUrl, sourcesSiteDeleteUrlV2, sourcesSiteDeleteUrlV2Batch, sourcesSiteDeleteUrlV2Single, sourcesSiteReindex, sourcesSiteReindexV2, userLogin, userRegistration, walletERC20Transfer, walletGetBalance } from "./apiClientDappros.js"
+import { appCreate, appCreateChat, appDelete, appDeleteChat, appGetDefaultRooms, appGetDefaultRoomsWithAppId, appList, appUpdate, apiPing, chatsBroadcastJobV2, chatsBroadcastV2, configureB2BToken, configureClient, filesDeleteV2, filesGetV2, filesUploadV2, getClientState, selectApp, setAuthMode, sourcesDocsDelete, sourcesDocsDeleteV2, sourcesDocsUpload, sourcesDocsUploadV2, sourcesSiteCrawl, sourcesSiteCrawlV2, sourcesSiteDeleteUrl, sourcesSiteDeleteUrlV2, sourcesSiteDeleteUrlV2Batch, sourcesSiteDeleteUrlV2Single, sourcesSiteReindex, sourcesSiteReindexV2, userLogin, userRegistration, walletERC20Transfer, walletGetBalance } from "./apiClientDappros.js"
 import { fail, ok } from "./mcpResponse.js"
 
 function errorToText(error: unknown) {
@@ -68,12 +68,16 @@ function configureTool(server: McpServer) {
             inputSchema: {
                 apiUrl: z.string().optional().describe("Ethora API URL (e.g. https://api.ethora.com/v1 or http://localhost:8080/v1)"),
                 appJwt: z.string().optional().describe("Ethora App JWT (used for login/register endpoints)."),
+                b2bToken: z.string().optional().describe("Ethora B2B token for x-custom-token auth (type=server)."),
             },
         },
-        async function ({ apiUrl, appJwt }) {
+        async function ({ apiUrl, appJwt, b2bToken }) {
             try {
                 const state = configureClient({ apiUrl, appJwt })
-                return asToolResult(ok(state, getDefaultMeta("ethora-configure")))
+                if (typeof b2bToken === "string") {
+                    configureB2BToken(b2bToken)
+                }
+                return asToolResult(ok(getClientState(), getDefaultMeta("ethora-configure")))
             } catch (error) {
                 return asToolResult(fail(error, getDefaultMeta("ethora-configure")))
             }
@@ -212,6 +216,32 @@ function authUseUserTool(server: McpServer) {
     )
 }
 
+function authUseB2BTool(server: McpServer) {
+    server.registerTool(
+        "ethora-auth-use-b2b",
+        {
+            description: "Switch auth mode to B2B (x-custom-token) for subsequent API calls (requires b2bToken).",
+        },
+        async function () {
+            try {
+                return asToolResult(ok(setAuthMode("b2b"), getDefaultMeta("ethora-auth-use-b2b")))
+            } catch (error) {
+                return asToolResult(fail(error, getDefaultMeta("ethora-auth-use-b2b")))
+            }
+        }
+    )
+}
+
+function ensureB2BAuthForTool() {
+    const state = getClientState() as any
+    if (state.authMode !== "b2b") {
+        throw new Error("This tool requires B2B auth. Call `ethora-auth-use-b2b` (and configure b2bToken via `ethora-configure`) first.")
+    }
+    if (!state.hasB2BToken) {
+        throw new Error("B2B auth mode selected, but b2bToken is missing. Provide it via env ETHORA_B2B_TOKEN or `ethora-configure`.")
+    }
+}
+
 function appSelectTool(server: McpServer) {
     server.registerTool(
         "ethora-app-select",
@@ -279,6 +309,46 @@ function chatsBroadcastJobTool(server: McpServer) {
                 return asToolResult(ok(res.data, getDefaultMeta("ethora-chats-broadcast-job-v2")))
             } catch (error) {
                 return asToolResult(fail(error, getDefaultMeta("ethora-chats-broadcast-job-v2")))
+            }
+        }
+    )
+}
+
+function sleep(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function waitBroadcastJobTool(server: McpServer) {
+    server.registerTool(
+        "ethora-wait-broadcast-job-v2",
+        {
+            description: "Poll broadcast job status until completed/failed (app-token auth).",
+            inputSchema: {
+                jobId: z.string().min(1),
+                timeoutMs: z.number().int().min(1000).max(300000).optional().describe("Max wait time (default 60000)"),
+                intervalMs: z.number().int().min(250).max(10000).optional().describe("Poll interval (default 1000)"),
+            },
+        },
+        async function ({ jobId, timeoutMs, intervalMs }) {
+            const meta = getDefaultMeta("ethora-wait-broadcast-job-v2")
+            try {
+                ensureAppAuthForTool()
+                const timeout = timeoutMs ?? 60_000
+                const interval = intervalMs ?? 1_000
+                const started = Date.now()
+                let last: any = null
+                while (Date.now() - started < timeout) {
+                    const res = await chatsBroadcastJobV2(jobId)
+                    last = res.data
+                    const state = String(last?.state || "")
+                    if (state === "completed" || state === "failed") {
+                        return asToolResult(ok({ done: true, state, job: last }, meta))
+                    }
+                    await sleep(interval)
+                }
+                return asToolResult(ok({ done: false, reason: "timeout", job: last }, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
             }
         }
     )
@@ -623,7 +693,7 @@ function appUpdateTool(server: McpServer) {
                 domainName: z.string().optional().describe("If the domainName is set to 'abcd', your web application will be available at abcd.ethora.com."),
                 appDescription: z.string().optional().describe("Set the application description"),
                 primaryColor: z.string().optional().describe("Set thie color of the application in #F54927 format"),
-                botStatus: z.enum(["on", "off"]).describe("Set the bot status to on or off, if on bot is enabled")
+                botStatus: z.enum(["on", "off"]).optional().describe("Set the bot status to on or off, if on bot is enabled")
             }
         },
         async function ({ appId, displayName, domainName, appDescription, primaryColor, botStatus }) {
@@ -792,6 +862,130 @@ function walletERC20TransferTool(server: McpServer) {
     )
 }
 
+function b2bAppCreateTool(server: McpServer) {
+    server.registerTool(
+        "ethora-b2b-app-create",
+        {
+            description: "Create a new app using B2B auth (x-custom-token).",
+            inputSchema: {
+                displayName: z.string().min(1),
+            },
+        },
+        async function ({ displayName }) {
+            try {
+                ensureB2BAuthForTool()
+                const res = await appCreate(displayName)
+                return asToolResult(ok(res.data, getDefaultMeta("ethora-b2b-app-create")))
+            } catch (error) {
+                return asToolResult(fail(error, getDefaultMeta("ethora-b2b-app-create")))
+            }
+        }
+    )
+}
+
+function b2bBotEnableTool(server: McpServer) {
+    server.registerTool(
+        "ethora-b2b-bot-enable",
+        {
+            description: "Enable AI bot for an app (B2B auth). This triggers backend best-effort activation against configured AI service.",
+            inputSchema: {
+                appId: z.string().optional().describe("Defaults to current app if selected"),
+                botTrigger: z.string().optional().describe("Optional bot trigger (example: '/bot' or 'any_message')"),
+            },
+        },
+        async function ({ appId, botTrigger }) {
+            try {
+                ensureB2BAuthForTool()
+                const state = getClientState() as any
+                const effectiveAppId = appId || state.currentAppId
+                if (!effectiveAppId) {
+                    throw new Error("appId is required (pass appId or call `ethora-app-select` first)")
+                }
+                const changes: any = { botStatus: "on" }
+                if (botTrigger) changes.botTrigger = botTrigger
+                const res = await appUpdate(effectiveAppId, changes)
+                return asToolResult(ok(res.data, getDefaultMeta("ethora-b2b-bot-enable")))
+            } catch (error) {
+                return asToolResult(fail(error, getDefaultMeta("ethora-b2b-bot-enable")))
+            }
+        }
+    )
+}
+
+// Minimal namespace aliases to reduce auth-mode mistakes for agents.
+function b2bAliases(server: McpServer) {
+    server.registerTool(
+        "ethora.b2b.auth.use",
+        { description: "Alias for ethora-auth-use-b2b" },
+        async function () {
+            try {
+                return asToolResult(ok(setAuthMode("b2b"), getDefaultMeta("ethora.b2b.auth.use")))
+            } catch (error) {
+                return asToolResult(fail(error, getDefaultMeta("ethora.b2b.auth.use")))
+            }
+        }
+    )
+    server.registerTool(
+        "ethora.b2b.app.create",
+        { description: "Alias for ethora-b2b-app-create", inputSchema: { displayName: z.string().min(1) } },
+        async function ({ displayName }) {
+            try {
+                ensureB2BAuthForTool()
+                const res = await appCreate(displayName)
+                return asToolResult(ok(res.data, getDefaultMeta("ethora.b2b.app.create")))
+            } catch (error) {
+                return asToolResult(fail(error, getDefaultMeta("ethora.b2b.app.create")))
+            }
+        }
+    )
+    server.registerTool(
+        "ethora.b2b.bot.enable",
+        { description: "Alias for ethora-b2b-bot-enable", inputSchema: { appId: z.string().optional(), botTrigger: z.string().optional() } },
+        async function ({ appId, botTrigger }) {
+            try {
+                ensureB2BAuthForTool()
+                const state = getClientState() as any
+                const effectiveAppId = appId || state.currentAppId
+                if (!effectiveAppId) {
+                    throw new Error("appId is required (pass appId or call `ethora-app-select` first)")
+                }
+                const changes: any = { botStatus: "on" }
+                if (botTrigger) changes.botTrigger = botTrigger
+                const res = await appUpdate(effectiveAppId, changes)
+                return asToolResult(ok(res.data, getDefaultMeta("ethora.b2b.bot.enable")))
+            } catch (error) {
+                return asToolResult(fail(error, getDefaultMeta("ethora.b2b.bot.enable")))
+            }
+        }
+    )
+    server.registerTool(
+        "ethora.b2b.broadcast.wait",
+        { description: "Alias for ethora-wait-broadcast-job-v2", inputSchema: { jobId: z.string().min(1), timeoutMs: z.number().int().min(1000).max(300000).optional(), intervalMs: z.number().int().min(250).max(10000).optional() } },
+        async function ({ jobId, timeoutMs, intervalMs }) {
+            const meta = getDefaultMeta("ethora.b2b.broadcast.wait")
+            try {
+                ensureAppAuthForTool()
+                const timeout = timeoutMs ?? 60_000
+                const interval = intervalMs ?? 1_000
+                const started = Date.now()
+                let last: any = null
+                while (Date.now() - started < timeout) {
+                    const res = await chatsBroadcastJobV2(jobId)
+                    last = res.data
+                    const state = String(last?.state || "")
+                    if (state === "completed" || state === "failed") {
+                        return asToolResult(ok({ done: true, state, job: last }, meta))
+                    }
+                    await sleep(interval)
+                }
+                return asToolResult(ok({ done: false, reason: "timeout", job: last }, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
 function sourcesSiteCrawlV2AppTool(server: McpServer) {
     server.registerTool(
         "ethora-sources-site-crawl-v2",
@@ -938,9 +1132,11 @@ export function registerTools(server: McpServer) {
     doctorTool(server);
     authUseAppTool(server);
     authUseUserTool(server);
+    authUseB2BTool(server);
     appSelectTool(server);
     chatsBroadcastTool(server);
     chatsBroadcastJobTool(server);
+    waitBroadcastJobTool(server);
     filesUploadV2Tool(server);
     filesGetV2Tool(server);
     filesDeleteV2Tool(server);
@@ -968,4 +1164,7 @@ export function registerTools(server: McpServer) {
     getDefaultRoomsWithAppIdTool(server);
     walletGetBalanceTool(server);
     walletERC20TransferTool(server);
+    b2bAppCreateTool(server);
+    b2bBotEnableTool(server);
+    b2bAliases(server);
 }

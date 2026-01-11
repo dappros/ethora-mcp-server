@@ -4,6 +4,7 @@ import { appConfig, normalizeApiUrl } from "./config.js"
 export const httpTokens = {
   appJwt: appConfig.appJwt,
   appToken: "",
+  b2bToken: appConfig.b2bToken || "",
   _token: '',
   _refreshToken: '',
   set refreshToken(token: string) {
@@ -21,7 +22,7 @@ export const httpTokens = {
 };
 
 export const ethoraContext = {
-  authMode: "user" as "user" | "app",
+  authMode: "user" as "user" | "app" | "b2b",
   currentAppId: "" as string,
 }
 
@@ -67,6 +68,16 @@ httpClientDappros.interceptors.request.use((config) => {
     config.headers.Authorization = httpTokens.appJwt;
 
     return config;
+  }
+
+  if (ethoraContext.authMode === "b2b") {
+    if (!httpTokens.b2bToken) {
+      throw new Error("B2B auth is selected but no b2bToken is configured. Set env ETHORA_B2B_TOKEN or call `ethora-configure` with b2bToken, or switch auth mode.")
+    }
+    // Backend expects `x-custom-token` for b2b/server/client flows.
+    // Keep any existing Authorization header untouched.
+    ;(config.headers as any)["x-custom-token"] = httpTokens.b2bToken
+    return config
   }
 
   if (ethoraContext.authMode === "app") {
@@ -145,6 +156,7 @@ export function getClientState() {
     apiUrl: String(httpClientDappros.defaults.baseURL || ""),
     hasAppJwt: Boolean(httpTokens.appJwt),
     hasAppToken: Boolean(httpTokens.appToken),
+    hasB2BToken: Boolean(httpTokens.b2bToken),
     hasUserToken: Boolean(httpTokens.token),
     hasRefreshToken: Boolean(httpTokens.refreshToken),
     authMode: ethoraContext.authMode,
@@ -170,8 +182,13 @@ export function selectApp(params: { appId: string; appToken?: string; authMode?:
   return getClientState()
 }
 
-export function setAuthMode(authMode: "app" | "user") {
+export function setAuthMode(authMode: "app" | "user" | "b2b") {
   ethoraContext.authMode = authMode
+  return getClientState()
+}
+
+export function configureB2BToken(b2bToken: string) {
+  httpTokens.b2bToken = String(b2bToken || "").trim()
   return getClientState()
 }
 
