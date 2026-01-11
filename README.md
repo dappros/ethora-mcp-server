@@ -95,6 +95,10 @@ Tip: to list runnable recipes without calling `ethora-help`, call `ethora-run-re
   - `ethora-app-list` — list apps
   - `ethora-b2b-app-create` — create app using B2B auth (x-custom-token)
   - `ethora-b2b-app-bootstrap-ai` — create app → index sources → enable bot (B2B automation)
+  - `ethora-app-tokens-list-v2` — list app token metadata (B2B auth)
+  - `ethora-app-tokens-create-v2` — create new app token (returned once) (B2B auth)
+  - `ethora-app-tokens-rotate-v2` — rotate token (revoke old, return new once) (B2B auth)
+  - `ethora-app-tokens-revoke-v2` — revoke token by tokenId (idempotent) (B2B auth)
 
 - **Chat & Rooms**
   - `ethora-app-get-default-rooms` — list default rooms

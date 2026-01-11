@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp"
 import { CallToolResult } from "@modelcontextprotocol/sdk/types"
 import z from "zod"
-import { appCreate, appCreateChat, appDelete, appDeleteChat, appGetDefaultRooms, appGetDefaultRoomsWithAppId, appList, appUpdate, apiPing, botGetV2, botUpdateV2, chatsBroadcastJobV2, chatsBroadcastV2, configureB2BToken, configureClient, filesDeleteV2, filesGetV2, filesUploadV2, getClientState, selectApp, setAuthMode, sourcesDocsDelete, sourcesDocsDeleteV2, sourcesDocsUpload, sourcesDocsUploadV2, sourcesSiteCrawl, sourcesSiteCrawlV2, sourcesSiteDeleteUrl, sourcesSiteDeleteUrlV2, sourcesSiteDeleteUrlV2Batch, sourcesSiteDeleteUrlV2Single, sourcesSiteReindex, sourcesSiteReindexV2, userLogin, userRegistration, usersBatchCreateJobV2, usersBatchCreateV2, walletERC20Transfer, walletGetBalance } from "./apiClientDappros.js"
+import { appCreate, appCreateChat, appDelete, appDeleteChat, appGetDefaultRooms, appGetDefaultRoomsWithAppId, appList, appTokensCreateV2, appTokensListV2, appTokensRevokeV2, appTokensRotateV2, appUpdate, apiPing, botGetV2, botUpdateV2, chatsBroadcastJobV2, chatsBroadcastV2, configureB2BToken, configureClient, filesDeleteV2, filesGetV2, filesUploadV2, getClientState, selectApp, setAuthMode, sourcesDocsDelete, sourcesDocsDeleteV2, sourcesDocsUpload, sourcesDocsUploadV2, sourcesSiteCrawl, sourcesSiteCrawlV2, sourcesSiteDeleteUrl, sourcesSiteDeleteUrlV2, sourcesSiteDeleteUrlV2Batch, sourcesSiteDeleteUrlV2Single, sourcesSiteReindex, sourcesSiteReindexV2, userLogin, userRegistration, usersBatchCreateJobV2, usersBatchCreateV2, walletERC20Transfer, walletGetBalance } from "./apiClientDappros.js"
 import { fail, ok } from "./mcpResponse.js"
 
 function errorToText(error: unknown) {
@@ -2148,6 +2148,110 @@ function waitUsersBatchCreateJobV2Tool(server: McpServer) {
     )
 }
 
+function appTokensListV2Tool(server: McpServer) {
+    server.registerTool(
+        "ethora-app-tokens-list-v2",
+        {
+            description: "List app tokens (metadata only) for an appId (B2B auth).",
+            inputSchema: {
+                appId: z.string().optional().describe("Defaults to current app if selected"),
+                timeoutMs: z.number().int().min(500).max(60000).optional(),
+            },
+        },
+        async function ({ appId, timeoutMs }) {
+            const meta = getDefaultMeta("ethora-app-tokens-list-v2")
+            try {
+                ensureB2BAuthForTool()
+                const effectiveAppId = String(appId || (getClientState() as any).currentAppId || "").trim()
+                if (!effectiveAppId) throw new Error("appId is required (pass appId or call `ethora-app-select` first)")
+                const res = await appTokensListV2(effectiveAppId, { timeoutMs: timeoutMs ?? 10_000 })
+                return asToolResult(ok(res.data, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
+function appTokensCreateV2Tool(server: McpServer) {
+    server.registerTool(
+        "ethora-app-tokens-create-v2",
+        {
+            description: "Create a new app token (returned once). Requires B2B auth.",
+            inputSchema: {
+                appId: z.string().optional().describe("Defaults to current app if selected"),
+                label: z.string().optional(),
+                timeoutMs: z.number().int().min(500).max(60000).optional(),
+            },
+        },
+        async function ({ appId, label, timeoutMs }) {
+            const meta = getDefaultMeta("ethora-app-tokens-create-v2")
+            try {
+                ensureB2BAuthForTool()
+                const effectiveAppId = String(appId || (getClientState() as any).currentAppId || "").trim()
+                if (!effectiveAppId) throw new Error("appId is required (pass appId or call `ethora-app-select` first)")
+                const res = await appTokensCreateV2(effectiveAppId, { label }, { timeoutMs: timeoutMs ?? 10_000 })
+                return asToolResult(ok(res.data, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
+function appTokensRotateV2Tool(server: McpServer) {
+    server.registerTool(
+        "ethora-app-tokens-rotate-v2",
+        {
+            description: "Rotate an app token: revoke old tokenId and return a new token once (B2B auth).",
+            inputSchema: {
+                appId: z.string().optional().describe("Defaults to current app if selected"),
+                tokenId: z.string().min(1),
+                label: z.string().optional(),
+                timeoutMs: z.number().int().min(500).max(60000).optional(),
+            },
+        },
+        async function ({ appId, tokenId, label, timeoutMs }) {
+            const meta = getDefaultMeta("ethora-app-tokens-rotate-v2")
+            try {
+                ensureB2BAuthForTool()
+                const effectiveAppId = String(appId || (getClientState() as any).currentAppId || "").trim()
+                if (!effectiveAppId) throw new Error("appId is required (pass appId or call `ethora-app-select` first)")
+                const res = await appTokensRotateV2(effectiveAppId, tokenId, { label }, { timeoutMs: timeoutMs ?? 10_000 })
+                return asToolResult(ok(res.data, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
+function appTokensRevokeV2Tool(server: McpServer) {
+    server.registerTool(
+        "ethora-app-tokens-revoke-v2",
+        {
+            description: "Revoke an app token by tokenId (idempotent). Requires B2B auth.",
+            inputSchema: {
+                appId: z.string().optional().describe("Defaults to current app if selected"),
+                tokenId: z.string().min(1),
+                timeoutMs: z.number().int().min(500).max(60000).optional(),
+            },
+        },
+        async function ({ appId, tokenId, timeoutMs }) {
+            const meta = getDefaultMeta("ethora-app-tokens-revoke-v2")
+            try {
+                ensureB2BAuthForTool()
+                const effectiveAppId = String(appId || (getClientState() as any).currentAppId || "").trim()
+                if (!effectiveAppId) throw new Error("appId is required (pass appId or call `ethora-app-select` first)")
+                const res = await appTokensRevokeV2(effectiveAppId, tokenId, { timeoutMs: timeoutMs ?? 10_000 })
+                return asToolResult(ok(res.data, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
 function sourcesSiteDeleteUrlV2AppTool(server: McpServer) {
     server.registerTool(
         "ethora-sources-site-delete-url-v2",
@@ -2277,6 +2381,10 @@ export function registerTools(server: McpServer) {
     usersBatchCreateV2Tool(server);
     usersBatchCreateJobV2Tool(server);
     waitUsersBatchCreateJobV2Tool(server);
+    appTokensListV2Tool(server);
+    appTokensCreateV2Tool(server);
+    appTokensRotateV2Tool(server);
+    appTokensRevokeV2Tool(server);
     userLoginWithEmailTool(server);
     userRegisterWithEmailTool(server);
     appListTool(server);

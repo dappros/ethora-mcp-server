@@ -385,6 +385,29 @@ export function usersBatchCreateJobV2(jobId: string, opts?: { timeoutMs?: number
   return httpClientDappros.get(`/v2/users/batch/${id}`, { timeout: opts?.timeoutMs })
 }
 
+// apps v2 token lifecycle (b2b auth)
+export function appTokensListV2(appId: string, opts?: { timeoutMs?: number }) {
+  const id = String(appId || "").trim()
+  return httpClientDappros.get(`/v2/apps/${id}/tokens`, { timeout: opts?.timeoutMs })
+}
+
+export function appTokensCreateV2(appId: string, payload?: { label?: string }, opts?: { timeoutMs?: number }) {
+  const id = String(appId || "").trim()
+  return httpClientDappros.post(`/v2/apps/${id}/tokens`, payload || {}, { timeout: opts?.timeoutMs })
+}
+
+export function appTokensRotateV2(appId: string, tokenId: string, payload?: { label?: string }, opts?: { timeoutMs?: number }) {
+  const id = String(appId || "").trim()
+  const tid = String(tokenId || "").trim()
+  return httpClientDappros.post(`/v2/apps/${id}/tokens/${tid}/rotate`, payload || {}, { timeout: opts?.timeoutMs })
+}
+
+export function appTokensRevokeV2(appId: string, tokenId: string, opts?: { timeoutMs?: number }) {
+  const id = String(appId || "").trim()
+  const tid = String(tokenId || "").trim()
+  return httpClientDappros.delete(`/v2/apps/${id}/tokens/${tid}`, { timeout: opts?.timeoutMs })
+}
+
 // files v2 (user auth)
 export function filesUploadV2(formData: any, headers?: any) {
   return httpClientDappros.post(`/v2/files`, formData, { headers })
