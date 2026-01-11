@@ -29,6 +29,11 @@ export const httpClientDappros = axios.create({
   baseURL: appConfig.apiUrl,
 });
 
+// Small helper used by `ethora-doctor`
+export async function apiPing(timeoutMs = 3000) {
+  return httpClientDappros.get("/ping", { timeout: timeoutMs })
+}
+
 httpClientDappros.interceptors.request.use((config) => {
   // If the user provides a full URL, don't attempt to mutate headers.
   if (!config.url) return config

@@ -1,7 +1,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp"
 import { CallToolResult } from "@modelcontextprotocol/sdk/types"
 import z from "zod"
-import { appCreate, appCreateChat, appDelete, appDeleteChat, appGetDefaultRooms, appGetDefaultRoomsWithAppId, appList, appUpdate, chatsBroadcastJobV2, chatsBroadcastV2, configureClient, filesDeleteV2, filesGetV2, filesUploadV2, getClientState, selectApp, setAuthMode, sourcesDocsDelete, sourcesDocsDeleteV2, sourcesDocsUpload, sourcesDocsUploadV2, sourcesSiteCrawl, sourcesSiteCrawlV2, sourcesSiteDeleteUrl, sourcesSiteDeleteUrlV2, sourcesSiteDeleteUrlV2Batch, sourcesSiteDeleteUrlV2Single, sourcesSiteReindex, sourcesSiteReindexV2, userLogin, userRegistration, walletERC20Transfer, walletGetBalance } from "./apiClientDappros.js"
+import { appCreate, appCreateChat, appDelete, appDeleteChat, appGetDefaultRooms, appGetDefaultRoomsWithAppId, appList, appUpdate, apiPing, chatsBroadcastJobV2, chatsBroadcastV2, configureClient, filesDeleteV2, filesGetV2, filesUploadV2, getClientState, selectApp, setAuthMode, sourcesDocsDelete, sourcesDocsDeleteV2, sourcesDocsUpload, sourcesDocsUploadV2, sourcesSiteCrawl, sourcesSiteCrawlV2, sourcesSiteDeleteUrl, sourcesSiteDeleteUrlV2, sourcesSiteDeleteUrlV2Batch, sourcesSiteDeleteUrlV2Single, sourcesSiteReindex, sourcesSiteReindexV2, userLogin, userRegistration, walletERC20Transfer, walletGetBalance } from "./apiClientDappros.js"
+import { fail, ok } from "./mcpResponse.js"
 
 function errorToText(error: unknown) {
     // axios-style errors
@@ -14,6 +15,20 @@ function errorToText(error: unknown) {
     }
     if (error instanceof Error) return `error: ${error.message}`
     return `error: ${String(error)}`
+}
+
+function asToolResult(envelope: any): CallToolResult {
+    return { content: [{ type: "text", text: JSON.stringify(envelope) }] }
+}
+
+function getDefaultMeta(tool: string) {
+    const state = getClientState() as any
+    return {
+        tool,
+        apiUrl: state.apiUrl,
+        authMode: state.authMode,
+        currentAppId: state.currentAppId,
+    }
 }
 
 function requireCurrentAppId() {
@@ -58,9 +73,9 @@ function configureTool(server: McpServer) {
         async function ({ apiUrl, appJwt }) {
             try {
                 const state = configureClient({ apiUrl, appJwt })
-                return { content: [{ type: "text", text: JSON.stringify(state) }] }
+                return asToolResult(ok(state, getDefaultMeta("ethora-configure")))
             } catch (error) {
-                return { content: [{ type: "text", text: errorToText(error) }] }
+                return asToolResult(fail(error, getDefaultMeta("ethora-configure")))
             }
         }
     )
@@ -74,9 +89,37 @@ function statusTool(server: McpServer) {
         },
         async function () {
             try {
-                return { content: [{ type: "text", text: JSON.stringify(getClientState()) }] }
+                return asToolResult(ok(getClientState(), getDefaultMeta("ethora-status")))
             } catch (error) {
-                return { content: [{ type: "text", text: errorToText(error) }] }
+                return asToolResult(fail(error, getDefaultMeta("ethora-status")))
+            }
+        }
+    )
+}
+
+function doctorTool(server: McpServer) {
+    server.registerTool(
+        "ethora-doctor",
+        {
+            description: "Validate configuration and connectivity (pings /v1/ping via the configured API URL).",
+            inputSchema: {
+                timeoutMs: z.number().int().min(500).max(20000).optional().describe("HTTP timeout for the ping request"),
+            },
+        },
+        async function ({ timeoutMs }) {
+            const meta = getDefaultMeta("ethora-doctor")
+            try {
+                const state = getClientState() as any
+                const checks: any = {
+                    hasApiUrl: Boolean(state.apiUrl),
+                    hasAppJwt: Boolean(state.hasAppJwt),
+                    hasAppToken: Boolean(state.hasAppToken),
+                    hasUserToken: Boolean(state.hasUserToken),
+                }
+                const pingRes = await apiPing(timeoutMs || 3000)
+                return asToolResult(ok({ state, checks, ping: { status: pingRes.status, data: pingRes.data } }, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
             }
         }
     )
@@ -90,9 +133,9 @@ function authUseAppTool(server: McpServer) {
         },
         async function () {
             try {
-                return { content: [{ type: "text", text: JSON.stringify(setAuthMode("app")) }] }
+                return asToolResult(ok(setAuthMode("app"), getDefaultMeta("ethora-auth-use-app")))
             } catch (error) {
-                return { content: [{ type: "text", text: errorToText(error) }] }
+                return asToolResult(fail(error, getDefaultMeta("ethora-auth-use-app")))
             }
         }
     )
@@ -106,9 +149,9 @@ function authUseUserTool(server: McpServer) {
         },
         async function () {
             try {
-                return { content: [{ type: "text", text: JSON.stringify(setAuthMode("user")) }] }
+                return asToolResult(ok(setAuthMode("user"), getDefaultMeta("ethora-auth-use-user")))
             } catch (error) {
-                return { content: [{ type: "text", text: errorToText(error) }] }
+                return asToolResult(fail(error, getDefaultMeta("ethora-auth-use-user")))
             }
         }
     )
@@ -127,9 +170,9 @@ function appSelectTool(server: McpServer) {
         },
         async function ({ appId, appToken, authMode }) {
             try {
-                return { content: [{ type: "text", text: JSON.stringify(selectApp({ appId, appToken, authMode })) }] }
+                return asToolResult(ok(selectApp({ appId, appToken, authMode }), getDefaultMeta("ethora-app-select")))
             } catch (error) {
-                return { content: [{ type: "text", text: errorToText(error) }] }
+                return asToolResult(fail(error, getDefaultMeta("ethora-app-select")))
             }
         }
     )
@@ -157,9 +200,9 @@ function chatsBroadcastTool(server: McpServer) {
                 if (chatNames?.length) payload.chatNames = chatNames
 
                 const res = await chatsBroadcastV2(payload)
-                return { content: [{ type: "text", text: JSON.stringify(res.data) }] }
+                return asToolResult(ok(res.data, getDefaultMeta("ethora-chats-broadcast-v2")))
             } catch (error) {
-                return { content: [{ type: "text", text: errorToText(error) }] }
+                return asToolResult(fail(error, getDefaultMeta("ethora-chats-broadcast-v2")))
             }
         }
     )
@@ -178,9 +221,9 @@ function chatsBroadcastJobTool(server: McpServer) {
             try {
                 ensureAppAuthForTool()
                 const res = await chatsBroadcastJobV2(jobId)
-                return { content: [{ type: "text", text: JSON.stringify(res.data) }] }
+                return asToolResult(ok(res.data, getDefaultMeta("ethora-chats-broadcast-job-v2")))
             } catch (error) {
-                return { content: [{ type: "text", text: errorToText(error) }] }
+                return asToolResult(fail(error, getDefaultMeta("ethora-chats-broadcast-job-v2")))
             }
         }
     )
@@ -213,9 +256,9 @@ function filesUploadV2Tool(server: McpServer) {
                     form.append("files", blob, f.name)
                 }
                 const res = await filesUploadV2(form, { "Content-Type": "multipart/form-data" })
-                return { content: [{ type: "text", text: JSON.stringify(res.data) }] }
+                return asToolResult(ok(res.data, getDefaultMeta("ethora-files-upload-v2")))
             } catch (error) {
-                return { content: [{ type: "text", text: errorToText(error) }] }
+                return asToolResult(fail(error, getDefaultMeta("ethora-files-upload-v2")))
             }
         }
     )
@@ -234,9 +277,9 @@ function filesGetV2Tool(server: McpServer) {
             try {
                 ensureUserAuthForTool()
                 const res = await filesGetV2(id)
-                return { content: [{ type: "text", text: JSON.stringify(res.data) }] }
+                return asToolResult(ok(res.data, getDefaultMeta("ethora-files-get-v2")))
             } catch (error) {
-                return { content: [{ type: "text", text: errorToText(error) }] }
+                return asToolResult(fail(error, getDefaultMeta("ethora-files-get-v2")))
             }
         }
     )
@@ -253,9 +296,9 @@ function filesDeleteV2Tool(server: McpServer) {
             try {
                 ensureUserAuthForTool()
                 const res = await filesDeleteV2(id)
-                return { content: [{ type: "text", text: JSON.stringify(res.data) }] }
+                return asToolResult(ok(res.data, getDefaultMeta("ethora-files-delete-v2")))
             } catch (error) {
-                return { content: [{ type: "text", text: errorToText(error) }] }
+                return asToolResult(fail(error, getDefaultMeta("ethora-files-delete-v2")))
             }
         }
     )
@@ -277,9 +320,9 @@ function sourcesSiteCrawlTool(server: McpServer) {
                 ensureUserAuthForTool()
                 const effectiveAppId = appId || requireCurrentAppId()
                 const res = await sourcesSiteCrawl(effectiveAppId, url, Boolean(followLink))
-                return { content: [{ type: "text", text: JSON.stringify(res.data) }] }
+                return asToolResult(ok(res.data, getDefaultMeta("ethora-sources-site-crawl")))
             } catch (error) {
-                return { content: [{ type: "text", text: errorToText(error) }] }
+                return asToolResult(fail(error, getDefaultMeta("ethora-sources-site-crawl")))
             }
         }
     )
@@ -300,9 +343,9 @@ function sourcesSiteReindexTool(server: McpServer) {
                 ensureUserAuthForTool()
                 const effectiveAppId = appId || requireCurrentAppId()
                 const res = await sourcesSiteReindex(effectiveAppId, urlId)
-                return { content: [{ type: "text", text: JSON.stringify(res.data) }] }
+                return asToolResult(ok(res.data, getDefaultMeta("ethora-sources-site-reindex")))
             } catch (error) {
-                return { content: [{ type: "text", text: errorToText(error) }] }
+                return asToolResult(fail(error, getDefaultMeta("ethora-sources-site-reindex")))
             }
         }
     )
@@ -323,9 +366,9 @@ function sourcesSiteDeleteUrlTool(server: McpServer) {
                 ensureUserAuthForTool()
                 const effectiveAppId = appId || requireCurrentAppId()
                 const res = await sourcesSiteDeleteUrl(effectiveAppId, url)
-                return { content: [{ type: "text", text: JSON.stringify(res.data) }] }
+                return asToolResult(ok(res.data, getDefaultMeta("ethora-sources-site-delete-url")))
             } catch (error) {
-                return { content: [{ type: "text", text: errorToText(error) }] }
+                return asToolResult(fail(error, getDefaultMeta("ethora-sources-site-delete-url")))
             }
         }
     )
@@ -346,9 +389,9 @@ function sourcesSiteDeleteUrlV2Tool(server: McpServer) {
                 ensureUserAuthForTool()
                 const effectiveAppId = appId || requireCurrentAppId()
                 const res = await sourcesSiteDeleteUrlV2(effectiveAppId, urls)
-                return { content: [{ type: "text", text: JSON.stringify(res.data) }] }
+                return asToolResult(ok(res.data, getDefaultMeta("ethora-sources-site-delete-url-v2")))
             } catch (error) {
-                return { content: [{ type: "text", text: errorToText(error) }] }
+                return asToolResult(fail(error, getDefaultMeta("ethora-sources-site-delete-url-v2")))
             }
         }
     )
@@ -382,9 +425,9 @@ function sourcesDocsUploadTool(server: McpServer) {
                     form.append("files", blob, f.name)
                 }
                 const res = await sourcesDocsUpload(effectiveAppId, form, { "Content-Type": "multipart/form-data" })
-                return { content: [{ type: "text", text: JSON.stringify(res.data) }] }
+                return asToolResult(ok(res.data, getDefaultMeta("ethora-sources-docs-upload")))
             } catch (error) {
-                return { content: [{ type: "text", text: errorToText(error) }] }
+                return asToolResult(fail(error, getDefaultMeta("ethora-sources-docs-upload")))
             }
         }
     )
@@ -405,9 +448,9 @@ function sourcesDocsDeleteTool(server: McpServer) {
                 ensureUserAuthForTool()
                 const effectiveAppId = appId || requireCurrentAppId()
                 const res = await sourcesDocsDelete(effectiveAppId, docId)
-                return { content: [{ type: "text", text: JSON.stringify(res.data) }] }
+                return asToolResult(ok(res.data, getDefaultMeta("ethora-sources-docs-delete")))
             } catch (error) {
-                return { content: [{ type: "text", text: errorToText(error) }] }
+                return asToolResult(fail(error, getDefaultMeta("ethora-sources-docs-delete")))
             }
         }
     )
@@ -423,15 +466,9 @@ function userLoginWithEmailTool(server: McpServer) {
         async function ({ email, password }) {
             try {
                 let result = await userLogin(email, password)
-                let toolRes: CallToolResult = {
-                    content: [{ type: "text", text: JSON.stringify(result.data) }]
-                }
-                return toolRes
+                return asToolResult(ok(result.data, getDefaultMeta("ethora-user-login")))
             } catch (error) {
-                let toolRes: CallToolResult = {
-                    content: [{ type: "text", text: errorToText(error) }]
-                }
-                return toolRes
+                return asToolResult(fail(error, getDefaultMeta("ethora-user-login")))
             }
         }
     )
@@ -454,21 +491,15 @@ function userRegisterWithEmailTool(server: McpServer) {
                     if (axiosError.response?.status === 422) {
                         const errorData = axiosError.response.data;
 
-                        return {
-                            content: [{ type: "text", text: `Error: ${errorData.error}` }]
-                        }
+                        return asToolResult(fail(new Error(String(errorData.error || "VALIDATION_ERROR")), getDefaultMeta("ethora-user-register")))
                     }
 
                 } else {
-                    return {
-                        content: [{ type: "text", text: 'An error occurred during user registration.' }]
-                    }
+                    return asToolResult(fail(error, getDefaultMeta("ethora-user-register")))
                 }
             }
 
-            return {
-                content: [{ type: "text", text: `Operation successful. Please follow the link in your email to complete the registration.` }]
-            }
+            return asToolResult(ok({ message: "Operation successful. Please follow the link in your email to complete the registration." }, getDefaultMeta("ethora-user-register")))
         }
     )
 }
@@ -482,15 +513,9 @@ function appListTool(server: McpServer) {
         async function () {
             try {
                 let result = await appList()
-                let toolRes: CallToolResult = {
-                    content: [{ type: "text", text: JSON.stringify(result.data) }]
-                }
-                return toolRes
+                return asToolResult(ok(result.data, getDefaultMeta("ethora-app-list")))
             } catch (error) {
-                let toolRes: CallToolResult = {
-                    content: [{ type: "text", text: errorToText(error) }]
-                }
-                return toolRes
+                return asToolResult(fail(error, getDefaultMeta("ethora-app-list")))
             }
         }
     )
@@ -506,15 +531,9 @@ function appCreateTool(server: McpServer) {
         async function ({ displayName }) {
             try {
                 let result = await appCreate(displayName)
-                let toolRes: CallToolResult = {
-                    content: [{ type: "text", text: JSON.stringify(result.data) }]
-                }
-                return toolRes
+                return asToolResult(ok(result.data, getDefaultMeta("ethora-app-create")))
             } catch (error) {
-                let toolRes: CallToolResult = {
-                    content: [{ type: "text", text: errorToText(error) }]
-                }
-                return toolRes
+                return asToolResult(fail(error, getDefaultMeta("ethora-app-create")))
             }
         }
     )
@@ -530,15 +549,9 @@ function appDeleteTool(server: McpServer) {
         async function ({ appId }) {
             try {
                 let result = await appDelete(appId)
-                let toolRes: CallToolResult = {
-                    content: [{ type: "text", text: JSON.stringify(result.data) }]
-                }
-                return toolRes
+                return asToolResult(ok(result.data, getDefaultMeta("ethora-app-delete")))
             } catch (error) {
-                let toolRes: CallToolResult = {
-                    content: [{ type: "text", text: errorToText(error) }]
-                }
-                return toolRes
+                return asToolResult(fail(error, getDefaultMeta("ethora-app-delete")))
             }
         }
     )
@@ -583,15 +596,9 @@ function appUpdateTool(server: McpServer) {
                     changes.botStatus = botStatus
                 }
                 let result = await appUpdate(effectiveAppId, changes)
-                let toolRes: CallToolResult = {
-                    content: [{ type: "text", text: JSON.stringify(result.data) }]
-                }
-                return toolRes
+                return asToolResult(ok(result.data, getDefaultMeta("ethora-app-update")))
             } catch (error) {
-                let toolRes: CallToolResult = {
-                    content: [{ type: "text", text: errorToText(error) }]
-                }
-                return toolRes
+                return asToolResult(fail(error, getDefaultMeta("ethora-app-update")))
             }
         }
     )
@@ -606,15 +613,9 @@ function appGetDefaultRoomsTool(server: McpServer) {
         async function () {
             try {
                 let result = await appGetDefaultRooms()
-                let toolRes: CallToolResult = {
-                    content: [{ type: "text", text: JSON.stringify(result.data) }]
-                }
-                return toolRes
+                return asToolResult(ok(result.data, getDefaultMeta("ethora-app-get-default-rooms")))
             } catch (error) {
-                let toolRes: CallToolResult = {
-                    content: [{ type: "text", text: errorToText(error) }]
-                }
-                return toolRes
+                return asToolResult(fail(error, getDefaultMeta("ethora-app-get-default-rooms")))
             }
         }
     )
@@ -637,15 +638,9 @@ function getDefaultRoomsWithAppIdTool(server: McpServer) {
                     throw new Error("appId is required (pass appId or call `ethora-app-select` first)")
                 }
                 let result = await appGetDefaultRoomsWithAppId(effectiveAppId)
-                let toolRes: CallToolResult = {
-                    content: [{ type: "text", text: JSON.stringify(result.data) }]
-                }
-                return toolRes
+                return asToolResult(ok(result.data, getDefaultMeta("ethora-app-get-default-rooms-with-app-id")))
             } catch (error) {
-                let toolRes: CallToolResult = {
-                    content: [{ type: "text", text: errorToText(error) }]
-                }
-                return toolRes
+                return asToolResult(fail(error, getDefaultMeta("ethora-app-get-default-rooms-with-app-id")))
             }
         }
     )
@@ -670,15 +665,9 @@ function craeteAppChatTool(server: McpServer) {
                     throw new Error("appId is required (pass appId or call `ethora-app-select` first)")
                 }
                 let result = await appCreateChat(effectiveAppId, title, pinned)
-                let toolRes: CallToolResult = {
-                    content: [{ type: "text", text: JSON.stringify(result.data) }]
-                }
-                return toolRes
+                return asToolResult(ok(result.data, getDefaultMeta("ethora-app-create-chat")))
             } catch (error) {
-                let toolRes: CallToolResult = {
-                    content: [{ type: "text", text: errorToText(error) }]
-                }
-                return toolRes
+                return asToolResult(fail(error, getDefaultMeta("ethora-app-create-chat")))
             }
         }
     )
@@ -702,15 +691,9 @@ function appDeleteChatTool(server: McpServer) {
                     throw new Error("appId is required (pass appId or call `ethora-app-select` first)")
                 }
                 let result = await appDeleteChat(effectiveAppId, chatJid)
-                let toolRes: CallToolResult = {
-                    content: [{ type: "text", text: JSON.stringify(result.data) }]
-                }
-                return toolRes
+                return asToolResult(ok(result.data, getDefaultMeta("ethora-app-delete-chat")))
             } catch (error) {
-                let toolRes: CallToolResult = {
-                    content: [{ type: "text", text: errorToText(error) }]
-                }
-                return toolRes
+                return asToolResult(fail(error, getDefaultMeta("ethora-app-delete-chat")))
             }
         }
     )
@@ -725,15 +708,9 @@ function walletGetBalanceTool(server: McpServer) {
         async function () {
             try {
                 let result = await walletGetBalance()
-                let toolRes: CallToolResult = {
-                    content: [{ type: "text", text: JSON.stringify(result.data) }]
-                }
-                return toolRes
+                return asToolResult(ok(result.data, getDefaultMeta("ethora-wallet-get-balance")))
             } catch (error) {
-                let toolRes: CallToolResult = {
-                    content: [{ type: "text", text: errorToText(error) }]
-                }
-                return toolRes
+                return asToolResult(fail(error, getDefaultMeta("ethora-wallet-get-balance")))
             }
         }
     )
@@ -752,15 +729,9 @@ function walletERC20TransferTool(server: McpServer) {
         async function ({ toWallet, amount }) {
             try {
                 let result = await walletERC20Transfer(toWallet, amount)
-                let toolRes: CallToolResult = {
-                    content: [{ type: "text", text: JSON.stringify(result.data) }]
-                }
-                return toolRes
+                return asToolResult(ok(result.data, getDefaultMeta("ethora-wallet-erc20-transfer")))
             } catch (error) {
-                let toolRes: CallToolResult = {
-                    content: [{ type: "text", text: errorToText(error) }]
-                }
-                return toolRes
+                return asToolResult(fail(error, getDefaultMeta("ethora-wallet-erc20-transfer")))
             }
         }
     )
@@ -780,9 +751,9 @@ function sourcesSiteCrawlV2AppTool(server: McpServer) {
             try {
                 ensureAppAuthForTool()
                 const res = await sourcesSiteCrawlV2({ url, followLink })
-                return { content: [{ type: "text", text: JSON.stringify(res.data) }] }
+                return asToolResult(ok(res.data, getDefaultMeta("ethora-sources-site-crawl-v2")))
             } catch (error) {
-                return { content: [{ type: "text", text: errorToText(error) }] }
+                return asToolResult(fail(error, getDefaultMeta("ethora-sources-site-crawl-v2")))
             }
         }
     )
@@ -801,9 +772,9 @@ function sourcesSiteReindexV2AppTool(server: McpServer) {
             try {
                 ensureAppAuthForTool()
                 const res = await sourcesSiteReindexV2({ urlId })
-                return { content: [{ type: "text", text: JSON.stringify(res.data) }] }
+                return asToolResult(ok(res.data, getDefaultMeta("ethora-sources-site-reindex-v2")))
             } catch (error) {
-                return { content: [{ type: "text", text: errorToText(error) }] }
+                return asToolResult(fail(error, getDefaultMeta("ethora-sources-site-reindex-v2")))
             }
         }
     )
@@ -822,9 +793,9 @@ function sourcesSiteDeleteUrlV2AppTool(server: McpServer) {
             try {
                 ensureAppAuthForTool()
                 const res = await sourcesSiteDeleteUrlV2Single({ url })
-                return { content: [{ type: "text", text: JSON.stringify(res.data) }] }
+                return asToolResult(ok(res.data, getDefaultMeta("ethora-sources-site-delete-url-v2")))
             } catch (error) {
-                return { content: [{ type: "text", text: errorToText(error) }] }
+                return asToolResult(fail(error, getDefaultMeta("ethora-sources-site-delete-url-v2")))
             }
         }
     )
@@ -843,9 +814,9 @@ function sourcesSiteDeleteUrlV2BatchAppTool(server: McpServer) {
             try {
                 ensureAppAuthForTool()
                 const res = await sourcesSiteDeleteUrlV2Batch({ urls })
-                return { content: [{ type: "text", text: JSON.stringify(res.data) }] }
+                return asToolResult(ok(res.data, getDefaultMeta("ethora-sources-site-delete-url-v2-batch")))
             } catch (error) {
-                return { content: [{ type: "text", text: errorToText(error) }] }
+                return asToolResult(fail(error, getDefaultMeta("ethora-sources-site-delete-url-v2-batch")))
             }
         }
     )
@@ -877,9 +848,9 @@ function sourcesDocsUploadV2AppTool(server: McpServer) {
                     form.append("files", blob, f.name)
                 }
                 const res = await sourcesDocsUploadV2(form, { "Content-Type": "multipart/form-data" })
-                return { content: [{ type: "text", text: JSON.stringify(res.data) }] }
+                return asToolResult(ok(res.data, getDefaultMeta("ethora-sources-docs-upload-v2")))
             } catch (error) {
-                return { content: [{ type: "text", text: errorToText(error) }] }
+                return asToolResult(fail(error, getDefaultMeta("ethora-sources-docs-upload-v2")))
             }
         }
     )
@@ -898,9 +869,9 @@ function sourcesDocsDeleteV2AppTool(server: McpServer) {
             try {
                 ensureAppAuthForTool()
                 const res = await sourcesDocsDeleteV2(docId)
-                return { content: [{ type: "text", text: JSON.stringify(res.data) }] }
+                return asToolResult(ok(res.data, getDefaultMeta("ethora-sources-docs-delete-v2")))
             } catch (error) {
-                return { content: [{ type: "text", text: errorToText(error) }] }
+                return asToolResult(fail(error, getDefaultMeta("ethora-sources-docs-delete-v2")))
             }
         }
     )
@@ -909,6 +880,7 @@ function sourcesDocsDeleteV2AppTool(server: McpServer) {
 export function registerTools(server: McpServer) {
     configureTool(server);
     statusTool(server);
+    doctorTool(server);
     authUseAppTool(server);
     authUseUserTool(server);
     appSelectTool(server);

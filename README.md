@@ -14,6 +14,7 @@ Use it from **Cursor**, **VS Code MCP**, **Claude Desktop**, or **Windsurf/Cline
 - **Session / Config**
   - `ethora-configure` — set API URL + App JWT (in-memory for this MCP session)
   - `ethora-status` — show configured API URL + whether auth tokens are present
+  - `ethora-doctor` — validate config + ping the configured Ethora API
   - `ethora-app-select` — select current appId and optionally set appToken (B2B)
   - `ethora-auth-use-app` — switch to app-token auth mode (B2B)
   - `ethora-auth-use-user` — switch to user-session auth mode
@@ -195,7 +196,7 @@ You can provide these either:
 After the server shows as **connected** in your client:
 
 - Run `list tools` (client command) to verify Ethora tools are available.
-- Check config: call `ethora-status`
+- Check config/connectivity: call `ethora-doctor` (or `ethora-status`)
 - Configure (optional): call `ethora-configure` with `apiUrl` / `appJwt`
 - Try a login: call `ethora-user-login`
 - List applications: call `ethora-app-list`
@@ -208,6 +209,12 @@ After the server shows as **connected** in your client:
 - **Never** hardcode API keys in shared config. Prefer client-side secret stores.
 - Use **least privilege** keys and consider **allowlists/rate limits** on your Ethora backend.
 - Rotate credentials regularly in production use.
+
+### CI security scans (report-only)
+
+This repo runs **report-only** scans on pushes/PRs:
+- **gitleaks** for secret scanning
+- **semgrep** for basic SAST
 
 ---
 
