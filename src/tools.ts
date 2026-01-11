@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp"
 import { CallToolResult } from "@modelcontextprotocol/sdk/types"
 import z from "zod"
-import { appCreate, appCreateChat, appDelete, appDeleteChat, appGetDefaultRooms, appGetDefaultRoomsWithAppId, appList, appTokensCreateV2, appTokensListV2, appTokensRevokeV2, appTokensRotateV2, appUpdate, apiPing, botGetV2, botUpdateV2, chatsBroadcastJobV2, chatsBroadcastV2, configureB2BToken, configureClient, filesDeleteV2, filesGetV2, filesUploadV2, getClientState, selectApp, setAuthMode, sourcesDocsDelete, sourcesDocsDeleteV2, sourcesDocsUpload, sourcesDocsUploadV2, sourcesSiteCrawl, sourcesSiteCrawlV2, sourcesSiteDeleteUrl, sourcesSiteDeleteUrlV2, sourcesSiteDeleteUrlV2Batch, sourcesSiteDeleteUrlV2Single, sourcesSiteReindex, sourcesSiteReindexV2, userLogin, userRegistration, usersBatchCreateJobV2, usersBatchCreateV2, walletERC20Transfer, walletGetBalance } from "./apiClientDappros.js"
+import { appCreate, appCreateChat, appDelete, appDeleteChat, appGetDefaultRooms, appGetDefaultRoomsWithAppId, appList, appProvisionV2, appTokensCreateV2, appTokensListV2, appTokensRevokeV2, appTokensRotateV2, appUpdate, apiPing, botGetV2, botUpdateV2, chatsBroadcastJobV2, chatsBroadcastV2, configureB2BToken, configureClient, filesDeleteV2, filesGetV2, filesUploadV2, getClientState, selectApp, setAuthMode, sourcesDocsDelete, sourcesDocsDeleteV2, sourcesDocsUpload, sourcesDocsUploadV2, sourcesSiteCrawl, sourcesSiteCrawlV2, sourcesSiteDeleteUrl, sourcesSiteDeleteUrlV2, sourcesSiteDeleteUrlV2Batch, sourcesSiteDeleteUrlV2Single, sourcesSiteReindex, sourcesSiteReindexV2, userLogin, userRegistration, usersBatchCreateJobV2, usersBatchCreateV2, walletERC20Transfer, walletGetBalance } from "./apiClientDappros.js"
 import { fail, ok } from "./mcpResponse.js"
 
 function errorToText(error: unknown) {
@@ -2252,6 +2252,94 @@ function appTokensRevokeV2Tool(server: McpServer) {
     )
 }
 
+function b2bAppProvisionTool(server: McpServer) {
+    server.registerTool(
+        "ethora-b2b-app-provision",
+        {
+            description: "One-call B2B flow: create app → create one or more app tokens → provision default rooms → configure/enable bot.",
+            inputSchema: {
+                displayName: z.string().min(1).describe("New app display name"),
+                // tokens
+                tokenLabels: z.array(z.string().min(1)).min(1).max(5).optional().describe("Optional labels for new tokens. Default: ['default']"),
+                // rooms
+                rooms: z.array(z.object({
+                    title: z.string().min(1),
+                    pinned: z.boolean().optional(),
+                })).max(20).optional().describe("Optional default rooms to create (B2B)."),
+                // bot
+                enableBot: z.boolean().optional().describe("If true, enables bot (app-token auth using first created token)."),
+                botTrigger: z.enum(["any_message", "/bot"]).optional(),
+                botPrompt: z.string().optional(),
+                botGreetingMessage: z.string().optional(),
+            },
+        },
+        async function ({ displayName, tokenLabels, rooms, enableBot, botTrigger, botPrompt, botGreetingMessage }) {
+            const meta = getDefaultMeta("ethora-b2b-app-provision")
+            const prev = (getClientState() as any).authMode as any
+            try {
+                ensureB2BAuthForTool()
+
+                const steps: any[] = []
+
+                // 1) Create app (B2B)
+                setAuthMode("b2b")
+                const created = await appCreate(displayName)
+                const app = created?.data?.app
+                const appId = String(app?._id || app?.id || "").trim()
+                if (!appId) throw new Error("Create app succeeded but no appId found in response")
+                steps.push({ step: "appCreate", ok: true, appId })
+
+                // 2) Create tokens (B2B)
+                const labels = Array.isArray(tokenLabels) && tokenLabels.length ? tokenLabels : ["default"]
+                const createdTokens: any[] = []
+                for (const label of labels) {
+                    const r = await appTokensCreateV2(appId, { label }, { timeoutMs: 10_000 })
+                    createdTokens.push(r.data)
+                }
+                const primaryToken = String(createdTokens?.[0]?.token || "").trim()
+                steps.push({ step: "appTokensCreate", ok: true, count: createdTokens.length })
+
+                // 3) Provision rooms (B2B)
+                let provisionRes: any = null
+                if (Array.isArray(rooms) && rooms.length) {
+                    const r = await appProvisionV2(appId, { rooms }, { timeoutMs: 60_000 })
+                    provisionRes = r.data
+                    steps.push({ step: "appProvisionRooms", ok: true, requested: rooms.length })
+                }
+
+                // 4) Configure bot (app-token using first created token)
+                let botRes: any = null
+                if (enableBot || botTrigger || botPrompt || botGreetingMessage) {
+                    if (!primaryToken) throw new Error("Bot config requested but no app token was created")
+                    selectApp({ appId, appToken: primaryToken, authMode: "app" })
+                    setAuthMode("app")
+                    const payload: any = {}
+                    if (enableBot) payload.status = "on"
+                    if (botTrigger) payload.trigger = botTrigger
+                    if (botPrompt) payload.prompt = botPrompt
+                    if (botGreetingMessage) payload.greetingMessage = botGreetingMessage
+                    const r = await botUpdateV2(payload)
+                    botRes = r.data
+                    steps.push({ step: "botUpdateV2", ok: true })
+                }
+
+                return asToolResult(ok({
+                    appId,
+                    app,
+                    tokens: createdTokens,
+                    provision: provisionRes,
+                    bot: botRes,
+                    steps,
+                    state: getClientState(),
+                }, meta))
+            } catch (error) {
+                try { setAuthMode(prev) } catch (_) {}
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
 function sourcesSiteDeleteUrlV2AppTool(server: McpServer) {
     server.registerTool(
         "ethora-sources-site-delete-url-v2",
@@ -2385,6 +2473,7 @@ export function registerTools(server: McpServer) {
     appTokensCreateV2Tool(server);
     appTokensRotateV2Tool(server);
     appTokensRevokeV2Tool(server);
+    b2bAppProvisionTool(server);
     userLoginWithEmailTool(server);
     userRegisterWithEmailTool(server);
     appListTool(server);

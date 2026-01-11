@@ -408,6 +408,11 @@ export function appTokensRevokeV2(appId: string, tokenId: string, opts?: { timeo
   return httpClientDappros.delete(`/v2/apps/${id}/tokens/${tid}`, { timeout: opts?.timeoutMs })
 }
 
+export function appProvisionV2(appId: string, payload: { rooms?: Array<{ title: string; pinned?: boolean }> }, opts?: { timeoutMs?: number }) {
+  const id = String(appId || "").trim()
+  return httpClientDappros.post(`/v2/apps/${id}/provision`, payload || {}, { timeout: opts?.timeoutMs })
+}
+
 // files v2 (user auth)
 export function filesUploadV2(formData: any, headers?: any) {
   return httpClientDappros.post(`/v2/files`, formData, { headers })
