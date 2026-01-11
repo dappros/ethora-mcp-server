@@ -106,6 +106,150 @@ function statusTool(server: McpServer) {
     )
 }
 
+function helpTool(server: McpServer) {
+    server.registerTool(
+        "ethora-help",
+        {
+            description: "Task-oriented help: shows auth modes + recommended next tool calls based on current state.",
+            inputSchema: {
+                goal: z.enum(["auto", "b2b-bootstrap-ai", "broadcast", "sources-ingest", "files-upload", "bot-manage", "user-login"]).optional()
+                    .describe("Optional goal hint to tailor recommendations. Defaults to auto."),
+            },
+        },
+        async function ({ goal }) {
+            const meta = getDefaultMeta("ethora-help")
+            try {
+                const state = getClientState() as any
+                const availableAuthModes = ["user", "app", "b2b"] as const
+
+                const checks: any = {
+                    hasApiUrl: Boolean(state.apiUrl),
+                    hasAppJwt: Boolean(state.hasAppJwt),
+                    hasAppToken: Boolean(state.hasAppToken),
+                    hasB2BToken: Boolean(state.hasB2BToken),
+                    hasUserToken: Boolean(state.hasUserToken),
+                    hasCurrentAppId: Boolean(state.currentAppId),
+                    enableDangerousTools: Boolean(state.enableDangerousTools),
+                }
+
+                type NextCall = { tool: string; args?: any; why: string }
+                const nextCalls: NextCall[] = []
+
+                // Always-start recommendations
+                if (!checks.hasApiUrl) {
+                    nextCalls.push({
+                        tool: "ethora-configure",
+                        args: { apiUrl: "https://api.ethoradev.com/v1" },
+                        why: "Set the Ethora API URL for this MCP session.",
+                    })
+                }
+
+                const effectiveGoal = goal || "auto"
+
+                // Goal: user login flows (needs appJwt and user auth mode + login)
+                if (effectiveGoal === "user-login" || effectiveGoal === "files-upload") {
+                    if (!checks.hasAppJwt) {
+                        nextCalls.push({
+                            tool: "ethora-configure",
+                            args: { appJwt: "JWT <APP_JWT_FOR_LOGIN_REGISTER>" },
+                            why: "Login/register tools require App JWT.",
+                        })
+                    }
+                    if (state.authMode !== "user") {
+                        nextCalls.push({ tool: "ethora-auth-use-user", why: "Switch to user-session auth mode." })
+                    }
+                    if (!checks.hasUserToken) {
+                        nextCalls.push({
+                            tool: "ethora-user-login",
+                            args: { email: "user@example.com", password: "<password>" },
+                            why: "Authenticate a user session token for user-auth endpoints (e.g. files).",
+                        })
+                    }
+                }
+
+                // Goal: B2B bootstrap AI
+                if (effectiveGoal === "b2b-bootstrap-ai") {
+                    if (state.authMode !== "b2b") {
+                        nextCalls.push({ tool: "ethora-auth-use-b2b", why: "Use B2B auth mode (x-custom-token) for app creation/bootstrap." })
+                    }
+                    if (!checks.hasB2BToken) {
+                        nextCalls.push({
+                            tool: "ethora-configure",
+                            args: { b2bToken: "JWT <B2B_SERVER_TOKEN>" },
+                            why: "B2B bootstrap requires a B2B server token.",
+                        })
+                    }
+                    nextCalls.push({
+                        tool: "ethora-b2b-app-bootstrap-ai",
+                        args: { displayName: "Acme AI Demo", crawlUrl: "https://example.com", enableBot: true },
+                        why: "Create app → ingest sources → enable bot in one flow.",
+                    })
+                }
+
+                // Goal: app-token operations (broadcast/sources/bot)
+                if (effectiveGoal === "broadcast" || effectiveGoal === "sources-ingest" || effectiveGoal === "bot-manage") {
+                    if (!checks.hasCurrentAppId || !checks.hasAppToken) {
+                        nextCalls.push({
+                            tool: "ethora-app-select",
+                            args: { appId: "<APP_ID>", appToken: "JWT <APP_TOKEN>" },
+                            why: "App-token operations need a selected app context + appToken.",
+                        })
+                    }
+                    if (state.authMode !== "app") {
+                        nextCalls.push({ tool: "ethora-auth-use-app", why: "Switch to app-token auth mode for B2B app operations." })
+                    }
+                }
+
+                // Auto mode: minimal “get unstuck” guidance
+                if (effectiveGoal === "auto") {
+                    if (!checks.hasApiUrl) {
+                        // already suggested above
+                    } else if (!checks.hasCurrentAppId) {
+                        nextCalls.push({
+                            tool: "ethora-app-select",
+                            args: { appId: "<APP_ID>", appToken: "JWT <APP_TOKEN>" },
+                            why: "Select an app to run app-scoped tools (broadcast/sources/bot).",
+                        })
+                    } else if (state.authMode === "app" && !checks.hasAppToken) {
+                        nextCalls.push({
+                            tool: "ethora-app-select",
+                            args: { appId: String(state.currentAppId || "<APP_ID>"), appToken: "JWT <APP_TOKEN>" },
+                            why: "You are in app auth mode but appToken is missing.",
+                        })
+                    } else if (state.authMode === "b2b" && !checks.hasB2BToken) {
+                        nextCalls.push({
+                            tool: "ethora-configure",
+                            args: { b2bToken: "JWT <B2B_SERVER_TOKEN>" },
+                            why: "You are in B2B auth mode but b2bToken is missing.",
+                        })
+                    } else if (state.authMode === "user" && !checks.hasUserToken) {
+                        nextCalls.push({
+                            tool: "ethora-user-login",
+                            args: { email: "user@example.com", password: "<password>" },
+                            why: "You are in user auth mode but no user token is present.",
+                        })
+                    } else {
+                        nextCalls.push({ tool: "ethora-doctor", why: "Run connectivity checks and get fix suggestions." })
+                    }
+                }
+
+                return asToolResult(ok({
+                    availableAuthModes,
+                    currentAuthMode: state.authMode,
+                    checks,
+                    recommendedNextCalls: nextCalls,
+                    notes: [
+                        "Tip: use goal='broadcast' or goal='b2b-bootstrap-ai' to tailor recommendations.",
+                        "Dangerous tools are deny-by-default; see ETHORA_MCP_ENABLE_DANGEROUS_TOOLS in README.",
+                    ],
+                }, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
 function doctorTool(server: McpServer) {
     server.registerTool(
         "ethora-doctor",
@@ -1525,6 +1669,7 @@ function sourcesDocsDeleteV2AppTool(server: McpServer) {
 export function registerTools(server: McpServer) {
     configureTool(server);
     statusTool(server);
+    helpTool(server);
     doctorTool(server);
     authUseAppTool(server);
     authUseUserTool(server);
