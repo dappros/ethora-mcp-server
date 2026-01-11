@@ -351,12 +351,12 @@ export function sourcesDocsDelete(appId: string, docId: string) {
 }
 
 // sources (v2 app-token endpoints)
-export function sourcesSiteCrawlV2(payload: { url: string; followLink?: boolean }) {
-  return httpClientDappros.post(`/v2/sources/site-crawl`, payload)
+export function sourcesSiteCrawlV2(payload: { url: string; followLink?: boolean }, opts?: { timeoutMs?: number }) {
+  return httpClientDappros.post(`/v2/sources/site-crawl`, payload, { timeout: opts?.timeoutMs })
 }
 
-export function sourcesSiteReindexV2(payload: { urlId: string }) {
-  return httpClientDappros.post(`/v2/sources/site-crawl-reindex`, payload)
+export function sourcesSiteReindexV2(payload: { urlId: string }, opts?: { timeoutMs?: number }) {
+  return httpClientDappros.post(`/v2/sources/site-crawl-reindex`, payload, { timeout: opts?.timeoutMs })
 }
 
 export function sourcesSiteDeleteUrlV2Single(payload: { url: string }) {
@@ -373,6 +373,16 @@ export function sourcesDocsUploadV2(formData: any, headers?: any) {
 
 export function sourcesDocsDeleteV2(docId: string) {
   return httpClientDappros.delete(`/v2/sources/docs/${docId}`)
+}
+
+// users v2 batch (async jobs; b2b auth)
+export function usersBatchCreateV2(payload: any, opts?: { timeoutMs?: number }) {
+  return httpClientDappros.post(`/v2/users/batch`, payload, { timeout: opts?.timeoutMs })
+}
+
+export function usersBatchCreateJobV2(jobId: string, opts?: { timeoutMs?: number }) {
+  const id = String(jobId || "").trim()
+  return httpClientDappros.get(`/v2/users/batch/${id}`, { timeout: opts?.timeoutMs })
 }
 
 // files v2 (user auth)

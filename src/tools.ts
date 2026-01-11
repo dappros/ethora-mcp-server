@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp"
 import { CallToolResult } from "@modelcontextprotocol/sdk/types"
 import z from "zod"
-import { appCreate, appCreateChat, appDelete, appDeleteChat, appGetDefaultRooms, appGetDefaultRoomsWithAppId, appList, appUpdate, apiPing, botGetV2, botUpdateV2, chatsBroadcastJobV2, chatsBroadcastV2, configureB2BToken, configureClient, filesDeleteV2, filesGetV2, filesUploadV2, getClientState, selectApp, setAuthMode, sourcesDocsDelete, sourcesDocsDeleteV2, sourcesDocsUpload, sourcesDocsUploadV2, sourcesSiteCrawl, sourcesSiteCrawlV2, sourcesSiteDeleteUrl, sourcesSiteDeleteUrlV2, sourcesSiteDeleteUrlV2Batch, sourcesSiteDeleteUrlV2Single, sourcesSiteReindex, sourcesSiteReindexV2, userLogin, userRegistration, walletERC20Transfer, walletGetBalance } from "./apiClientDappros.js"
+import { appCreate, appCreateChat, appDelete, appDeleteChat, appGetDefaultRooms, appGetDefaultRoomsWithAppId, appList, appUpdate, apiPing, botGetV2, botUpdateV2, chatsBroadcastJobV2, chatsBroadcastV2, configureB2BToken, configureClient, filesDeleteV2, filesGetV2, filesUploadV2, getClientState, selectApp, setAuthMode, sourcesDocsDelete, sourcesDocsDeleteV2, sourcesDocsUpload, sourcesDocsUploadV2, sourcesSiteCrawl, sourcesSiteCrawlV2, sourcesSiteDeleteUrl, sourcesSiteDeleteUrlV2, sourcesSiteDeleteUrlV2Batch, sourcesSiteDeleteUrlV2Single, sourcesSiteReindex, sourcesSiteReindexV2, userLogin, userRegistration, usersBatchCreateJobV2, usersBatchCreateV2, walletERC20Transfer, walletGetBalance } from "./apiClientDappros.js"
 import { fail, ok } from "./mcpResponse.js"
 
 function errorToText(error: unknown) {
@@ -2010,6 +2010,144 @@ function sourcesSiteReindexV2AppTool(server: McpServer) {
     )
 }
 
+function sourcesSiteCrawlV2WaitTool(server: McpServer) {
+    server.registerTool(
+        "ethora-sources-site-crawl-v2-wait",
+        {
+            description: "Wait for /v2/sources/site-crawl to finish (single call with extended timeout; app-token auth).",
+            inputSchema: {
+                url: z.string().min(1),
+                followLink: z.boolean().optional(),
+                timeoutMs: z.number().int().min(1000).max(600000).optional().describe("HTTP timeout for the crawl request (default 120000)"),
+            },
+        },
+        async function ({ url, followLink, timeoutMs }) {
+            const meta = getDefaultMeta("ethora-sources-site-crawl-v2-wait")
+            try {
+                ensureAppAuthForTool()
+                const started = Date.now()
+                const res = await sourcesSiteCrawlV2({ url, followLink }, { timeoutMs: timeoutMs ?? 120_000 })
+                return asToolResult(ok({ done: true, durationMs: Date.now() - started, result: res.data }, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
+function sourcesSiteReindexV2WaitTool(server: McpServer) {
+    server.registerTool(
+        "ethora-sources-site-reindex-v2-wait",
+        {
+            description: "Wait for /v2/sources/site-crawl-reindex to finish (single call with extended timeout; app-token auth).",
+            inputSchema: {
+                urlId: z.string().min(1),
+                timeoutMs: z.number().int().min(1000).max(600000).optional().describe("HTTP timeout for the reindex request (default 120000)"),
+            },
+        },
+        async function ({ urlId, timeoutMs }) {
+            const meta = getDefaultMeta("ethora-sources-site-reindex-v2-wait")
+            try {
+                ensureAppAuthForTool()
+                const started = Date.now()
+                const res = await sourcesSiteReindexV2({ urlId }, { timeoutMs: timeoutMs ?? 120_000 })
+                return asToolResult(ok({ done: true, durationMs: Date.now() - started, result: res.data }, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
+function usersBatchCreateV2Tool(server: McpServer) {
+    server.registerTool(
+        "ethora-users-batch-create-v2",
+        {
+            description: "Create an async v2 users batch job (B2B auth). Returns { jobId, statusUrl } with HTTP 202.",
+            inputSchema: {
+                bypassEmailConfirmation: z.boolean().optional(),
+                usersList: z.array(z.object({
+                    email: z.string().email(),
+                    firstName: z.string().min(1),
+                    lastName: z.string().min(1),
+                    password: z.string().min(1).optional(),
+                    uuid: z.string().min(1).optional(),
+                })).min(1).max(100),
+                timeoutMs: z.number().int().min(1000).max(600000).optional().describe("HTTP timeout for job creation request (default 30000)"),
+            },
+        },
+        async function ({ bypassEmailConfirmation, usersList, timeoutMs }) {
+            const meta = getDefaultMeta("ethora-users-batch-create-v2")
+            try {
+                ensureB2BAuthForTool()
+                const res = await usersBatchCreateV2({ bypassEmailConfirmation, usersList }, { timeoutMs: timeoutMs ?? 30_000 })
+                return asToolResult(ok(res.data, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
+function usersBatchCreateJobV2Tool(server: McpServer) {
+    server.registerTool(
+        "ethora-users-batch-job-v2",
+        {
+            description: "Get status/results for a v2 users batch job (B2B auth).",
+            inputSchema: {
+                jobId: z.string().min(1),
+                timeoutMs: z.number().int().min(500).max(60000).optional().describe("HTTP timeout (default 10000)"),
+            },
+        },
+        async function ({ jobId, timeoutMs }) {
+            const meta = getDefaultMeta("ethora-users-batch-job-v2")
+            try {
+                ensureB2BAuthForTool()
+                const res = await usersBatchCreateJobV2(jobId, { timeoutMs: timeoutMs ?? 10_000 })
+                return asToolResult(ok(res.data, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
+function waitUsersBatchCreateJobV2Tool(server: McpServer) {
+    server.registerTool(
+        "ethora-wait-users-batch-job-v2",
+        {
+            description: "Poll v2 users batch job until completed/failed (B2B auth).",
+            inputSchema: {
+                jobId: z.string().min(1),
+                timeoutMs: z.number().int().min(1000).max(300000).optional().describe("Max wait time (default 60000)"),
+                intervalMs: z.number().int().min(250).max(10000).optional().describe("Poll interval (default 1000)"),
+            },
+        },
+        async function ({ jobId, timeoutMs, intervalMs }) {
+            const meta = getDefaultMeta("ethora-wait-users-batch-job-v2")
+            try {
+                ensureB2BAuthForTool()
+                const timeout = timeoutMs ?? 60_000
+                const interval = intervalMs ?? 1_000
+                const started = Date.now()
+                let last: any = null
+                while (Date.now() - started < timeout) {
+                    const res = await usersBatchCreateJobV2(jobId, { timeoutMs: 10_000 })
+                    last = res.data
+                    const state = String(last?.state || "")
+                    if (state === "completed" || state === "failed") {
+                        return asToolResult(ok({ done: true, state, job: last }, meta))
+                    }
+                    await sleep(interval)
+                }
+                return asToolResult(ok({ done: false, reason: "timeout", job: last }, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
 function sourcesSiteDeleteUrlV2AppTool(server: McpServer) {
     server.registerTool(
         "ethora-sources-site-delete-url-v2",
@@ -2131,9 +2269,14 @@ export function registerTools(server: McpServer) {
     sourcesDocsDeleteTool(server);
     sourcesSiteCrawlV2AppTool(server);
     sourcesSiteReindexV2AppTool(server);
+    sourcesSiteCrawlV2WaitTool(server);
+    sourcesSiteReindexV2WaitTool(server);
     sourcesSiteDeleteUrlV2AppTool(server);
     sourcesDocsUploadV2AppTool(server);
     sourcesDocsDeleteV2AppTool(server);
+    usersBatchCreateV2Tool(server);
+    usersBatchCreateJobV2Tool(server);
+    waitUsersBatchCreateJobV2Tool(server);
     userLoginWithEmailTool(server);
     userRegisterWithEmailTool(server);
     appListTool(server);

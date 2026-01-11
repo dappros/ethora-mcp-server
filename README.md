@@ -50,6 +50,12 @@ Tip: to list runnable recipes without calling `ethora-help`, call `ethora-run-re
 - **Chats (v2)**
   - `ethora-chats-broadcast-v2` — enqueue broadcast job (requires app-token auth)
   - `ethora-chats-broadcast-job-v2` — get broadcast job status/results (requires app-token auth)
+  - `ethora-wait-broadcast-job-v2` — poll broadcast job until completed/failed (requires app-token auth)
+
+- **Users (v2 async batch)**
+  - `ethora-users-batch-create-v2` — create async users batch job (requires B2B auth)
+  - `ethora-users-batch-job-v2` — get users batch job status/results (requires B2B auth)
+  - `ethora-wait-users-batch-job-v2` — poll users batch job until completed/failed (requires B2B auth)
 
 - **Files (v2)**
 - **Bot / Agent (v2)**
@@ -71,6 +77,8 @@ Tip: to list runnable recipes without calling `ethora-help`, call `ethora-run-re
   - `ethora-sources-docs-delete` — delete ingested doc by id (requires user auth)
   - `ethora-sources-site-crawl-v2` — crawl a URL (requires app-token auth; no user creds)
   - `ethora-sources-site-reindex-v2` — reindex URL by urlId (requires app-token auth)
+  - `ethora-sources-site-crawl-v2-wait` — single-call long-timeout helper for crawl (app-token auth)
+  - `ethora-sources-site-reindex-v2-wait` — single-call long-timeout helper for reindex (app-token auth)
   - `ethora-sources-site-delete-url-v2` — delete by URL (requires app-token auth)
   - `ethora-sources-site-delete-url-v2-batch` — batch delete (requires app-token auth)
   - `ethora-sources-docs-upload-v2` — upload docs (requires app-token auth)
