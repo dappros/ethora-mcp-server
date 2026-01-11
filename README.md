@@ -38,6 +38,7 @@ Use it from **Cursor**, **VS Code MCP**, **Claude Desktop**, or **Windsurf/Cline
   - `ethora-configure` — set API URL + App JWT (in-memory for this MCP session)
   - `ethora-status` — show configured API URL + whether auth tokens are present
   - `ethora-help` — task-oriented help (recommended next calls + “one-click recipes” based on current state)
+  - `ethora-run-recipe` — execute a built-in recipe by id (sequential steps; no shell, no file writes)
   - `ethora-doctor` — validate config + ping the configured Ethora API
   - `ethora-app-select` — select current appId and optionally set appToken (B2B)
   - `ethora-auth-use-app` — switch to app-token auth mode (B2B)

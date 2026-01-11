@@ -365,6 +365,317 @@ function helpTool(server: McpServer) {
     )
 }
 
+function resolveRecipeValue(value: any, vars: Record<string, any>, ctx: { lastJobId?: string }) {
+    if (typeof value === "string") {
+        const replacements: Record<string, any> = {
+            "<API_URL>": vars.apiUrl,
+            "<APP_JWT>": vars.appJwt,
+            "<B2B_TOKEN>": vars.b2bToken,
+            "<APP_ID>": vars.appId,
+            "<APP_TOKEN>": vars.appToken,
+            "<EMAIL>": vars.email,
+            "<PASSWORD>": vars.password,
+            "<JOB_ID_FROM_PREVIOUS_STEP>": ctx.lastJobId,
+        }
+        let out = value
+        for (const [k, v] of Object.entries(replacements)) {
+            if (v === undefined || v === null) continue
+            out = out.split(k).join(String(v))
+        }
+        return out
+    }
+    if (Array.isArray(value)) return value.map((v) => resolveRecipeValue(v, vars, ctx))
+    if (value && typeof value === "object") {
+        const out: any = {}
+        for (const [k, v] of Object.entries(value)) out[k] = resolveRecipeValue(v, vars, ctx)
+        return out
+    }
+    return value
+}
+
+async function executeRecipeStep(tool: string, args: any, ctx: { lastJobId?: string }) {
+    // NOTE: this executes a small allow-list of tools used by built-in recipes.
+    switch (tool) {
+        case "ethora-configure": {
+            const { apiUrl, appJwt, b2bToken } = args || {}
+            const s = configureClient({ apiUrl, appJwt })
+            if (typeof b2bToken === "string") configureB2BToken(b2bToken)
+            return s
+        }
+        case "ethora-auth-use-user":
+            return setAuthMode("user")
+        case "ethora-auth-use-app":
+            return setAuthMode("app")
+        case "ethora-auth-use-b2b":
+            return setAuthMode("b2b")
+        case "ethora-user-login": {
+            const { email, password } = args || {}
+            const res = await userLogin(String(email || ""), String(password || ""))
+            return res.data
+        }
+        case "ethora-app-select": {
+            const { appId, appToken } = args || {}
+            return selectApp({ appId: String(appId || ""), appToken: typeof appToken === "string" ? appToken : undefined })
+        }
+        case "ethora-b2b-app-create": {
+            ensureB2BAuthForTool()
+            const { displayName } = args || {}
+            const res = await appCreate(String(displayName || "My App"))
+            return res.data
+        }
+        case "ethora-b2b-app-bootstrap-ai": {
+            const { displayName, crawlUrl, enableBot, followLink, docs, setAsCurrent, botTrigger } = args || {}
+            return await runB2BAppBootstrapAi({
+                displayName: String(displayName || "Acme AI Demo"),
+                crawlUrl,
+                enableBot,
+                followLink,
+                docs,
+                setAsCurrent,
+                botTrigger,
+            } as any)
+        }
+        case "ethora-chats-broadcast-v2": {
+            ensureAppAuthForTool()
+            const { text, allRooms, chatIds, chatNames } = args || {}
+            const payload: any = { text: String(text || "") }
+            if (typeof allRooms === "boolean") payload.allRooms = allRooms
+            if (Array.isArray(chatIds) && chatIds.length) payload.chatIds = chatIds
+            if (Array.isArray(chatNames) && chatNames.length) payload.chatNames = chatNames
+            const res = await chatsBroadcastV2(payload)
+            const jobId = String(res?.data?.jobId || res?.data?.id || "")
+            if (jobId) ctx.lastJobId = jobId
+            return res.data
+        }
+        case "ethora-wait-broadcast-job-v2": {
+            ensureAppAuthForTool()
+            const { jobId, timeoutMs, intervalMs } = args || {}
+            const timeout = timeoutMs ?? 60_000
+            const interval = intervalMs ?? 1_000
+            const started = Date.now()
+            let last: any = null
+            while (Date.now() - started < timeout) {
+                const res = await chatsBroadcastJobV2(String(jobId || ctx.lastJobId || ""))
+                last = res.data
+                const state = String(last?.state || "")
+                if (state === "completed" || state === "failed") return { done: true, state, job: last }
+                await sleep(interval)
+            }
+            return { done: false, reason: "timeout", job: last }
+        }
+        case "ethora-sources-site-crawl-v2": {
+            ensureAppAuthForTool()
+            const { url, followLink } = args || {}
+            const res = await sourcesSiteCrawlV2({ url: String(url || ""), followLink })
+            return res.data
+        }
+        case "ethora-sources-docs-upload-v2": {
+            ensureAppAuthForTool()
+            const { files } = args || {}
+            const form = new FormData()
+            for (const f of (files || [])) {
+                const buf = normalizeBase64ToBuffer(f.base64)
+                if (buf.length > 50 * 1024 * 1024) throw new Error(`File '${f.name}' exceeds 50MB limit`)
+                const blob = new Blob([buf], { type: f.mimeType })
+                form.append("files", blob, f.name)
+            }
+            const res = await sourcesDocsUploadV2(form, { "Content-Type": "multipart/form-data" })
+            return res.data
+        }
+        case "ethora-bot-enable-v2": {
+            ensureAppAuthForTool()
+            const { trigger } = args || {}
+            const res = await botUpdateV2({ status: "on", trigger } as any)
+            return res.data
+        }
+        case "ethora-bot-update-v2": {
+            ensureAppAuthForTool()
+            const res = await botUpdateV2(args as any)
+            return res.data
+        }
+        case "ethora-files-upload-v2": {
+            ensureUserAuthForTool()
+            const { files } = args || {}
+            const form = new FormData()
+            for (const f of (files || [])) {
+                const buf = normalizeBase64ToBuffer(f.base64)
+                if (buf.length > 50 * 1024 * 1024) throw new Error(`File '${f.name}' exceeds 50MB limit`)
+                const blob = new Blob([buf], { type: f.mimeType })
+                form.append("files", blob, f.name)
+            }
+            const res = await filesUploadV2(form, { "Content-Type": "multipart/form-data" })
+            return res.data
+        }
+        default:
+            throw new Error(`ethora-run-recipe does not support step tool '${tool}'`)
+    }
+}
+
+function runRecipeTool(server: McpServer) {
+    server.registerTool(
+        "ethora-run-recipe",
+        {
+            description: "Execute a built-in ethora-help recipe by id (sequential steps, no shell, no file writes).",
+            inputSchema: {
+                recipeId: z.string().min(1),
+                goal: z.enum(["auto", "b2b-bootstrap-ai", "broadcast", "sources-ingest", "files-upload", "bot-manage", "user-login"]).optional()
+                    .describe("Optional goal scope to look up recipes; defaults to auto."),
+                vars: z.record(z.any()).optional().describe("Variables to substitute (appId, appToken, b2bToken, appJwt, email, password, apiUrl, etc)."),
+                dryRun: z.boolean().optional().describe("If true, only returns resolved steps without executing."),
+            },
+        },
+        async function ({ recipeId, goal, vars, dryRun }) {
+            const meta = getDefaultMeta("ethora-run-recipe")
+            try {
+                const state = getClientState() as any
+                const effectiveGoal = goal || "auto"
+
+                // NOTE: We can't call the ethora-help tool implementation from here directly.
+                // So we keep a small built-in recipe registry (runnable only) with stable IDs.
+                const helpRes = await (async () => {
+                    // Minimal subset of recipes: these IDs match ethora-help.
+                    const out: any = { recipes: [] as any[] }
+                    const apiUrl = String(state.apiUrl || "https://api.ethoradev.com/v1")
+                    if (effectiveGoal === "b2b-bootstrap-ai") {
+                        out.recipes.push(
+                            {
+                                id: "b2b-bootstrap-ai",
+                                title: "B2B bootstrap: create app → ingest → enable bot",
+                                description: "Best for partner automation and repeatable provisioning.",
+                                steps: [
+                                    { tool: "ethora-configure", args: { apiUrl, b2bToken: "<B2B_TOKEN>" } },
+                                    { tool: "ethora-auth-use-b2b" },
+                                    { tool: "ethora-b2b-app-bootstrap-ai", args: { displayName: "Acme AI Demo", crawlUrl: "https://example.com", enableBot: true } },
+                                ],
+                            },
+                            {
+                                id: "b2b-create-app-only",
+                                title: "B2B: create app only",
+                                description: "Create an app via B2B token (no sources/bot).",
+                                steps: [
+                                    { tool: "ethora-configure", args: { apiUrl, b2bToken: "<B2B_TOKEN>" } },
+                                    { tool: "ethora-auth-use-b2b" },
+                                    { tool: "ethora-b2b-app-create", args: { displayName: "My App" } },
+                                ],
+                            }
+                        )
+                    }
+                    if (effectiveGoal === "broadcast") {
+                        out.recipes.push({
+                            id: "broadcast-v2",
+                            title: "Broadcast to chat rooms (v2 job)",
+                            description: "Select app + appToken, switch to app auth, enqueue broadcast, then poll for completion.",
+                            steps: [
+                                { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: "<APP_TOKEN>" } },
+                                { tool: "ethora-auth-use-app" },
+                                { tool: "ethora-chats-broadcast-v2", args: { text: "Hello from MCP!", allRooms: true } },
+                                { tool: "ethora-wait-broadcast-job-v2", args: { jobId: "<JOB_ID_FROM_PREVIOUS_STEP>", timeoutMs: 60000, intervalMs: 2000 } },
+                            ],
+                        })
+                    }
+                    if (effectiveGoal === "sources-ingest") {
+                        out.recipes.push(
+                            {
+                                id: "sources-site-crawl-v2",
+                                title: "Ingest website (Sources v2 crawl)",
+                                description: "Crawl a website for RAG ingestion using app-token auth.",
+                                steps: [
+                                    { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: "<APP_TOKEN>" } },
+                                    { tool: "ethora-auth-use-app" },
+                                    { tool: "ethora-sources-site-crawl-v2", args: { url: "https://example.com", followLink: true } },
+                                ],
+                            }
+                        )
+                        out.recipes.push(
+                            {
+                                id: "sources-docs-upload-v2",
+                                title: "Upload docs for ingestion (Sources v2 docs)",
+                                description: "Upload documents for parsing + embeddings using app-token auth.",
+                                steps: [
+                                    { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: "<APP_TOKEN>" } },
+                                    { tool: "ethora-auth-use-app" },
+                                    { tool: "ethora-sources-docs-upload-v2", args: { files: [{ name: "doc.pdf", mimeType: "application/pdf", base64: "<BASE64_CONTENT>" }] } },
+                                ],
+                            }
+                        )
+                    }
+                    if (effectiveGoal === "bot-manage") {
+                        out.recipes.push({
+                            id: "bot-enable-and-tune",
+                            title: "Enable bot + tune settings (v2)",
+                            description: "Enable a bot for an app and update its prompt/greeting.",
+                            steps: [
+                                { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: "<APP_TOKEN>" } },
+                                { tool: "ethora-auth-use-app" },
+                                { tool: "ethora-bot-enable-v2", args: {} },
+                                { tool: "ethora-bot-update-v2", args: { trigger: "/bot", prompt: "You are a helpful assistant.", greetingMessage: "Hello! Ask me anything." } },
+                            ],
+                        })
+                    }
+                    if (effectiveGoal === "user-login" || effectiveGoal === "files-upload") {
+                        out.recipes.push(
+                            {
+                                id: "user-login",
+                                title: "User login (for user-auth tools like files)",
+                                description: "Configure appJwt (if needed), switch to user auth, and login.",
+                                steps: [
+                                    { tool: "ethora-configure", args: { apiUrl, appJwt: "<APP_JWT>" } },
+                                    { tool: "ethora-auth-use-user" },
+                                    { tool: "ethora-user-login", args: { email: "<EMAIL>", password: "<PASSWORD>" } },
+                                ],
+                            },
+                            {
+                                id: "files-upload-v2",
+                                title: "Upload files (v2)",
+                                description: "Login a user, then call the v2 files upload tool.",
+                                steps: [
+                                    { tool: "ethora-auth-use-user" },
+                                    { tool: "ethora-user-login", args: { email: "<EMAIL>", password: "<PASSWORD>" } },
+                                    { tool: "ethora-files-upload-v2", args: { files: [{ name: "example.txt", mimeType: "text/plain", base64: "<BASE64_CONTENT>" }] } },
+                                ],
+                            }
+                        )
+                    }
+                    return out
+                })()
+
+                const recipe = (helpRes?.recipes || []).find((r: any) => r.id === String(recipeId))
+                if (!recipe) {
+                    return asToolResult(fail(new Error(`Unknown recipeId '${recipeId}' for goal '${effectiveGoal}'. Try ethora-help first.`), meta))
+                }
+
+                const v = (vars && typeof vars === "object") ? (vars as any) : {}
+                const ctx: { lastJobId?: string } = {}
+
+                const resolvedSteps = recipe.steps.map((s: any) => ({
+                    tool: s.tool,
+                    args: resolveRecipeValue(s.args, v, ctx),
+                }))
+
+                if (dryRun) {
+                    return asToolResult(ok({ recipeId: recipe.id, dryRun: true, steps: resolvedSteps }, meta))
+                }
+
+                const results: any[] = []
+                for (let i = 0; i < resolvedSteps.length; i++) {
+                    const step = resolvedSteps[i]
+                    try {
+                        const data = await executeRecipeStep(step.tool, step.args, ctx)
+                        results.push({ i, tool: step.tool, args: step.args, ok: true, data })
+                    } catch (e) {
+                        results.push({ i, tool: step.tool, args: step.args, ok: false, error: errorToText(e) })
+                        break
+                    }
+                }
+
+                return asToolResult(ok({ recipeId: recipe.id, dryRun: false, steps: results, state: getClientState() }, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
 function doctorTool(server: McpServer) {
     server.registerTool(
         "ethora-doctor",
@@ -1785,6 +2096,7 @@ export function registerTools(server: McpServer) {
     configureTool(server);
     statusTool(server);
     helpTool(server);
+    runRecipeTool(server);
     doctorTool(server);
     authUseAppTool(server);
     authUseUserTool(server);
