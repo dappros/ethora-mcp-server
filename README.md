@@ -18,6 +18,23 @@ Use it from **Cursor**, **VS Code MCP**, **Claude Desktop**, or **Windsurf/Cline
   - `ethora-auth-use-app` — switch to app-token auth mode (B2B)
   - `ethora-auth-use-user` — switch to user-session auth mode
 
+- **Chats (v2)**
+  - `ethora-chats-broadcast-v2` — enqueue broadcast job (requires app-token auth)
+  - `ethora-chats-broadcast-job-v2` — get broadcast job status/results (requires app-token auth)
+
+- **Files (v2)**
+  - `ethora-files-upload-v2` — upload files (requires user auth)
+  - `ethora-files-get-v2` — list/get files (requires user auth)
+  - `ethora-files-delete-v2` — delete file by id (requires user auth)
+
+- **Sources**
+  - `ethora-sources-site-crawl` — crawl a URL (requires user auth)
+  - `ethora-sources-site-reindex` — reindex URL by urlId (requires user auth)
+  - `ethora-sources-site-delete-url` — delete by URL (requires user auth)
+  - `ethora-sources-site-delete-url-v2` — batch delete URLs (requires user auth)
+  - `ethora-sources-docs-upload` — upload docs for ingestion (requires user auth)
+  - `ethora-sources-docs-delete` — delete ingested doc by id (requires user auth)
+
 - **Auth & Accounts**
   - `ethora-user-login` — login user (email + password)
   - `ethora-user-register` — register user (email + first/last name)

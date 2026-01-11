@@ -33,6 +33,13 @@ httpClientDappros.interceptors.request.use((config) => {
   // If the user provides a full URL, don't attempt to mutate headers.
   if (!config.url) return config
 
+  // Allow calling v2 endpoints even if baseURL is configured as .../v1.
+  // Example: baseURL=https://api.ethora.com/v1 + url=/v2/chats/broadcast => should call https://api.ethora.com/v2/...
+  const baseURL = String(config.baseURL || httpClientDappros.defaults.baseURL || "")
+  if (config.url.startsWith("/v2/") && /\/v1\/?$/.test(baseURL)) {
+    config.baseURL = baseURL.replace(/\/v1\/?$/, "")
+  }
+
   if (config.url === '/users/login/refresh') {
     return config;
   }
@@ -261,4 +268,56 @@ export function walletERC20Transfer(toWallet: string, amount: number) {
       "tokenName": "Dappros Platform Token"
     }
   )
+}
+
+// v2 chats (app-token auth)
+export function chatsBroadcastV2(payload: {
+  text: string
+  allRooms?: boolean
+  chatIds?: string[]
+  chatNames?: string[]
+}) {
+  return httpClientDappros.post(`/v2/chats/broadcast`, payload)
+}
+
+export function chatsBroadcastJobV2(jobId: string) {
+  return httpClientDappros.get(`/v2/chats/broadcast/${jobId}`)
+}
+
+// sources (v1-style routes, user auth)
+export function sourcesSiteCrawl(appId: string, url: string, followLink: boolean) {
+  return httpClientDappros.post(`/sources/site-crawl/${appId}`, { url, followLink })
+}
+
+export function sourcesSiteReindex(appId: string, urlId: string) {
+  return httpClientDappros.post(`/sources/site-crawl-reindex/${appId}`, { urlId })
+}
+
+export function sourcesSiteDeleteUrl(appId: string, url: string) {
+  return httpClientDappros.delete(`/sources/site-crawl/url/${appId}`, { data: { url } })
+}
+
+export function sourcesSiteDeleteUrlV2(appId: string, urls: string[]) {
+  return httpClientDappros.delete(`/sources/site-crawl-v2/url/${appId}`, { data: { urls } })
+}
+
+export function sourcesDocsUpload(appId: string, formData: any, headers?: any) {
+  return httpClientDappros.post(`/sources/docs/${appId}`, formData, { headers })
+}
+
+export function sourcesDocsDelete(appId: string, docId: string) {
+  return httpClientDappros.delete(`/sources/docs/${appId}/${docId}`)
+}
+
+// files v2 (user auth)
+export function filesUploadV2(formData: any, headers?: any) {
+  return httpClientDappros.post(`/v2/files`, formData, { headers })
+}
+
+export function filesGetV2(id?: string) {
+  return httpClientDappros.get(id ? `/v2/files/${id}` : `/v2/files`)
+}
+
+export function filesDeleteV2(id: string) {
+  return httpClientDappros.delete(`/v2/files/${id}`)
 }

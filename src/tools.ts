@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp"
 import { CallToolResult } from "@modelcontextprotocol/sdk/types"
 import z from "zod"
-import { appCreate, appCreateChat, appDelete, appDeleteChat, appGetDefaultRooms, appGetDefaultRoomsWithAppId, appList, appUpdate, configureClient, getClientState, selectApp, setAuthMode, userLogin, userRegistration, walletERC20Transfer, walletGetBalance } from "./apiClientDappros.js"
+import { appCreate, appCreateChat, appDelete, appDeleteChat, appGetDefaultRooms, appGetDefaultRoomsWithAppId, appList, appUpdate, chatsBroadcastJobV2, chatsBroadcastV2, configureClient, filesDeleteV2, filesGetV2, filesUploadV2, getClientState, selectApp, setAuthMode, sourcesDocsDelete, sourcesDocsUpload, sourcesSiteCrawl, sourcesSiteDeleteUrl, sourcesSiteDeleteUrlV2, sourcesSiteReindex, userLogin, userRegistration, walletERC20Transfer, walletGetBalance } from "./apiClientDappros.js"
 
 function errorToText(error: unknown) {
     // axios-style errors
@@ -14,6 +14,35 @@ function errorToText(error: unknown) {
     }
     if (error instanceof Error) return `error: ${error.message}`
     return `error: ${String(error)}`
+}
+
+function requireCurrentAppId() {
+    const state = getClientState() as any
+    const appId = String(state.currentAppId || "").trim()
+    if (!appId) {
+        throw new Error("No current app selected. Call `ethora-app-select` first (or pass appId where supported).")
+    }
+    return appId
+}
+
+function normalizeBase64ToBuffer(input: string) {
+    const raw = String(input || "")
+    const b64 = raw.includes("base64,") ? raw.split("base64,").pop() || "" : raw
+    return Buffer.from(b64, "base64")
+}
+
+function ensureUserAuthForTool() {
+    const state = getClientState() as any
+    if (state.authMode !== "user") {
+        throw new Error("This tool requires user auth. Call `ethora-auth-use-user` (and `ethora-user-login`) first.")
+    }
+}
+
+function ensureAppAuthForTool() {
+    const state = getClientState() as any
+    if (state.authMode !== "app") {
+        throw new Error("This tool requires app-token auth. Call `ethora-auth-use-app` (and configure appToken via `ethora-app-select`) first.")
+    }
 }
 
 function configureTool(server: McpServer) {
@@ -99,6 +128,284 @@ function appSelectTool(server: McpServer) {
         async function ({ appId, appToken, authMode }) {
             try {
                 return { content: [{ type: "text", text: JSON.stringify(selectApp({ appId, appToken, authMode })) }] }
+            } catch (error) {
+                return { content: [{ type: "text", text: errorToText(error) }] }
+            }
+        }
+    )
+}
+
+function chatsBroadcastTool(server: McpServer) {
+    server.registerTool(
+        "ethora-chats-broadcast-v2",
+        {
+            description: "Enqueue a v2 broadcast job (XMPP system message) for an app. Requires app-token auth.",
+            inputSchema: {
+                // backend supports targeting by allRooms OR chatIds/chatNames
+                text: z.string().min(1).describe("Message text to broadcast"),
+                allRooms: z.boolean().optional().describe("If true, broadcast to all rooms in the app"),
+                chatIds: z.array(z.string()).optional().describe("Optional list of chatIds to target"),
+                chatNames: z.array(z.string()).optional().describe("Optional list of chat JIDs/localparts to target"),
+            },
+        },
+        async function ({ text, allRooms, chatIds, chatNames }) {
+            try {
+                ensureAppAuthForTool()
+                const payload: any = { text }
+                if (typeof allRooms === "boolean") payload.allRooms = allRooms
+                if (chatIds?.length) payload.chatIds = chatIds
+                if (chatNames?.length) payload.chatNames = chatNames
+
+                const res = await chatsBroadcastV2(payload)
+                return { content: [{ type: "text", text: JSON.stringify(res.data) }] }
+            } catch (error) {
+                return { content: [{ type: "text", text: errorToText(error) }] }
+            }
+        }
+    )
+}
+
+function chatsBroadcastJobTool(server: McpServer) {
+    server.registerTool(
+        "ethora-chats-broadcast-job-v2",
+        {
+            description: "Fetch v2 broadcast job status/results. Requires app-token auth.",
+            inputSchema: {
+                jobId: z.string().describe("Broadcast job id"),
+            },
+        },
+        async function ({ jobId }) {
+            try {
+                ensureAppAuthForTool()
+                const res = await chatsBroadcastJobV2(jobId)
+                return { content: [{ type: "text", text: JSON.stringify(res.data) }] }
+            } catch (error) {
+                return { content: [{ type: "text", text: errorToText(error) }] }
+            }
+        }
+    )
+}
+
+function filesUploadV2Tool(server: McpServer) {
+    server.registerTool(
+        "ethora-files-upload-v2",
+        {
+            description: "Upload files via POST /v2/files (requires user auth). Input is base64 to avoid local filesystem access.",
+            inputSchema: {
+                files: z.array(z.object({
+                    name: z.string().min(1),
+                    mimeType: z.string().min(1),
+                    base64: z.string().min(1).describe("Base64 content (may include data:...;base64, prefix)"),
+                })).min(1).max(5),
+            },
+        },
+        async function ({ files }) {
+            try {
+                ensureUserAuthForTool()
+                const form = new FormData()
+                for (const f of files) {
+                    const buf = normalizeBase64ToBuffer(f.base64)
+                    // lightweight client-side guardrail (server has its own limits too)
+                    if (buf.length > 50 * 1024 * 1024) {
+                        throw new Error(`File '${f.name}' exceeds 50MB limit`)
+                    }
+                    const blob = new Blob([buf], { type: f.mimeType })
+                    form.append("files", blob, f.name)
+                }
+                const res = await filesUploadV2(form, { "Content-Type": "multipart/form-data" })
+                return { content: [{ type: "text", text: JSON.stringify(res.data) }] }
+            } catch (error) {
+                return { content: [{ type: "text", text: errorToText(error) }] }
+            }
+        }
+    )
+}
+
+function filesGetV2Tool(server: McpServer) {
+    server.registerTool(
+        "ethora-files-get-v2",
+        {
+            description: "List files or get file by id via GET /v2/files (requires user auth).",
+            inputSchema: {
+                id: z.string().optional().describe("Optional file id"),
+            },
+        },
+        async function ({ id }) {
+            try {
+                ensureUserAuthForTool()
+                const res = await filesGetV2(id)
+                return { content: [{ type: "text", text: JSON.stringify(res.data) }] }
+            } catch (error) {
+                return { content: [{ type: "text", text: errorToText(error) }] }
+            }
+        }
+    )
+}
+
+function filesDeleteV2Tool(server: McpServer) {
+    server.registerTool(
+        "ethora-files-delete-v2",
+        {
+            description: "Delete file by id via DELETE /v2/files/:id (requires user auth).",
+            inputSchema: { id: z.string().min(1) },
+        },
+        async function ({ id }) {
+            try {
+                ensureUserAuthForTool()
+                const res = await filesDeleteV2(id)
+                return { content: [{ type: "text", text: JSON.stringify(res.data) }] }
+            } catch (error) {
+                return { content: [{ type: "text", text: errorToText(error) }] }
+            }
+        }
+    )
+}
+
+function sourcesSiteCrawlTool(server: McpServer) {
+    server.registerTool(
+        "ethora-sources-site-crawl",
+        {
+            description: "Crawl a site URL and ingest into Sources (requires user auth).",
+            inputSchema: {
+                appId: z.string().optional().describe("Defaults to current app if selected"),
+                url: z.string().min(1),
+                followLink: z.boolean().default(false),
+            },
+        },
+        async function ({ appId, url, followLink }) {
+            try {
+                ensureUserAuthForTool()
+                const effectiveAppId = appId || requireCurrentAppId()
+                const res = await sourcesSiteCrawl(effectiveAppId, url, Boolean(followLink))
+                return { content: [{ type: "text", text: JSON.stringify(res.data) }] }
+            } catch (error) {
+                return { content: [{ type: "text", text: errorToText(error) }] }
+            }
+        }
+    )
+}
+
+function sourcesSiteReindexTool(server: McpServer) {
+    server.registerTool(
+        "ethora-sources-site-reindex",
+        {
+            description: "Reindex a crawled URL by urlId (requires user auth).",
+            inputSchema: {
+                appId: z.string().optional().describe("Defaults to current app if selected"),
+                urlId: z.string().min(1),
+            },
+        },
+        async function ({ appId, urlId }) {
+            try {
+                ensureUserAuthForTool()
+                const effectiveAppId = appId || requireCurrentAppId()
+                const res = await sourcesSiteReindex(effectiveAppId, urlId)
+                return { content: [{ type: "text", text: JSON.stringify(res.data) }] }
+            } catch (error) {
+                return { content: [{ type: "text", text: errorToText(error) }] }
+            }
+        }
+    )
+}
+
+function sourcesSiteDeleteUrlTool(server: McpServer) {
+    server.registerTool(
+        "ethora-sources-site-delete-url",
+        {
+            description: "Delete a crawled site URL by exact url string (requires user auth).",
+            inputSchema: {
+                appId: z.string().optional().describe("Defaults to current app if selected"),
+                url: z.string().min(1),
+            },
+        },
+        async function ({ appId, url }) {
+            try {
+                ensureUserAuthForTool()
+                const effectiveAppId = appId || requireCurrentAppId()
+                const res = await sourcesSiteDeleteUrl(effectiveAppId, url)
+                return { content: [{ type: "text", text: JSON.stringify(res.data) }] }
+            } catch (error) {
+                return { content: [{ type: "text", text: errorToText(error) }] }
+            }
+        }
+    )
+}
+
+function sourcesSiteDeleteUrlV2Tool(server: McpServer) {
+    server.registerTool(
+        "ethora-sources-site-delete-url-v2",
+        {
+            description: "Delete multiple crawled URLs (requires user auth).",
+            inputSchema: {
+                appId: z.string().optional().describe("Defaults to current app if selected"),
+                urls: z.array(z.string().min(1)).min(1).max(100),
+            },
+        },
+        async function ({ appId, urls }) {
+            try {
+                ensureUserAuthForTool()
+                const effectiveAppId = appId || requireCurrentAppId()
+                const res = await sourcesSiteDeleteUrlV2(effectiveAppId, urls)
+                return { content: [{ type: "text", text: JSON.stringify(res.data) }] }
+            } catch (error) {
+                return { content: [{ type: "text", text: errorToText(error) }] }
+            }
+        }
+    )
+}
+
+function sourcesDocsUploadTool(server: McpServer) {
+    server.registerTool(
+        "ethora-sources-docs-upload",
+        {
+            description: "Upload docs for ingestion (requires user auth). Input is base64 to avoid local filesystem access.",
+            inputSchema: {
+                appId: z.string().optional().describe("Defaults to current app if selected"),
+                files: z.array(z.object({
+                    name: z.string().min(1),
+                    mimeType: z.string().min(1),
+                    base64: z.string().min(1),
+                })).min(1).max(5),
+            },
+        },
+        async function ({ appId, files }) {
+            try {
+                ensureUserAuthForTool()
+                const effectiveAppId = appId || requireCurrentAppId()
+                const form = new FormData()
+                for (const f of files) {
+                    const buf = normalizeBase64ToBuffer(f.base64)
+                    if (buf.length > 50 * 1024 * 1024) {
+                        throw new Error(`File '${f.name}' exceeds 50MB limit`)
+                    }
+                    const blob = new Blob([buf], { type: f.mimeType })
+                    form.append("files", blob, f.name)
+                }
+                const res = await sourcesDocsUpload(effectiveAppId, form, { "Content-Type": "multipart/form-data" })
+                return { content: [{ type: "text", text: JSON.stringify(res.data) }] }
+            } catch (error) {
+                return { content: [{ type: "text", text: errorToText(error) }] }
+            }
+        }
+    )
+}
+
+function sourcesDocsDeleteTool(server: McpServer) {
+    server.registerTool(
+        "ethora-sources-docs-delete",
+        {
+            description: "Delete an ingested doc by docId (requires user auth).",
+            inputSchema: {
+                appId: z.string().optional().describe("Defaults to current app if selected"),
+                docId: z.string().min(1),
+            },
+        },
+        async function ({ appId, docId }) {
+            try {
+                ensureUserAuthForTool()
+                const effectiveAppId = appId || requireCurrentAppId()
+                const res = await sourcesDocsDelete(effectiveAppId, docId)
+                return { content: [{ type: "text", text: JSON.stringify(res.data) }] }
             } catch (error) {
                 return { content: [{ type: "text", text: errorToText(error) }] }
             }
@@ -465,6 +772,17 @@ export function registerTools(server: McpServer) {
     authUseAppTool(server);
     authUseUserTool(server);
     appSelectTool(server);
+    chatsBroadcastTool(server);
+    chatsBroadcastJobTool(server);
+    filesUploadV2Tool(server);
+    filesGetV2Tool(server);
+    filesDeleteV2Tool(server);
+    sourcesSiteCrawlTool(server);
+    sourcesSiteReindexTool(server);
+    sourcesSiteDeleteUrlTool(server);
+    sourcesSiteDeleteUrlV2Tool(server);
+    sourcesDocsUploadTool(server);
+    sourcesDocsDeleteTool(server);
     userLoginWithEmailTool(server);
     userRegisterWithEmailTool(server);
     appListTool(server);
