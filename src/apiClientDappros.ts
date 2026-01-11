@@ -3,6 +3,7 @@ import { appConfig, normalizeApiUrl } from "./config.js"
 
 export const httpTokens = {
   appJwt: appConfig.appJwt,
+  appToken: "",
   _token: '',
   _refreshToken: '',
   set refreshToken(token: string) {
@@ -18,6 +19,11 @@ export const httpTokens = {
     return this._token;
   },
 };
+
+export const ethoraContext = {
+  authMode: "user" as "user" | "app",
+  currentAppId: "" as string,
+}
 
 export const httpClientDappros = axios.create({
   baseURL: appConfig.apiUrl,
@@ -51,8 +57,16 @@ httpClientDappros.interceptors.request.use((config) => {
     return config;
   }
 
+  if (ethoraContext.authMode === "app") {
+    if (!httpTokens.appToken) {
+      throw new Error("App-token auth is selected but no appToken is configured. Call `ethora-app-select` with appToken, or call `ethora-configure` and set appToken.")
+    }
+    config.headers.Authorization = httpTokens.appToken
+    return config
+  }
+
   if (!httpTokens.token) {
-    throw new Error("Not logged in. Call `ethora-user-login` first.")
+    throw new Error("Not logged in. Call `ethora-user-login` first (or switch to app-token auth via `ethora-auth-use-app`).")
   }
   config.headers.Authorization = httpTokens.token;
 
@@ -118,9 +132,35 @@ export function getClientState() {
   return {
     apiUrl: String(httpClientDappros.defaults.baseURL || ""),
     hasAppJwt: Boolean(httpTokens.appJwt),
+    hasAppToken: Boolean(httpTokens.appToken),
     hasUserToken: Boolean(httpTokens.token),
     hasRefreshToken: Boolean(httpTokens.refreshToken),
+    authMode: ethoraContext.authMode,
+    currentAppId: ethoraContext.currentAppId,
   }
+}
+
+export function selectApp(params: { appId: string; appToken?: string; authMode?: "app" | "user" }) {
+  const { appId, appToken, authMode } = params
+  ethoraContext.currentAppId = String(appId || "").trim()
+  if (!ethoraContext.currentAppId) {
+    throw new Error("appId is required")
+  }
+  if (typeof appToken === "string") {
+    httpTokens.appToken = appToken.trim()
+  }
+  if (authMode) {
+    ethoraContext.authMode = authMode
+  } else if (httpTokens.appToken) {
+    // If caller provided appToken, default to app auth.
+    ethoraContext.authMode = "app"
+  }
+  return getClientState()
+}
+
+export function setAuthMode(authMode: "app" | "user") {
+  ethoraContext.authMode = authMode
+  return getClientState()
 }
 
 export function userRegistration(email: string, firstName: string, lastName: string) {

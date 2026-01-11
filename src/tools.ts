@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp"
 import { CallToolResult } from "@modelcontextprotocol/sdk/types"
 import z from "zod"
-import { appCreate, appCreateChat, appDelete, appDeleteChat, appGetDefaultRooms, appGetDefaultRoomsWithAppId, appList, appUpdate, configureClient, getClientState, userLogin, userRegistration, walletERC20Transfer, walletGetBalance } from "./apiClientDappros.js"
+import { appCreate, appCreateChat, appDelete, appDeleteChat, appGetDefaultRooms, appGetDefaultRoomsWithAppId, appList, appUpdate, configureClient, getClientState, selectApp, setAuthMode, userLogin, userRegistration, walletERC20Transfer, walletGetBalance } from "./apiClientDappros.js"
 
 function errorToText(error: unknown) {
     // axios-style errors
@@ -46,6 +46,59 @@ function statusTool(server: McpServer) {
         async function () {
             try {
                 return { content: [{ type: "text", text: JSON.stringify(getClientState()) }] }
+            } catch (error) {
+                return { content: [{ type: "text", text: errorToText(error) }] }
+            }
+        }
+    )
+}
+
+function authUseAppTool(server: McpServer) {
+    server.registerTool(
+        "ethora-auth-use-app",
+        {
+            description: "Switch auth mode to app-token (B2B) for subsequent API calls (requires appToken to be configured).",
+        },
+        async function () {
+            try {
+                return { content: [{ type: "text", text: JSON.stringify(setAuthMode("app")) }] }
+            } catch (error) {
+                return { content: [{ type: "text", text: errorToText(error) }] }
+            }
+        }
+    )
+}
+
+function authUseUserTool(server: McpServer) {
+    server.registerTool(
+        "ethora-auth-use-user",
+        {
+            description: "Switch auth mode to user session for subsequent API calls (requires `ethora-user-login`).",
+        },
+        async function () {
+            try {
+                return { content: [{ type: "text", text: JSON.stringify(setAuthMode("user")) }] }
+            } catch (error) {
+                return { content: [{ type: "text", text: errorToText(error) }] }
+            }
+        }
+    )
+}
+
+function appSelectTool(server: McpServer) {
+    server.registerTool(
+        "ethora-app-select",
+        {
+            description: "Select the current app context (and optionally configure appToken). Many app-scoped tools can omit appId after this.",
+            inputSchema: {
+                appId: z.string().describe("Ethora appId to set as current context"),
+                appToken: z.string().optional().describe("Optional App token/JWT for B2B auth. If provided, auth mode defaults to app-token."),
+                authMode: z.enum(["app", "user"]).optional().describe("Explicitly set auth mode after selecting app."),
+            },
+        },
+        async function ({ appId, appToken, authMode }) {
+            try {
+                return { content: [{ type: "text", text: JSON.stringify(selectApp({ appId, appToken, authMode })) }] }
             } catch (error) {
                 return { content: [{ type: "text", text: errorToText(error) }] }
             }
@@ -190,7 +243,7 @@ function appUpdateTool(server: McpServer) {
         {
             description: 'Updates the application fields for the logged-in user who has created the app.',
             inputSchema: { 
-                appId: z.string().describe("appId for app"),
+                appId: z.string().optional().describe("appId for app (defaults to current app if selected)"),
                 displayName: z.string().optional().describe("displayName of the application"),
                 domainName: z.string().optional().describe("If the domainName is set to 'abcd', your web application will be available at abcd.ethora.com."),
                 appDescription: z.string().optional().describe("Set the application description"),
@@ -200,6 +253,11 @@ function appUpdateTool(server: McpServer) {
         },
         async function ({ appId, displayName, domainName, appDescription, primaryColor, botStatus }) {
             try {
+                const state = getClientState() as any
+                const effectiveAppId = appId || state.currentAppId
+                if (!effectiveAppId) {
+                    throw new Error("appId is required (pass appId or call `ethora-app-select` first)")
+                }
                 let changes: any = {}
 
                 if (displayName) {
@@ -217,7 +275,7 @@ function appUpdateTool(server: McpServer) {
                 if (botStatus) {
                     changes.botStatus = botStatus
                 }
-                let result = await appUpdate(appId, changes)
+                let result = await appUpdate(effectiveAppId, changes)
                 let toolRes: CallToolResult = {
                     content: [{ type: "text", text: JSON.stringify(result.data) }]
                 }
@@ -261,12 +319,17 @@ function getDefaultRoomsWithAppIdTool(server: McpServer) {
         {
             description: 'Get the default rooms for the application by appId. You should have read access to the application.',
             inputSchema: {
-                appId: z.string().describe("appId for app"),
+                appId: z.string().optional().describe("appId for app (defaults to current app if selected)"),
             }
         },
         async function ({ appId }) {
             try {
-                let result = await appGetDefaultRoomsWithAppId(appId)
+                const state = getClientState() as any
+                const effectiveAppId = appId || state.currentAppId
+                if (!effectiveAppId) {
+                    throw new Error("appId is required (pass appId or call `ethora-app-select` first)")
+                }
+                let result = await appGetDefaultRoomsWithAppId(effectiveAppId)
                 let toolRes: CallToolResult = {
                     content: [{ type: "text", text: JSON.stringify(result.data) }]
                 }
@@ -287,14 +350,19 @@ function craeteAppChatTool(server: McpServer) {
         {
             description: 'Create a new chat for the logged-in user who has created the app.',
             inputSchema: {
-                appId: z.string().describe("appId for app"),
+                appId: z.string().optional().describe("appId for app (defaults to current app if selected)"),
                 title: z.string().describe("title for chat"),
                 pinned: z.boolean().describe("pinned for chat"),
             }
         },
         async function ({ appId, title, pinned }) {
             try {
-                let result = await appCreateChat(appId, title, pinned)
+                const state = getClientState() as any
+                const effectiveAppId = appId || state.currentAppId
+                if (!effectiveAppId) {
+                    throw new Error("appId is required (pass appId or call `ethora-app-select` first)")
+                }
+                let result = await appCreateChat(effectiveAppId, title, pinned)
                 let toolRes: CallToolResult = {
                     content: [{ type: "text", text: JSON.stringify(result.data) }]
                 }
@@ -315,13 +383,18 @@ function appDeleteChatTool(server: McpServer) {
         {
             description: 'Delete a chat for the logged-in user who has created the app.',
             inputSchema: {
-                appId: z.string().describe("appId for app"),
+                appId: z.string().optional().describe("appId for app (defaults to current app if selected)"),
                 chatJid: z.string().describe("title for chat"),
             }
         },
         async function ({ appId, chatJid }) {
             try {
-                let result = await appDeleteChat(appId, chatJid)
+                const state = getClientState() as any
+                const effectiveAppId = appId || state.currentAppId
+                if (!effectiveAppId) {
+                    throw new Error("appId is required (pass appId or call `ethora-app-select` first)")
+                }
+                let result = await appDeleteChat(effectiveAppId, chatJid)
                 let toolRes: CallToolResult = {
                     content: [{ type: "text", text: JSON.stringify(result.data) }]
                 }
@@ -389,6 +462,9 @@ function walletERC20TransferTool(server: McpServer) {
 export function registerTools(server: McpServer) {
     configureTool(server);
     statusTool(server);
+    authUseAppTool(server);
+    authUseUserTool(server);
+    appSelectTool(server);
     userLoginWithEmailTool(server);
     userRegisterWithEmailTool(server);
     appListTool(server);

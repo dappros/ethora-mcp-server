@@ -14,6 +14,9 @@ Use it from **Cursor**, **VS Code MCP**, **Claude Desktop**, or **Windsurf/Cline
 - **Session / Config**
   - `ethora-configure` — set API URL + App JWT (in-memory for this MCP session)
   - `ethora-status` — show configured API URL + whether auth tokens are present
+  - `ethora-app-select` — select current appId and optionally set appToken (B2B)
+  - `ethora-auth-use-app` — switch to app-token auth mode (B2B)
+  - `ethora-auth-use-user` — switch to user-session auth mode
 
 - **Auth & Accounts**
   - `ethora-user-login` — login user (email + password)
