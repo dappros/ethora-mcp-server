@@ -116,8 +116,63 @@ function doctorTool(server: McpServer) {
                     hasAppToken: Boolean(state.hasAppToken),
                     hasUserToken: Boolean(state.hasUserToken),
                 }
-                const pingRes = await apiPing(timeoutMs || 3000)
-                return asToolResult(ok({ state, checks, ping: { status: pingRes.status, data: pingRes.data } }, meta))
+                const suggestions: Array<{ severity: "info" | "warn"; message: string; action: string }> = []
+
+                if (!checks.hasApiUrl) {
+                    suggestions.push({
+                        severity: "warn",
+                        message: "ETHORA API URL is not configured.",
+                        action: "Set env ETHORA_API_URL (or ETHORA_BASE_URL) or call `ethora-configure` with apiUrl.",
+                    })
+                }
+
+                // Login/register endpoints require appJwt.
+                if (!checks.hasAppJwt) {
+                    suggestions.push({
+                        severity: "info",
+                        message: "App JWT is missing (needed for ethora-user-login / ethora-user-register).",
+                        action: "Set env ETHORA_APP_JWT (or ETHORA_APP_TOKEN) or call `ethora-configure` with appJwt.",
+                    })
+                }
+
+                if (state.authMode === "app" && !checks.hasAppToken) {
+                    suggestions.push({
+                        severity: "warn",
+                        message: "Auth mode is app-token but appToken is not configured.",
+                        action: "Call `ethora-app-select` with { appId, appToken } or switch to user auth via `ethora-auth-use-user`.",
+                    })
+                }
+
+                if (state.authMode === "user" && !checks.hasUserToken) {
+                    suggestions.push({
+                        severity: "info",
+                        message: "Auth mode is user-session but no user token is present.",
+                        action: "Call `ethora-user-login` or switch to app-token auth via `ethora-auth-use-app`.",
+                    })
+                }
+
+                if (!state.currentAppId) {
+                    suggestions.push({
+                        severity: "info",
+                        message: "No current app is selected.",
+                        action: "Call `ethora-app-select` to set appId (and optionally appToken).",
+                    })
+                }
+
+                let ping: any = null
+                try {
+                    const pingRes = await apiPing(timeoutMs || 3000)
+                    ping = { ok: true, status: pingRes.status, data: pingRes.data }
+                } catch (pingErr) {
+                    ping = { ok: false, ...fail(pingErr).error }
+                    suggestions.push({
+                        severity: "warn",
+                        message: "API connectivity check failed (ping).",
+                        action: "Verify ETHORA_API_URL points to a reachable Ethora API and that /v1/ping is exposed. Then rerun `ethora-doctor`.",
+                    })
+                }
+
+                return asToolResult(ok({ state, checks, ping, suggestions }, meta))
             } catch (error) {
                 return asToolResult(fail(error, meta))
             }
