@@ -161,6 +161,7 @@ export function getClientState() {
     hasRefreshToken: Boolean(httpTokens.refreshToken),
     authMode: ethoraContext.authMode,
     currentAppId: ethoraContext.currentAppId,
+    enableDangerousTools: Boolean(appConfig.enableDangerousTools),
   }
 }
 

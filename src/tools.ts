@@ -40,6 +40,11 @@ function requireCurrentAppId() {
     return appId
 }
 
+function isDangerousToolsEnabled() {
+    const state = getClientState() as any
+    return Boolean(state.enableDangerousTools)
+}
+
 function normalizeBase64ToBuffer(input: string) {
     const raw = String(input || "")
     const b64 = raw.includes("base64,") ? raw.split("base64,").pop() || "" : raw
@@ -169,6 +174,14 @@ function doctorTool(server: McpServer) {
                         severity: "info",
                         message: "No current app is selected.",
                         action: "Call `ethora-app-select` to set appId (and optionally appToken).",
+                    })
+                }
+
+                if (!state.enableDangerousTools) {
+                    suggestions.push({
+                        severity: "info",
+                        message: "Dangerous/destructive tools are disabled (deny-by-default).",
+                        action: "If you need app deletion, wallet transfers, or bulk deletes, set env ETHORA_MCP_ENABLE_DANGEROUS_TOOLS=true and restart the MCP server.",
                     })
                 }
 
@@ -1532,21 +1545,25 @@ export function registerTools(server: McpServer) {
     sourcesSiteCrawlV2AppTool(server);
     sourcesSiteReindexV2AppTool(server);
     sourcesSiteDeleteUrlV2AppTool(server);
-    sourcesSiteDeleteUrlV2BatchAppTool(server);
     sourcesDocsUploadV2AppTool(server);
     sourcesDocsDeleteV2AppTool(server);
     userLoginWithEmailTool(server);
     userRegisterWithEmailTool(server);
     appListTool(server);
     appCreateTool(server);
-    appDeleteTool(server);
     appUpdateTool(server);
     appGetDefaultRoomsTool(server);
     craeteAppChatTool(server);
     appDeleteChatTool(server);
     getDefaultRoomsWithAppIdTool(server);
     walletGetBalanceTool(server);
-    walletERC20TransferTool(server);
+    if (isDangerousToolsEnabled()) {
+        // Destructive tools are deny-by-default. Enable only when explicitly allowed.
+        appDeleteTool(server);
+        walletERC20TransferTool(server);
+        // Bulk deletes
+        sourcesSiteDeleteUrlV2BatchAppTool(server);
+    }
     b2bAppCreateTool(server);
     b2bBotEnableTool(server);
     botGetV2Tool(server);

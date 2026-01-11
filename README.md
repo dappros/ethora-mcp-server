@@ -136,6 +136,10 @@ You can provide these either:
   If provided, the server will default to `.../v1`.
 - `ETHORA_APP_JWT` (or `ETHORA_APP_TOKEN`): App JWT string, usually starting with `JWT ...`
 - `ETHORA_B2B_TOKEN`: B2B server token for `x-custom-token` auth (JWT with `type=server`)
+- `ETHORA_MCP_ENABLE_DANGEROUS_TOOLS`: enable destructive tools (default: disabled). Set to `true` to expose:
+  - app deletion tools
+  - wallet transfer tools
+  - bulk delete tools
 
 > Security: **never** commit App JWTs to git. Configure them via env vars or the client’s secret store.
 

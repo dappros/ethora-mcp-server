@@ -23,4 +23,11 @@ export const appConfig = {
 
   // For B2B/server flows Ethora expects x-custom-token (JWT with type=server).
   b2bToken: process.env.ETHORA_B2B_TOKEN ?? "",
+
+  // Safety rail: deny-by-default for destructive actions.
+  // Enable explicitly for power users / CI automation.
+  enableDangerousTools:
+    String(process.env.ETHORA_MCP_ENABLE_DANGEROUS_TOOLS ?? "")
+      .trim()
+      .toLowerCase() === "true",
 }
