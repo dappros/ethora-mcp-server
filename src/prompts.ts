@@ -74,6 +74,11 @@ ETHORA_CHAT_APP_SECRET=your_app_secret
 const RECIPES_MD = md`
 ## Common recipes
 
+### B2B bootstrap AI
+1) \`ethora-configure\` with \`{ apiUrl, b2bToken }\`
+2) \`ethora-auth-use-b2b\`
+3) \`ethora-b2b-app-bootstrap-ai\` with \`displayName\`, optional \`crawlUrl\` / \`docs[]\`, and optional \`llmProvider\` / \`llmModel\`
+
 ### Broadcast (app-token)
 1) \`ethora-app-select\` with \`{ appId, appToken }\`
 2) \`ethora-auth-use-app\`
@@ -84,6 +89,8 @@ const RECIPES_MD = md`
 1) \`ethora-app-select\` with \`{ appId, appToken }\`
 2) \`ethora-auth-use-app\`
 3) \`ethora-sources-site-crawl-v2\` or \`ethora-sources-docs-upload-v2\`
+4) \`ethora-sources-site-list-v2\` / \`ethora-sources-docs-list-v2\`
+5) \`ethora-sources-site-tags-update-v2\` / \`ethora-sources-docs-tags-update-v2\`
 
 ### Files upload (user)
 1) \`ethora-auth-use-user\`
@@ -94,6 +101,25 @@ const RECIPES_MD = md`
 1) \`ethora-app-select\` with \`{ appId, appToken }\`
 2) \`ethora-auth-use-app\`
 3) \`ethora-bot-get-v2\` / \`ethora-bot-update-v2\`
+
+### Saved agents (app-token)
+1) \`ethora-app-select\` with \`{ appId, appToken }\`
+2) \`ethora-auth-use-app\`
+3) \`ethora-agents-list-v2\` / \`ethora-agents-create-v2\`
+4) \`ethora-agents-activate-v2\`
+
+### Shared knowledge on saved agent (app-token)
+1) \`ethora-app-select\` with \`{ appId, appToken }\`
+2) \`ethora-auth-use-app\`
+3) \`ethora-sources-site-crawl-v2\` or \`ethora-sources-docs-upload-v2\` with \`knowledgeScope: "saved_agent"\` and \`savedAgentId\`
+4) \`ethora-sources-site-list-v2\` / \`ethora-sources-docs-list-v2\` with the same scope params
+
+### Chat automation test loop (app-token)
+1) \`ethora-app-select\` with \`{ appId, appToken }\`
+2) \`ethora-auth-use-app\`
+3) \`ethora-chats-message-v2\`
+4) \`ethora-chats-history-v2\`
+5) \`ethora-bot-widget-v2\`
 `
 
 export function registerPromptsAndResources(server: McpServer) {
@@ -189,7 +215,7 @@ export function registerPromptsAndResources(server: McpServer) {
     "ethora-recipes",
     {
       title: "Ethora recipes",
-      description: "Common MCP tool sequences: broadcast, sources ingest, files upload, bot management.",
+      description: "Common MCP tool sequences: bootstrap, broadcast, sources ingest/tags, files upload, bot management, chat testing.",
       argsSchema: {},
     },
     () => ({

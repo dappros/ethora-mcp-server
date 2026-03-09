@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp"
 import { CallToolResult } from "@modelcontextprotocol/sdk/types"
 import z from "zod"
-import { appCreate, appCreateChat, appDelete, appDeleteChat, appGetDefaultRooms, appGetDefaultRoomsWithAppId, appList, appProvisionV2, appTokensCreateV2, appTokensListV2, appTokensRevokeV2, appTokensRotateV2, appUpdate, apiPing, botGetV2, botUpdateV2, chatsBroadcastJobV2, chatsBroadcastV2, configureB2BToken, configureClient, filesDeleteV2, filesGetV2, filesUploadV2, getClientState, selectApp, setAuthMode, sourcesDocsDelete, sourcesDocsDeleteV2, sourcesDocsUpload, sourcesDocsUploadV2, sourcesSiteCrawl, sourcesSiteCrawlV2, sourcesSiteDeleteUrl, sourcesSiteDeleteUrlV2, sourcesSiteDeleteUrlV2Batch, sourcesSiteDeleteUrlV2Single, sourcesSiteReindex, sourcesSiteReindexV2, userLogin, userRegistration, usersBatchCreateJobV2, usersBatchCreateV2, walletERC20Transfer, walletGetBalance } from "./apiClientDappros.js"
+import { agentsActivateV2, agentsCloneV2, agentsCreateV2, agentsGetV2, agentsListV2, agentsUpdateV2, appCreate, appCreateChat, appDelete, appDeleteChat, appGetDefaultRooms, appGetDefaultRoomsWithAppId, appList, appProvisionV2, appTokensCreateV2, appTokensListV2, appTokensRevokeV2, appTokensRotateV2, appUpdate, apiPing, botGetV2, botHistoryGetV2, botMessageCreateV2, botUpdateV2, botWidgetGetV2, chatsBroadcastJobV2, chatsBroadcastV2, chatsHistoryGetV2, chatsMessageCreateV2, configureB2BToken, configureClient, filesDeleteV2, filesGetV2, filesUploadV2, getClientState, selectAgent, selectApp, setAuthMode, sourcesDocsDelete, sourcesDocsDeleteV2, sourcesDocsListV2, sourcesDocsTagsUpdateV2, sourcesDocsUpload, sourcesDocsUploadV2, sourcesSiteCrawl, sourcesSiteCrawlV2, sourcesSiteDeleteUrl, sourcesSiteDeleteUrlV2, sourcesSiteDeleteUrlV2Batch, sourcesSiteDeleteUrlV2Single, sourcesSiteListV2, sourcesSiteReindex, sourcesSiteReindexV2, sourcesSiteTagsUpdateV2, userLogin, userRegistration, usersBatchCreateJobV2, usersBatchCreateV2, walletERC20Transfer, walletGetBalance } from "./apiClientEthora.js"
 import { fail, ok } from "./mcpResponse.js"
 
 function errorToText(error: unknown) {
@@ -112,7 +112,7 @@ function helpTool(server: McpServer) {
         {
             description: "Task-oriented help: shows auth modes + recommended next tool calls based on current state.",
             inputSchema: {
-                goal: z.enum(["auto", "b2b-bootstrap-ai", "broadcast", "sources-ingest", "files-upload", "bot-manage", "user-login"]).optional()
+                goal: z.enum(["auto", "b2b-bootstrap-ai", "broadcast", "sources-ingest", "files-upload", "bot-manage", "chat-test", "user-login"]).optional()
                     .describe("Optional goal hint to tailor recommendations. Defaults to auto."),
             },
         },
@@ -207,8 +207,8 @@ function helpTool(server: McpServer) {
                     }
                     nextCalls.push({
                         tool: "ethora-b2b-app-bootstrap-ai",
-                        args: { displayName: "Acme AI Demo", crawlUrl: "https://example.com", enableBot: true },
-                        why: "Create app → ingest sources → enable bot in one flow.",
+                        args: { displayName: "Acme AI Demo", crawlUrl: "https://example.com", enableBot: true, llmProvider: "openai", llmModel: "gpt-4o-mini" },
+                        why: "Create app → ingest sources → enable bot in one flow, including runtime LLM selection.",
                     })
 
                     recipes.push({
@@ -218,7 +218,7 @@ function helpTool(server: McpServer) {
                         steps: [
                             { tool: "ethora-configure", args: { apiUrl: String(state.apiUrl || "https://api.ethoradev.com/v1"), b2bToken: "JWT <B2B_SERVER_TOKEN>" } },
                             { tool: "ethora-auth-use-b2b" },
-                            { tool: "ethora-b2b-app-bootstrap-ai", args: { displayName: "Acme AI Demo", crawlUrl: "https://example.com", enableBot: true } },
+                            { tool: "ethora-b2b-app-bootstrap-ai", args: { displayName: "Acme AI Demo", crawlUrl: "https://example.com", enableBot: true, llmProvider: "openai", llmModel: "gpt-4o-mini" } },
                         ],
                     })
 
@@ -234,8 +234,8 @@ function helpTool(server: McpServer) {
                     })
                 }
 
-                // Goal: app-token operations (broadcast/sources/bot)
-                if (effectiveGoal === "broadcast" || effectiveGoal === "sources-ingest" || effectiveGoal === "bot-manage") {
+                // Goal: app-token operations (broadcast/sources/bot/chat test)
+                if (effectiveGoal === "broadcast" || effectiveGoal === "sources-ingest" || effectiveGoal === "bot-manage" || effectiveGoal === "chat-test") {
                     if (!checks.hasCurrentAppId || !checks.hasAppToken) {
                         nextCalls.push({
                             tool: "ethora-app-select",
@@ -262,6 +262,11 @@ function helpTool(server: McpServer) {
                     }
 
                     if (effectiveGoal === "sources-ingest") {
+                        nextCalls.push({
+                            tool: "ethora-sources-site-list-v2",
+                            why: "Inspect crawled URLs and current tags for this app.",
+                        })
+
                         recipes.push({
                             id: "sources-site-crawl-v2",
                             title: "Ingest website (Sources v2 crawl)",
@@ -283,9 +288,26 @@ function helpTool(server: McpServer) {
                                 { tool: "ethora-sources-docs-upload-v2", args: { files: [{ name: "doc.pdf", mimeType: "application/pdf", base64: "<BASE64_CONTENT>" }] } },
                             ],
                         })
+
+                        recipes.push({
+                            id: "sources-tag-site-v2",
+                            title: "Tag a crawled source for segmented retrieval",
+                            description: "List crawled sources, then assign tags used by RAG filtering.",
+                            steps: [
+                                { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: "JWT <APP_TOKEN>" } },
+                                { tool: "ethora-auth-use-app" },
+                                { tool: "ethora-sources-site-list-v2", args: {} },
+                                { tool: "ethora-sources-site-tags-update-v2", args: { sourceId: "<SOURCE_ID>", tags: ["support", "faq"] } },
+                            ],
+                        })
                     }
 
                     if (effectiveGoal === "bot-manage") {
+                        nextCalls.push({
+                            tool: "ethora-bot-get-v2",
+                            why: "Inspect current bot status, prompt, widget state, and runtime LLM settings.",
+                        })
+
                         recipes.push({
                             id: "bot-enable-and-tune",
                             title: "Enable bot + tune settings (v2)",
@@ -294,9 +316,63 @@ function helpTool(server: McpServer) {
                                 { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: "JWT <APP_TOKEN>" } },
                                 { tool: "ethora-auth-use-app" },
                                 { tool: "ethora-bot-enable-v2", args: {} },
-                                { tool: "ethora-bot-update-v2", args: { trigger: "/bot", prompt: "You are a helpful assistant.", greetingMessage: "Hello! Ask me anything." } },
+                                { tool: "ethora-bot-update-v2", args: { trigger: "/bot", prompt: "You are a helpful assistant.", greetingMessage: "Hello! Ask me anything.", llmProvider: "openai", llmModel: "gpt-4o-mini" } },
                             ],
                         })
+                    }
+
+                    if (effectiveGoal === "chat-test") {
+                        nextCalls.push(
+                            {
+                                tool: "ethora-chats-message-v2",
+                                args: { text: "Summarize the indexed FAQ in 3 bullets.", mode: "private", nickname: "SDK Tester" },
+                                why: "Send a private automation/test message through the primary /v2/chats surface.",
+                            },
+                            {
+                                tool: "ethora-chats-history-v2",
+                                args: { mode: "private", nickname: "SDK Tester", limit: 10 },
+                                why: "Read the saved automation/test history back after sending a message.",
+                            },
+                            {
+                                tool: "ethora-bot-widget-v2",
+                                why: "Fetch widget/embed config and any public widget URL metadata for this app.",
+                            }
+                        )
+
+                        recipes.push(
+                            {
+                                id: "chat-test-private",
+                                title: "Test bot via private chat automation",
+                                description: "Send a private test message and then read back the saved conversation history.",
+                                steps: [
+                                    { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: "JWT <APP_TOKEN>" } },
+                                    { tool: "ethora-auth-use-app" },
+                                    { tool: "ethora-chats-message-v2", args: { text: "Summarize the indexed FAQ in 3 bullets.", mode: "private", nickname: "SDK Tester" } },
+                                    { tool: "ethora-chats-history-v2", args: { mode: "private", nickname: "SDK Tester", limit: 10 } },
+                                ],
+                            },
+                            {
+                                id: "chat-test-group",
+                                title: "Test bot via group-room automation",
+                                description: "Send a test message into a room-style conversation and then fetch the resulting history.",
+                                steps: [
+                                    { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: "JWT <APP_TOKEN>" } },
+                                    { tool: "ethora-auth-use-app" },
+                                    { tool: "ethora-chats-message-v2", args: { text: "What sources are currently indexed for this app?", mode: "group", roomJid: "<ROOM_JID>" } },
+                                    { tool: "ethora-chats-history-v2", args: { mode: "group", roomJid: "<ROOM_JID>", limit: 10 } },
+                                ],
+                            },
+                            {
+                                id: "widget-config-v2",
+                                title: "Fetch widget config",
+                                description: "Read the widget/embed config and public widget metadata for the selected app.",
+                                steps: [
+                                    { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: "JWT <APP_TOKEN>" } },
+                                    { tool: "ethora-auth-use-app" },
+                                    { tool: "ethora-bot-widget-v2", args: {} },
+                                ],
+                            }
+                        )
                     }
                 }
 
@@ -345,6 +421,17 @@ function helpTool(server: McpServer) {
                         description: "Get copy/paste .env.example templates for MCP and SDK usage.",
                         steps: [{ tool: "ethora-generate-env-examples", args: {} }],
                     })
+                    recipes.push({
+                        id: "auto-chat-test-private",
+                        title: "Test bot via private chat",
+                        description: "Use the primary chats automation surface to send a test message and read history.",
+                        steps: [
+                            { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: "JWT <APP_TOKEN>" } },
+                            { tool: "ethora-auth-use-app" },
+                            { tool: "ethora-chats-message-v2", args: { text: "Hello from MCP", mode: "private", nickname: "SDK Tester" } },
+                            { tool: "ethora-chats-history-v2", args: { mode: "private", nickname: "SDK Tester", limit: 10 } },
+                        ],
+                    })
                 }
 
                 return asToolResult(ok({
@@ -354,7 +441,7 @@ function helpTool(server: McpServer) {
                     recommendedNextCalls: nextCalls,
                     recipes,
                     notes: [
-                        "Tip: use goal='broadcast' or goal='b2b-bootstrap-ai' to tailor recommendations.",
+                        "Tip: use goal='broadcast', goal='b2b-bootstrap-ai', or goal='chat-test' to tailor recommendations.",
                         "Dangerous tools are deny-by-default; see ETHORA_MCP_ENABLE_DANGEROUS_TOOLS in README.",
                     ],
                 }, meta))
@@ -373,6 +460,8 @@ function resolveRecipeValue(value: any, vars: Record<string, any>, ctx: { lastJo
             "<B2B_TOKEN>": vars.b2bToken,
             "<APP_ID>": vars.appId,
             "<APP_TOKEN>": vars.appToken,
+            "<ROOM_JID>": vars.roomJid,
+            "<SOURCE_ID>": vars.sourceId,
             "<EMAIL>": vars.email,
             "<PASSWORD>": vars.password,
             "<JOB_ID_FROM_PREVIOUS_STEP>": ctx.lastJobId,
@@ -424,7 +513,7 @@ async function executeRecipeStep(tool: string, args: any, ctx: { lastJobId?: str
             return res.data
         }
         case "ethora-b2b-app-bootstrap-ai": {
-            const { displayName, crawlUrl, enableBot, followLink, docs, setAsCurrent, botTrigger } = args || {}
+            const { displayName, crawlUrl, enableBot, followLink, docs, setAsCurrent, botTrigger, llmProvider, llmModel, savedAgentId } = args || {}
             return await runB2BAppBootstrapAi({
                 displayName: String(displayName || "Acme AI Demo"),
                 crawlUrl,
@@ -433,6 +522,9 @@ async function executeRecipeStep(tool: string, args: any, ctx: { lastJobId?: str
                 docs,
                 setAsCurrent,
                 botTrigger,
+                llmProvider,
+                llmModel,
+                savedAgentId,
             } as any)
         }
         case "ethora-chats-broadcast-v2": {
@@ -465,13 +557,13 @@ async function executeRecipeStep(tool: string, args: any, ctx: { lastJobId?: str
         }
         case "ethora-sources-site-crawl-v2": {
             ensureAppAuthForTool()
-            const { url, followLink } = args || {}
-            const res = await sourcesSiteCrawlV2({ url: String(url || ""), followLink })
+            const { url, followLink, knowledgeScope, savedAgentId } = args || {}
+            const res = await sourcesSiteCrawlV2({ url: String(url || ""), followLink, knowledgeScope, savedAgentId })
             return res.data
         }
         case "ethora-sources-docs-upload-v2": {
             ensureAppAuthForTool()
-            const { files } = args || {}
+            const { files, knowledgeScope, savedAgentId } = args || {}
             const form = new FormData()
             for (const f of (files || [])) {
                 const buf = normalizeBase64ToBuffer(f.base64)
@@ -479,7 +571,43 @@ async function executeRecipeStep(tool: string, args: any, ctx: { lastJobId?: str
                 const blob = new Blob([buf], { type: f.mimeType })
                 form.append("files", blob, f.name)
             }
+            if (knowledgeScope) form.append("knowledgeScope", knowledgeScope)
+            if (savedAgentId) form.append("savedAgentId", savedAgentId)
             const res = await sourcesDocsUploadV2(form, { "Content-Type": "multipart/form-data" })
+            return res.data
+        }
+        case "ethora-agents-list-v2": {
+            ensureAppAuthForTool()
+            const res = await agentsListV2()
+            return res.data
+        }
+        case "ethora-agents-get-v2": {
+            ensureAppAuthForTool()
+            const { agentId } = args || {}
+            const res = await agentsGetV2(String(agentId || ""))
+            return res.data
+        }
+        case "ethora-agents-create-v2": {
+            ensureAppAuthForTool()
+            const res = await agentsCreateV2(args as any)
+            return res.data
+        }
+        case "ethora-agents-update-v2": {
+            ensureAppAuthForTool()
+            const { agentId, ...payload } = args || {}
+            const res = await agentsUpdateV2(String(agentId || ""), payload as any)
+            return res.data
+        }
+        case "ethora-agents-clone-v2": {
+            ensureAppAuthForTool()
+            const { agentId, ...payload } = args || {}
+            const res = await agentsCloneV2(String(agentId || ""), payload as any)
+            return res.data
+        }
+        case "ethora-agents-activate-v2": {
+            ensureAppAuthForTool()
+            const { agentId } = args || {}
+            const res = await agentsActivateV2(String(agentId || ""))
             return res.data
         }
         case "ethora-bot-enable-v2": {
@@ -518,7 +646,7 @@ function runRecipeTool(server: McpServer) {
             description: "Execute a built-in ethora-help recipe by id (sequential steps, no shell, no file writes).",
             inputSchema: {
                 recipeId: z.string().min(1).optional().describe("Recipe id. If omitted, lists runnable recipes for the selected goal."),
-                goal: z.enum(["auto", "b2b-bootstrap-ai", "broadcast", "sources-ingest", "files-upload", "bot-manage", "user-login"]).optional()
+                goal: z.enum(["auto", "b2b-bootstrap-ai", "broadcast", "sources-ingest", "files-upload", "bot-manage", "chat-test", "user-login"]).optional()
                     .describe("Optional goal scope to look up recipes; defaults to auto."),
                 vars: z.record(z.any()).optional().describe("Variables to substitute (appId, appToken, b2bToken, appJwt, email, password, apiUrl, etc)."),
                 dryRun: z.boolean().optional().describe("If true, only returns resolved steps without executing."),
@@ -542,13 +670,13 @@ function runRecipeTool(server: McpServer) {
                         out.recipes.push(
                             {
                                 id: "b2b-bootstrap-ai",
-                                title: "B2B bootstrap: create app → ingest → enable bot",
+                                title: "B2B bootstrap: create app → ingest → configure bot",
                                 description: "Best for partner automation and repeatable provisioning.",
                                 requiredVars: ["b2bToken"],
                                 steps: [
                                     { tool: "ethora-configure", args: { apiUrl, b2bToken: "<B2B_TOKEN>" } },
                                     { tool: "ethora-auth-use-b2b" },
-                                    { tool: "ethora-b2b-app-bootstrap-ai", args: { displayName: "Acme AI Demo", crawlUrl: "https://example.com", enableBot: true } },
+                                    { tool: "ethora-b2b-app-bootstrap-ai", args: { displayName: "Acme AI Demo", crawlUrl: "https://example.com", enableBot: true, llmProvider: "openai", llmModel: "gpt-4o-mini" } },
                                 ],
                             },
                             {
@@ -603,6 +731,18 @@ function runRecipeTool(server: McpServer) {
                                     { tool: "ethora-auth-use-app" },
                                     { tool: "ethora-sources-docs-upload-v2", args: { files: [{ name: "doc.pdf", mimeType: "application/pdf", base64: "<BASE64_CONTENT>" }] } },
                                 ],
+                            },
+                            {
+                                id: "sources-tag-site-v2",
+                                title: "Tag a crawled source for segmented retrieval",
+                                description: "List crawled sources, then assign tags used by RAG filtering.",
+                                requiredVars: ["appId", "appToken"],
+                                steps: [
+                                    { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: "<APP_TOKEN>" } },
+                                    { tool: "ethora-auth-use-app" },
+                                    { tool: "ethora-sources-site-list-v2", args: {} },
+                                    { tool: "ethora-sources-site-tags-update-v2", args: { sourceId: "<SOURCE_ID>", tags: ["support", "faq"] } },
+                                ],
                             }
                         )
                     }
@@ -616,9 +756,48 @@ function runRecipeTool(server: McpServer) {
                                 { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: "<APP_TOKEN>" } },
                                 { tool: "ethora-auth-use-app" },
                                 { tool: "ethora-bot-enable-v2", args: {} },
-                                { tool: "ethora-bot-update-v2", args: { trigger: "/bot", prompt: "You are a helpful assistant.", greetingMessage: "Hello! Ask me anything." } },
+                                { tool: "ethora-bot-update-v2", args: { trigger: "/bot", prompt: "You are a helpful assistant.", greetingMessage: "Hello! Ask me anything.", llmProvider: "openai", llmModel: "gpt-4o-mini" } },
                             ],
                         })
+                    }
+                    if (includeAll || effectiveGoal === "chat-test") {
+                        out.recipes.push(
+                            {
+                                id: "chat-test-private",
+                                title: "Test bot via private chat automation",
+                                description: "Send a private test message and then read back the saved conversation history.",
+                                requiredVars: ["appId", "appToken"],
+                                steps: [
+                                    { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: "<APP_TOKEN>" } },
+                                    { tool: "ethora-auth-use-app" },
+                                    { tool: "ethora-chats-message-v2", args: { text: "Summarize the indexed FAQ in 3 bullets.", mode: "private", nickname: "SDK Tester" } },
+                                    { tool: "ethora-chats-history-v2", args: { mode: "private", nickname: "SDK Tester", limit: 10 } },
+                                ],
+                            },
+                            {
+                                id: "chat-test-group",
+                                title: "Test bot via group-room automation",
+                                description: "Send a test message into a room-style conversation and then fetch the resulting history.",
+                                requiredVars: ["appId", "appToken", "roomJid"],
+                                steps: [
+                                    { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: "<APP_TOKEN>" } },
+                                    { tool: "ethora-auth-use-app" },
+                                    { tool: "ethora-chats-message-v2", args: { text: "What sources are currently indexed for this app?", mode: "group", roomJid: "<ROOM_JID>" } },
+                                    { tool: "ethora-chats-history-v2", args: { mode: "group", roomJid: "<ROOM_JID>", limit: 10 } },
+                                ],
+                            },
+                            {
+                                id: "widget-config-v2",
+                                title: "Fetch widget config",
+                                description: "Read the widget/embed config and public widget metadata for the selected app.",
+                                requiredVars: ["appId", "appToken"],
+                                steps: [
+                                    { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: "<APP_TOKEN>" } },
+                                    { tool: "ethora-auth-use-app" },
+                                    { tool: "ethora-bot-widget-v2", args: {} },
+                                ],
+                            }
+                        )
                     }
                     if (includeAll || effectiveGoal === "user-login" || effectiveGoal === "files-upload") {
                         out.recipes.push(
@@ -865,6 +1044,25 @@ function appSelectTool(server: McpServer) {
                 return asToolResult(ok(selectApp({ appId, appToken, authMode }), getDefaultMeta("ethora-app-select")))
             } catch (error) {
                 return asToolResult(fail(error, getDefaultMeta("ethora-app-select")))
+            }
+        }
+    )
+}
+
+function agentSelectTool(server: McpServer) {
+    server.registerTool(
+        "ethora-agent-select",
+        {
+            description: "Select current saved agent context for this MCP session.",
+            inputSchema: {
+                agentId: z.string().min(1),
+            },
+        },
+        async function ({ agentId }) {
+            try {
+                return asToolResult(ok(selectAgent({ agentId }), getDefaultMeta("ethora-agent-select")))
+            } catch (error) {
+                return asToolResult(fail(error, getDefaultMeta("ethora-agent-select")))
             }
         }
     )
@@ -1545,6 +1743,7 @@ function botUpdateV2Tool(server: McpServer) {
             description: "Update bot settings via PUT /v2/bot (app-token auth).",
             inputSchema: {
                 status: z.enum(["on", "off"]).optional(),
+                savedAgentId: z.string().optional(),
                 trigger: z.enum(["any_message", "/bot"]).optional(),
                 prompt: z.string().optional(),
                 greetingMessage: z.string().optional(),
@@ -1552,6 +1751,13 @@ function botUpdateV2Tool(server: McpServer) {
                 isRAG: z.boolean().optional(),
                 botFirstName: z.string().optional(),
                 botLastName: z.string().optional(),
+                botDisplayName: z.string().optional(),
+                botAvatarUrl: z.string().optional(),
+                ragTags: z.array(z.string().min(1)).optional(),
+                llmProvider: z.string().optional(),
+                llmModel: z.string().optional(),
+                widgetPublicEnabled: z.boolean().optional(),
+                widgetPublicUrl: z.string().optional(),
             },
         },
         async function (payload) {
@@ -1559,6 +1765,174 @@ function botUpdateV2Tool(server: McpServer) {
             try {
                 ensureAppAuthForTool()
                 const res = await botUpdateV2(payload as any)
+                return asToolResult(ok(res.data, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
+function agentsListV2Tool(server: McpServer) {
+    server.registerTool(
+        "ethora-agents-list-v2",
+        {
+            description: "List reusable saved agents for the current app owner via GET /v2/agents (app-token auth).",
+        },
+        async function () {
+            const meta = getDefaultMeta("ethora-agents-list-v2")
+            try {
+                ensureAppAuthForTool()
+                const res = await agentsListV2()
+                return asToolResult(ok(res.data, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
+function agentsGetV2Tool(server: McpServer) {
+    server.registerTool(
+        "ethora-agents-get-v2",
+        {
+            description: "Get one reusable saved agent via GET /v2/agents/:agentId (app-token auth).",
+            inputSchema: {
+                agentId: z.string().min(1),
+            },
+        },
+        async function ({ agentId }) {
+            const meta = getDefaultMeta("ethora-agents-get-v2")
+            try {
+                ensureAppAuthForTool()
+                const res = await agentsGetV2(agentId)
+                selectAgent({ agentId })
+                return asToolResult(ok(res.data, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
+function agentsCreateV2Tool(server: McpServer) {
+    server.registerTool(
+        "ethora-agents-create-v2",
+        {
+            description: "Create a reusable saved agent via POST /v2/agents (app-token auth).",
+            inputSchema: {
+                name: z.string().optional(),
+                slug: z.string().optional(),
+                summary: z.string().optional(),
+                prompt: z.string().optional(),
+                greetingMessage: z.string().optional(),
+                trigger: z.enum(["any_message", "/bot"]).optional(),
+                botDisplayName: z.string().optional(),
+                botAvatarUrl: z.string().optional(),
+                isRAG: z.boolean().optional(),
+                ragTags: z.array(z.string().min(1)).optional(),
+                llmProvider: z.string().optional(),
+                llmModel: z.string().optional(),
+                visibility: z.enum(["private", "public"]).optional(),
+                isPublished: z.boolean().optional(),
+                categories: z.array(z.string().min(1)).optional(),
+            },
+        },
+        async function (payload) {
+            const meta = getDefaultMeta("ethora-agents-create-v2")
+            try {
+                ensureAppAuthForTool()
+                const res = await agentsCreateV2(payload as any)
+                const createdId = String(res?.data?.agent?.id || res?.data?.agent?._id || "")
+                if (createdId) selectAgent({ agentId: createdId })
+                return asToolResult(ok(res.data, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
+function agentsUpdateV2Tool(server: McpServer) {
+    server.registerTool(
+        "ethora-agents-update-v2",
+        {
+            description: "Update a reusable saved agent via PUT /v2/agents/:agentId (app-token auth).",
+            inputSchema: {
+                agentId: z.string().min(1),
+                name: z.string().optional(),
+                slug: z.string().optional(),
+                summary: z.string().optional(),
+                prompt: z.string().optional(),
+                greetingMessage: z.string().optional(),
+                trigger: z.enum(["any_message", "/bot"]).optional(),
+                botDisplayName: z.string().optional(),
+                botAvatarUrl: z.string().optional(),
+                isRAG: z.boolean().optional(),
+                ragTags: z.array(z.string().min(1)).optional(),
+                llmProvider: z.string().optional(),
+                llmModel: z.string().optional(),
+                visibility: z.enum(["private", "public"]).optional(),
+                isPublished: z.boolean().optional(),
+                categories: z.array(z.string().min(1)).optional(),
+            },
+        },
+        async function ({ agentId, ...payload }) {
+            const meta = getDefaultMeta("ethora-agents-update-v2")
+            try {
+                ensureAppAuthForTool()
+                const res = await agentsUpdateV2(agentId, payload as any)
+                selectAgent({ agentId })
+                return asToolResult(ok(res.data, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
+function agentsCloneV2Tool(server: McpServer) {
+    server.registerTool(
+        "ethora-agents-clone-v2",
+        {
+            description: "Clone a reusable saved agent via POST /v2/agents/:agentId/clone (app-token auth).",
+            inputSchema: {
+                agentId: z.string().min(1),
+                name: z.string().optional(),
+                slug: z.string().optional(),
+                summary: z.string().optional(),
+            },
+        },
+        async function ({ agentId, ...payload }) {
+            const meta = getDefaultMeta("ethora-agents-clone-v2")
+            try {
+                ensureAppAuthForTool()
+                const res = await agentsCloneV2(agentId, payload as any)
+                const createdId = String(res?.data?.agent?.id || res?.data?.agent?._id || "")
+                if (createdId) selectAgent({ agentId: createdId })
+                return asToolResult(ok(res.data, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
+function agentsActivateV2Tool(server: McpServer) {
+    server.registerTool(
+        "ethora-agents-activate-v2",
+        {
+            description: "Bind a saved agent as the active bot for the selected app via POST /v2/agents/:agentId/activate (app-token auth).",
+            inputSchema: {
+                agentId: z.string().min(1),
+            },
+        },
+        async function ({ agentId }) {
+            const meta = getDefaultMeta("ethora-agents-activate-v2")
+            try {
+                ensureAppAuthForTool()
+                const res = await agentsActivateV2(agentId)
+                selectAgent({ agentId })
                 return asToolResult(ok(res.data, meta))
             } catch (error) {
                 return asToolResult(fail(error, meta))
@@ -1606,6 +1980,125 @@ function botDisableV2Tool(server: McpServer) {
     )
 }
 
+function botWidgetGetV2Tool(server: McpServer) {
+    server.registerTool(
+        "ethora-bot-widget-v2",
+        {
+            description: "Get widget/embed config via GET /v2/bot/widget (app-token auth).",
+        },
+        async function () {
+            const meta = getDefaultMeta("ethora-bot-widget-v2")
+            try {
+                ensureAppAuthForTool()
+                const res = await botWidgetGetV2()
+                return asToolResult(ok(res.data, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
+function chatsMessageCreateV2Tool(server: McpServer) {
+    server.registerTool(
+        "ethora-chats-message-v2",
+        {
+            description: "Send a test message through the app chat/bot automation surface (app-token auth).",
+            inputSchema: {
+                text: z.string().min(1),
+                mode: z.enum(["private", "group"]).optional(),
+                nickname: z.string().optional(),
+                roomJid: z.string().optional(),
+            },
+        },
+        async function ({ text, mode, nickname, roomJid }) {
+            const meta = getDefaultMeta("ethora-chats-message-v2")
+            try {
+                ensureAppAuthForTool()
+                const res = await chatsMessageCreateV2({ text, mode, nickname, roomJid })
+                return asToolResult(ok(res.data, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
+function chatsHistoryGetV2Tool(server: McpServer) {
+    server.registerTool(
+        "ethora-chats-history-v2",
+        {
+            description: "Read persisted chat automation history for private/group test sessions (app-token auth).",
+            inputSchema: {
+                mode: z.enum(["private", "group"]).optional(),
+                nickname: z.string().optional(),
+                roomJid: z.string().optional(),
+                limit: z.number().int().min(1).max(100).optional(),
+            },
+        },
+        async function ({ mode, nickname, roomJid, limit }) {
+            const meta = getDefaultMeta("ethora-chats-history-v2")
+            try {
+                ensureAppAuthForTool()
+                const res = await chatsHistoryGetV2({ mode, nickname, roomJid, limit })
+                return asToolResult(ok(res.data, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
+function botMessageCreateV2Tool(server: McpServer) {
+    server.registerTool(
+        "ethora-bot-message-v2",
+        {
+            description: "Compatibility alias for ethora-chats-message-v2 (app-token auth).",
+            inputSchema: {
+                text: z.string().min(1),
+                mode: z.enum(["private", "group"]).optional(),
+                nickname: z.string().optional(),
+                roomJid: z.string().optional(),
+            },
+        },
+        async function ({ text, mode, nickname, roomJid }) {
+            const meta = getDefaultMeta("ethora-bot-message-v2")
+            try {
+                ensureAppAuthForTool()
+                const res = await botMessageCreateV2({ text, mode, nickname, roomJid })
+                return asToolResult(ok(res.data, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
+function botHistoryGetV2Tool(server: McpServer) {
+    server.registerTool(
+        "ethora-bot-history-v2",
+        {
+            description: "Compatibility alias for ethora-chats-history-v2 (app-token auth).",
+            inputSchema: {
+                mode: z.enum(["private", "group"]).optional(),
+                nickname: z.string().optional(),
+                roomJid: z.string().optional(),
+                limit: z.number().int().min(1).max(100).optional(),
+            },
+        },
+        async function ({ mode, nickname, roomJid, limit }) {
+            const meta = getDefaultMeta("ethora-bot-history-v2")
+            try {
+                ensureAppAuthForTool()
+                const res = await botHistoryGetV2({ mode, nickname, roomJid, limit })
+                return asToolResult(ok(res.data, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
 async function runB2BAppBootstrapAi(args: {
     displayName: string
     setAsCurrent?: boolean
@@ -1614,8 +2107,11 @@ async function runB2BAppBootstrapAi(args: {
     docs?: Array<{ name: string; mimeType: string; base64: string }>
     enableBot?: boolean
     botTrigger?: string
+    llmProvider?: string
+    llmModel?: string
+    savedAgentId?: string
 }) {
-    const { displayName, setAsCurrent, crawlUrl, followLink, docs, enableBot, botTrigger } = args
+    const { displayName, setAsCurrent, crawlUrl, followLink, docs, enableBot, botTrigger, llmProvider, llmModel, savedAgentId } = args
 
     ensureB2BAuthForTool()
 
@@ -1674,14 +2170,24 @@ async function runB2BAppBootstrapAi(args: {
 
     // 5) Enable bot (B2B)
     let botEnableResult: any = null
-    if (enableBot) {
-        if (!appToken) throw new Error("enableBot requested but no appToken available for app-token bot management")
+    if (savedAgentId || enableBot || botTrigger || llmProvider || llmModel) {
+        if (!appToken) throw new Error("Bot setup requested but no appToken available for app-token bot management")
         setAuthMode("app")
-        const payload: any = { status: "on" }
+        if (savedAgentId) {
+            const activated = await agentsActivateV2(savedAgentId)
+            botEnableResult = activated.data
+            steps.push({ step: "agentsActivateV2", ok: true, savedAgentId })
+        }
+        const payload: any = {}
+        if (enableBot) payload.status = "on"
         if (botTrigger) payload.trigger = botTrigger
-        const r = await botUpdateV2(payload)
-        botEnableResult = r.data
-        steps.push({ step: "botEnable", ok: true })
+        if (llmProvider) payload.llmProvider = llmProvider
+        if (llmModel) payload.llmModel = llmModel
+        if (Object.keys(payload).length > 0) {
+            const r = await botUpdateV2(payload)
+            botEnableResult = r.data
+            steps.push({ step: "botSetup", ok: true })
+        }
     }
 
     // Final: set default auth mode for next steps
@@ -1776,6 +2282,9 @@ function b2bAliases(server: McpServer) {
                 docs: z.array(z.object({ name: z.string().min(1), mimeType: z.string().min(1), base64: z.string().min(1) })).optional(),
                 enableBot: z.boolean().optional(),
                 botTrigger: z.string().optional(),
+                llmProvider: z.string().optional(),
+                llmModel: z.string().optional(),
+                savedAgentId: z.string().optional(),
             },
         },
         async function (args) {
@@ -1796,7 +2305,7 @@ function b2bAppBootstrapAiTool(server: McpServer) {
     server.registerTool(
         "ethora-b2b-app-bootstrap-ai",
         {
-            description: "One-call B2B flow: create app → set context → index sources → enable bot (best-effort).",
+            description: "One-call B2B flow: create app → set context → index sources → configure/enable bot, including runtime LLM selection.",
             inputSchema: {
                 displayName: z.string().min(1).describe("New app display name"),
                 setAsCurrent: z.boolean().optional().describe("If true (default), sets current app context + app-token auth"),
@@ -1807,15 +2316,18 @@ function b2bAppBootstrapAiTool(server: McpServer) {
                     mimeType: z.string().min(1),
                     base64: z.string().min(1),
                 })).optional().describe("Optional docs to ingest (base64)"),
+                savedAgentId: z.string().optional().describe("Optional saved agent to bind as the active bot for the new app."),
                 enableBot: z.boolean().optional().describe("If true, enables botStatus=on (best-effort AI service activation)"),
                 botTrigger: z.string().optional().describe("Optional bot trigger (e.g. '/bot' or 'any_message')"),
+                llmProvider: z.string().optional().describe("Optional generation provider for the default AI bot (example: 'openai' or 'openai-compatible')."),
+                llmModel: z.string().optional().describe("Optional generation model for the default AI bot (example: 'gpt-4o-mini')."),
             },
         },
-        async function ({ displayName, setAsCurrent, crawlUrl, followLink, docs, enableBot, botTrigger }) {
+        async function ({ displayName, setAsCurrent, crawlUrl, followLink, docs, enableBot, botTrigger, llmProvider, llmModel, savedAgentId }) {
             const meta = getDefaultMeta("ethora-b2b-app-bootstrap-ai")
             const prev = (getClientState() as any).authMode as any
             try {
-                const res = await runB2BAppBootstrapAi({ displayName, setAsCurrent, crawlUrl, followLink, docs, enableBot, botTrigger })
+                const res = await runB2BAppBootstrapAi({ displayName, setAsCurrent, crawlUrl, followLink, docs, enableBot, botTrigger, llmProvider, llmModel, savedAgentId })
                 return asToolResult(ok(res, meta))
             } catch (error) {
                 // restore previous mode best-effort
@@ -1949,7 +2461,7 @@ function generateB2BBootstrapRunbookTool(server: McpServer) {
                     ``,
                     `## 3) Bootstrap app + AI`,
                     `Call: ethora-b2b-app-bootstrap-ai`,
-                    `Payload: ${JSON.stringify({ displayName: displayName || "Acme AI Demo", crawlUrl: crawlUrl || "https://example.com", enableBot: true }, null, 2)}`,
+                    `Payload: ${JSON.stringify({ displayName: displayName || "Acme AI Demo", crawlUrl: crawlUrl || "https://example.com", enableBot: true, llmProvider: "openai", llmModel: "gpt-4o-mini" }, null, 2)}`,
                     ``,
                     `## 4) Optional: tune bot`,
                     `Call: ethora-auth-use-app`,
@@ -1975,12 +2487,14 @@ function sourcesSiteCrawlV2AppTool(server: McpServer) {
             inputSchema: {
                 url: z.string().min(1),
                 followLink: z.boolean().optional(),
+                knowledgeScope: z.enum(["app", "saved_agent"]).optional(),
+                savedAgentId: z.string().optional(),
             },
         },
-        async function ({ url, followLink }) {
+        async function ({ url, followLink, knowledgeScope, savedAgentId }) {
             try {
                 ensureAppAuthForTool()
-                const res = await sourcesSiteCrawlV2({ url, followLink })
+                const res = await sourcesSiteCrawlV2({ url, followLink, knowledgeScope, savedAgentId })
                 return asToolResult(ok(res.data, getDefaultMeta("ethora-sources-site-crawl-v2")))
             } catch (error) {
                 return asToolResult(fail(error, getDefaultMeta("ethora-sources-site-crawl-v2")))
@@ -1996,12 +2510,14 @@ function sourcesSiteReindexV2AppTool(server: McpServer) {
             description: "Reindex a crawled URL by urlId via /v2/sources/site-crawl-reindex (app-token auth).",
             inputSchema: {
                 urlId: z.string().min(1),
+                knowledgeScope: z.enum(["app", "saved_agent"]).optional(),
+                savedAgentId: z.string().optional(),
             },
         },
-        async function ({ urlId }) {
+        async function ({ urlId, knowledgeScope, savedAgentId }) {
             try {
                 ensureAppAuthForTool()
-                const res = await sourcesSiteReindexV2({ urlId })
+                const res = await sourcesSiteReindexV2({ urlId, knowledgeScope, savedAgentId })
                 return asToolResult(ok(res.data, getDefaultMeta("ethora-sources-site-reindex-v2")))
             } catch (error) {
                 return asToolResult(fail(error, getDefaultMeta("ethora-sources-site-reindex-v2")))
@@ -2018,15 +2534,17 @@ function sourcesSiteCrawlV2WaitTool(server: McpServer) {
             inputSchema: {
                 url: z.string().min(1),
                 followLink: z.boolean().optional(),
+                knowledgeScope: z.enum(["app", "saved_agent"]).optional(),
+                savedAgentId: z.string().optional(),
                 timeoutMs: z.number().int().min(1000).max(600000).optional().describe("HTTP timeout for the crawl request (default 120000)"),
             },
         },
-        async function ({ url, followLink, timeoutMs }) {
+        async function ({ url, followLink, knowledgeScope, savedAgentId, timeoutMs }) {
             const meta = getDefaultMeta("ethora-sources-site-crawl-v2-wait")
             try {
                 ensureAppAuthForTool()
                 const started = Date.now()
-                const res = await sourcesSiteCrawlV2({ url, followLink }, { timeoutMs: timeoutMs ?? 120_000 })
+                const res = await sourcesSiteCrawlV2({ url, followLink, knowledgeScope, savedAgentId }, { timeoutMs: timeoutMs ?? 120_000 })
                 return asToolResult(ok({ done: true, durationMs: Date.now() - started, result: res.data }, meta))
             } catch (error) {
                 return asToolResult(fail(error, meta))
@@ -2042,16 +2560,66 @@ function sourcesSiteReindexV2WaitTool(server: McpServer) {
             description: "Wait for /v2/sources/site-crawl-reindex to finish (single call with extended timeout; app-token auth).",
             inputSchema: {
                 urlId: z.string().min(1),
+                knowledgeScope: z.enum(["app", "saved_agent"]).optional(),
+                savedAgentId: z.string().optional(),
                 timeoutMs: z.number().int().min(1000).max(600000).optional().describe("HTTP timeout for the reindex request (default 120000)"),
             },
         },
-        async function ({ urlId, timeoutMs }) {
+        async function ({ urlId, knowledgeScope, savedAgentId, timeoutMs }) {
             const meta = getDefaultMeta("ethora-sources-site-reindex-v2-wait")
             try {
                 ensureAppAuthForTool()
                 const started = Date.now()
-                const res = await sourcesSiteReindexV2({ urlId }, { timeoutMs: timeoutMs ?? 120_000 })
+                const res = await sourcesSiteReindexV2({ urlId, knowledgeScope, savedAgentId }, { timeoutMs: timeoutMs ?? 120_000 })
                 return asToolResult(ok({ done: true, durationMs: Date.now() - started, result: res.data }, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
+function sourcesSiteListV2Tool(server: McpServer) {
+    server.registerTool(
+        "ethora-sources-site-list-v2",
+        {
+            description: "List crawled site sources and their tags via GET /v2/sources/site-crawl (app-token auth).",
+            inputSchema: {
+                knowledgeScope: z.enum(["app", "saved_agent"]).optional(),
+                savedAgentId: z.string().optional(),
+            },
+        },
+        async function ({ knowledgeScope, savedAgentId }) {
+            const meta = getDefaultMeta("ethora-sources-site-list-v2")
+            try {
+                ensureAppAuthForTool()
+                const res = await sourcesSiteListV2({ knowledgeScope, savedAgentId })
+                return asToolResult(ok(res.data, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
+function sourcesSiteTagsUpdateV2Tool(server: McpServer) {
+    server.registerTool(
+        "ethora-sources-site-tags-update-v2",
+        {
+            description: "Set tags for a crawled site source via PATCH /v2/sources/site-crawl/:sourceId/tags (app-token auth).",
+            inputSchema: {
+                sourceId: z.string().min(1),
+                tags: z.array(z.string().min(1)).max(50),
+                knowledgeScope: z.enum(["app", "saved_agent"]).optional(),
+                savedAgentId: z.string().optional(),
+            },
+        },
+        async function ({ sourceId, tags, knowledgeScope, savedAgentId }) {
+            const meta = getDefaultMeta("ethora-sources-site-tags-update-v2")
+            try {
+                ensureAppAuthForTool()
+                const res = await sourcesSiteTagsUpdateV2(sourceId, tags, { knowledgeScope, savedAgentId })
+                return asToolResult(ok(res.data, meta))
             } catch (error) {
                 return asToolResult(fail(error, meta))
             }
@@ -2256,7 +2824,7 @@ function b2bAppProvisionTool(server: McpServer) {
     server.registerTool(
         "ethora-b2b-app-provision",
         {
-            description: "One-call B2B flow: create app → create one or more app tokens → provision default rooms → configure/enable bot.",
+            description: "One-call B2B flow: create app → create one or more app tokens → provision default rooms → configure/enable bot, including runtime LLM selection.",
             inputSchema: {
                 displayName: z.string().min(1).describe("New app display name"),
                 // tokens
@@ -2268,12 +2836,15 @@ function b2bAppProvisionTool(server: McpServer) {
                 })).max(20).optional().describe("Optional default rooms to create (B2B)."),
                 // bot
                 enableBot: z.boolean().optional().describe("If true, enables bot (app-token auth using first created token)."),
+                savedAgentId: z.string().optional().describe("Optional saved agent to bind as the active bot for the new app."),
                 botTrigger: z.enum(["any_message", "/bot"]).optional(),
                 botPrompt: z.string().optional(),
                 botGreetingMessage: z.string().optional(),
+                llmProvider: z.string().optional().describe("Optional generation provider for the default AI bot."),
+                llmModel: z.string().optional().describe("Optional generation model for the default AI bot."),
             },
         },
-        async function ({ displayName, tokenLabels, rooms, enableBot, botTrigger, botPrompt, botGreetingMessage }) {
+        async function ({ displayName, tokenLabels, rooms, enableBot, savedAgentId, botTrigger, botPrompt, botGreetingMessage, llmProvider, llmModel }) {
             const meta = getDefaultMeta("ethora-b2b-app-provision")
             const prev = (getClientState() as any).authMode as any
             try {
@@ -2309,18 +2880,27 @@ function b2bAppProvisionTool(server: McpServer) {
 
                 // 4) Configure bot (app-token using first created token)
                 let botRes: any = null
-                if (enableBot || botTrigger || botPrompt || botGreetingMessage) {
+                if (savedAgentId || enableBot || botTrigger || botPrompt || botGreetingMessage || llmProvider || llmModel) {
                     if (!primaryToken) throw new Error("Bot config requested but no app token was created")
                     selectApp({ appId, appToken: primaryToken, authMode: "app" })
                     setAuthMode("app")
+                    if (savedAgentId) {
+                        const activated = await agentsActivateV2(savedAgentId)
+                        botRes = activated.data
+                        steps.push({ step: "agentsActivateV2", ok: true, savedAgentId })
+                    }
                     const payload: any = {}
                     if (enableBot) payload.status = "on"
                     if (botTrigger) payload.trigger = botTrigger
                     if (botPrompt) payload.prompt = botPrompt
                     if (botGreetingMessage) payload.greetingMessage = botGreetingMessage
-                    const r = await botUpdateV2(payload)
-                    botRes = r.data
-                    steps.push({ step: "botUpdateV2", ok: true })
+                    if (llmProvider) payload.llmProvider = llmProvider
+                    if (llmModel) payload.llmModel = llmModel
+                    if (Object.keys(payload).length > 0) {
+                        const r = await botUpdateV2(payload)
+                        botRes = r.data
+                        steps.push({ step: "botUpdateV2", ok: true })
+                    }
                 }
 
                 return asToolResult(ok({
@@ -2347,12 +2927,14 @@ function sourcesSiteDeleteUrlV2AppTool(server: McpServer) {
             description: "Delete a crawled site URL via /v2/sources/site-crawl/url (app-token auth).",
             inputSchema: {
                 url: z.string().min(1),
+                knowledgeScope: z.enum(["app", "saved_agent"]).optional(),
+                savedAgentId: z.string().optional(),
             },
         },
-        async function ({ url }) {
+        async function ({ url, knowledgeScope, savedAgentId }) {
             try {
                 ensureAppAuthForTool()
-                const res = await sourcesSiteDeleteUrlV2Single({ url })
+                const res = await sourcesSiteDeleteUrlV2Single({ url, knowledgeScope, savedAgentId })
                 return asToolResult(ok(res.data, getDefaultMeta("ethora-sources-site-delete-url-v2")))
             } catch (error) {
                 return asToolResult(fail(error, getDefaultMeta("ethora-sources-site-delete-url-v2")))
@@ -2368,12 +2950,14 @@ function sourcesSiteDeleteUrlV2BatchAppTool(server: McpServer) {
             description: "Batch delete crawled URLs via /v2/sources/site-crawl-v2/url (app-token auth).",
             inputSchema: {
                 urls: z.array(z.string().min(1)).min(1).max(100),
+                knowledgeScope: z.enum(["app", "saved_agent"]).optional(),
+                savedAgentId: z.string().optional(),
             },
         },
-        async function ({ urls }) {
+        async function ({ urls, knowledgeScope, savedAgentId }) {
             try {
                 ensureAppAuthForTool()
-                const res = await sourcesSiteDeleteUrlV2Batch({ urls })
+                const res = await sourcesSiteDeleteUrlV2Batch({ urls, knowledgeScope, savedAgentId })
                 return asToolResult(ok(res.data, getDefaultMeta("ethora-sources-site-delete-url-v2-batch")))
             } catch (error) {
                 return asToolResult(fail(error, getDefaultMeta("ethora-sources-site-delete-url-v2-batch")))
@@ -2393,9 +2977,11 @@ function sourcesDocsUploadV2AppTool(server: McpServer) {
                     mimeType: z.string().min(1),
                     base64: z.string().min(1),
                 })).min(1).max(5),
+                knowledgeScope: z.enum(["app", "saved_agent"]).optional(),
+                savedAgentId: z.string().optional(),
             },
         },
-        async function ({ files }) {
+        async function ({ files, knowledgeScope, savedAgentId }) {
             try {
                 ensureAppAuthForTool()
                 const form = new FormData()
@@ -2407,6 +2993,8 @@ function sourcesDocsUploadV2AppTool(server: McpServer) {
                     const blob = new Blob([buf], { type: f.mimeType })
                     form.append("files", blob, f.name)
                 }
+                if (knowledgeScope) form.append("knowledgeScope", knowledgeScope)
+                if (savedAgentId) form.append("savedAgentId", savedAgentId)
                 const res = await sourcesDocsUploadV2(form, { "Content-Type": "multipart/form-data" })
                 return asToolResult(ok(res.data, getDefaultMeta("ethora-sources-docs-upload-v2")))
             } catch (error) {
@@ -2423,15 +3011,65 @@ function sourcesDocsDeleteV2AppTool(server: McpServer) {
             description: "Delete an ingested doc by docId via /v2/sources/docs/:docId (app-token auth).",
             inputSchema: {
                 docId: z.string().min(1),
+                knowledgeScope: z.enum(["app", "saved_agent"]).optional(),
+                savedAgentId: z.string().optional(),
             },
         },
-        async function ({ docId }) {
+        async function ({ docId, knowledgeScope, savedAgentId }) {
             try {
                 ensureAppAuthForTool()
-                const res = await sourcesDocsDeleteV2(docId)
+                const res = await sourcesDocsDeleteV2(docId, { knowledgeScope, savedAgentId })
                 return asToolResult(ok(res.data, getDefaultMeta("ethora-sources-docs-delete-v2")))
             } catch (error) {
                 return asToolResult(fail(error, getDefaultMeta("ethora-sources-docs-delete-v2")))
+            }
+        }
+    )
+}
+
+function sourcesDocsListV2Tool(server: McpServer) {
+    server.registerTool(
+        "ethora-sources-docs-list-v2",
+        {
+            description: "List ingested documents and their tags via GET /v2/sources/docs (app-token auth).",
+            inputSchema: {
+                knowledgeScope: z.enum(["app", "saved_agent"]).optional(),
+                savedAgentId: z.string().optional(),
+            },
+        },
+        async function ({ knowledgeScope, savedAgentId }) {
+            const meta = getDefaultMeta("ethora-sources-docs-list-v2")
+            try {
+                ensureAppAuthForTool()
+                const res = await sourcesDocsListV2({ knowledgeScope, savedAgentId })
+                return asToolResult(ok(res.data, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
+function sourcesDocsTagsUpdateV2Tool(server: McpServer) {
+    server.registerTool(
+        "ethora-sources-docs-tags-update-v2",
+        {
+            description: "Set tags for an ingested document via PATCH /v2/sources/docs/:docId/tags (app-token auth).",
+            inputSchema: {
+                docId: z.string().min(1),
+                tags: z.array(z.string().min(1)).max(50),
+                knowledgeScope: z.enum(["app", "saved_agent"]).optional(),
+                savedAgentId: z.string().optional(),
+            },
+        },
+        async function ({ docId, tags, knowledgeScope, savedAgentId }) {
+            const meta = getDefaultMeta("ethora-sources-docs-tags-update-v2")
+            try {
+                ensureAppAuthForTool()
+                const res = await sourcesDocsTagsUpdateV2(docId, tags, { knowledgeScope, savedAgentId })
+                return asToolResult(ok(res.data, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
             }
         }
     )
@@ -2463,8 +3101,12 @@ export function registerTools(server: McpServer) {
     sourcesSiteReindexV2AppTool(server);
     sourcesSiteCrawlV2WaitTool(server);
     sourcesSiteReindexV2WaitTool(server);
+    sourcesSiteListV2Tool(server);
+    sourcesSiteTagsUpdateV2Tool(server);
     sourcesSiteDeleteUrlV2AppTool(server);
     sourcesDocsUploadV2AppTool(server);
+    sourcesDocsListV2Tool(server);
+    sourcesDocsTagsUpdateV2Tool(server);
     sourcesDocsDeleteV2AppTool(server);
     usersBatchCreateV2Tool(server);
     usersBatchCreateJobV2Tool(server);
@@ -2497,6 +3139,17 @@ export function registerTools(server: McpServer) {
     botUpdateV2Tool(server);
     botEnableV2Tool(server);
     botDisableV2Tool(server);
+    botWidgetGetV2Tool(server);
+    agentsListV2Tool(server);
+    agentsGetV2Tool(server);
+    agentsCreateV2Tool(server);
+    agentsUpdateV2Tool(server);
+    agentsCloneV2Tool(server);
+    agentsActivateV2Tool(server);
+    chatsMessageCreateV2Tool(server);
+    chatsHistoryGetV2Tool(server);
+    botMessageCreateV2Tool(server);
+    botHistoryGetV2Tool(server);
     b2bAliases(server);
     b2bAppBootstrapAiTool(server);
     generateChatComponentAppTsxTool(server);

@@ -51,6 +51,8 @@ Tip: to list runnable recipes without calling `ethora-help`, call `ethora-run-re
   - `ethora-chats-broadcast-v2` — enqueue broadcast job (requires app-token auth)
   - `ethora-chats-broadcast-job-v2` — get broadcast job status/results (requires app-token auth)
   - `ethora-wait-broadcast-job-v2` — poll broadcast job until completed/failed (requires app-token auth)
+  - `ethora-chats-message-v2` — send a test/automation message through the app chat surface (requires app-token auth)
+  - `ethora-chats-history-v2` — read persisted automation/test history for private or group sessions (requires app-token auth)
 
 - **Users (v2 async batch)**
   - `ethora-users-batch-create-v2` — create async users batch job (requires B2B auth)
@@ -63,6 +65,15 @@ Tip: to list runnable recipes without calling `ethora-help`, call `ethora-run-re
   - `ethora-bot-update-v2` — update bot settings (app-token auth)
   - `ethora-bot-enable-v2` — enable bot (app-token auth)
   - `ethora-bot-disable-v2` — disable bot (app-token auth)
+  - `ethora-bot-widget-v2` — get widget/embed config and public widget URL metadata (app-token auth)
+  - `ethora-agents-list-v2` — list reusable saved agents for the current app owner (app-token auth)
+  - `ethora-agents-get-v2` — get one reusable saved agent (app-token auth)
+  - `ethora-agents-create-v2` — create a reusable saved agent (app-token auth)
+  - `ethora-agents-update-v2` — update a reusable saved agent (app-token auth)
+  - `ethora-agents-clone-v2` — clone a reusable saved agent (app-token auth)
+  - `ethora-agents-activate-v2` — bind a saved agent as the active bot for the selected app (app-token auth)
+  - `ethora-bot-message-v2` — compatibility alias for `ethora-chats-message-v2`
+  - `ethora-bot-history-v2` — compatibility alias for `ethora-chats-history-v2`
 
   - `ethora-files-upload-v2` — upload files (requires user auth)
   - `ethora-files-get-v2` — list/get files (requires user auth)
@@ -75,13 +86,17 @@ Tip: to list runnable recipes without calling `ethora-help`, call `ethora-run-re
   - `ethora-sources-site-delete-url-v2` — batch delete URLs (requires user auth)
   - `ethora-sources-docs-upload` — upload docs for ingestion (requires user auth)
   - `ethora-sources-docs-delete` — delete ingested doc by id (requires user auth)
-  - `ethora-sources-site-crawl-v2` — crawl a URL (requires app-token auth; no user creds)
+  - `ethora-sources-site-crawl-v2` — crawl a URL into app-local or saved-agent shared knowledge (requires app-token auth; no user creds)
   - `ethora-sources-site-reindex-v2` — reindex URL by urlId (requires app-token auth)
   - `ethora-sources-site-crawl-v2-wait` — single-call long-timeout helper for crawl (app-token auth)
   - `ethora-sources-site-reindex-v2-wait` — single-call long-timeout helper for reindex (app-token auth)
+  - `ethora-sources-site-list-v2` — list crawled site sources and current tags for `knowledgeScope=app` or `knowledgeScope=saved_agent` (requires app-token auth)
+  - `ethora-sources-site-tags-update-v2` — set/update tags for a crawled site source (requires app-token auth)
   - `ethora-sources-site-delete-url-v2` — delete by URL (requires app-token auth)
   - `ethora-sources-site-delete-url-v2-batch` — batch delete (requires app-token auth)
-  - `ethora-sources-docs-upload-v2` — upload docs (requires app-token auth)
+  - `ethora-sources-docs-upload-v2` — upload docs into app-local or saved-agent shared knowledge (requires app-token auth)
+  - `ethora-sources-docs-list-v2` — list indexed documents and current tags for `knowledgeScope=app` or `knowledgeScope=saved_agent` (requires app-token auth)
+  - `ethora-sources-docs-tags-update-v2` — set/update tags for an indexed document (requires app-token auth)
   - `ethora-sources-docs-delete-v2` — delete doc by id (requires app-token auth)
 
 - **Auth & Accounts**
@@ -94,12 +109,12 @@ Tip: to list runnable recipes without calling `ethora-help`, call `ethora-run-re
   - `ethora-app-delete` — delete app
   - `ethora-app-list` — list apps
   - `ethora-b2b-app-create` — create app using B2B auth (x-custom-token)
-  - `ethora-b2b-app-bootstrap-ai` — create app → index sources → enable bot (B2B automation)
+  - `ethora-b2b-app-bootstrap-ai` — create app → index sources → configure/enable bot, including runtime LLM selection (B2B automation)
   - `ethora-app-tokens-list-v2` — list app token metadata (B2B auth)
   - `ethora-app-tokens-create-v2` — create new app token (returned once) (B2B auth)
   - `ethora-app-tokens-rotate-v2` — rotate token (revoke old, return new once) (B2B auth)
   - `ethora-app-tokens-revoke-v2` — revoke token by tokenId (idempotent) (B2B auth)
-  - `ethora-b2b-app-provision` — create app + create tokens + provision rooms + configure bot (B2B orchestrator)
+  - `ethora-b2b-app-provision` — create app + create tokens + provision rooms + configure bot, including runtime LLM selection (B2B orchestrator)
 
 - **Chat & Rooms**
   - `ethora-app-get-default-rooms` — list default rooms
@@ -282,15 +297,18 @@ Suggested flow:
 - Call `ethora-auth-use-b2b`
 - Call `ethora-b2b-app-bootstrap-ai` with:
   - `displayName`
+  - optional `savedAgentId`
   - optional `crawlUrl`
   - optional `docs[]` (base64)
   - `enableBot: true`
+  - optional `llmProvider`
+  - optional `llmModel`
 
 It will:
 - create the app (B2B)
 - set current app context (best-effort)
 - index sources via `/v2/sources/*` (app-token auth)
-- enable bot (best-effort)
+- configure and/or enable bot (best-effort)
 
 ### Example payloads
 
@@ -308,10 +326,13 @@ Create app + crawl a website + enable bot:
 ```json
 {
   "displayName": "Acme AI Demo",
+  "savedAgentId": "6790abc1234567890def1111",
   "crawlUrl": "https://example.com",
   "followLink": true,
   "enableBot": true,
-  "botTrigger": "/bot"
+  "botTrigger": "/bot",
+  "llmProvider": "openai",
+  "llmModel": "gpt-4o-mini"
 }
 ```
 
@@ -327,9 +348,163 @@ Create app + upload docs + enable bot:
       "base64": "BASE64_PDF_CONTENT_HERE"
     }
   ],
-  "enableBot": true
+  "enableBot": true,
+  "llmProvider": "openai",
+  "llmModel": "gpt-4o-mini"
 }
 ```
+
+Provision app + token + default rooms + bot settings:
+
+```json
+{
+  "displayName": "Acme Support",
+  "savedAgentId": "6790abc1234567890def1111",
+  "tokenLabels": ["default", "staging"],
+  "rooms": [
+    { "title": "General" },
+    { "title": "Support", "pinned": true }
+  ],
+  "enableBot": true,
+  "botTrigger": "/bot",
+  "botPrompt": "You are the Acme support assistant.",
+  "botGreetingMessage": "Hello. How can I help?",
+  "llmProvider": "openai",
+  "llmModel": "gpt-4o-mini"
+}
+```
+
+Provider/model note:
+- Common values are `openai` and `openai-compatible`.
+- The effective provider/model must also be enabled by your Ethora backend + AI service environment.
+
+---
+
+## 🧠 Saved agents and hybrid knowledge
+
+Ethora now distinguishes between:
+
+- **App bot wrapper**: the app-scoped XMPP/chat/widget identity returned by `ethora-bot-get-v2`
+- **Saved agent**: a reusable persona/runtime config that can be listed, created, cloned, updated, and activated across apps owned by the same creator
+
+Recommended mental model:
+
+- Keep `/v2/bot` and `ethora-bot-*` for the current app’s active wrapper/runtime
+- Use `/v2/agents` and `ethora-agents-*` for reusable templates and agent switching
+- Use source tools with `knowledgeScope: "app"` for app-local overlays
+- Use source tools with `knowledgeScope: "saved_agent"` plus `savedAgentId` for shared base knowledge
+
+Example: create a saved agent
+
+```json
+{
+  "name": "Acme Support Base",
+  "prompt": "You are the Acme support assistant.",
+  "botDisplayName": "Acme Support",
+  "isRAG": true,
+  "ragTags": ["support", "faq"],
+  "llmProvider": "openai",
+  "llmModel": "gpt-4o-mini"
+}
+```
+
+Example: activate a saved agent for the current app
+
+```json
+{
+  "agentId": "6790abc1234567890def1111"
+}
+```
+
+Example: upload shared knowledge to a saved agent
+
+```json
+{
+  "files": [
+    {
+      "name": "support-playbook.pdf",
+      "mimeType": "application/pdf",
+      "base64": "BASE64_PDF_CONTENT_HERE"
+    }
+  ],
+  "knowledgeScope": "saved_agent",
+  "savedAgentId": "6790abc1234567890def1111"
+}
+```
+
+Example: list only shared site/doc knowledge for a saved agent
+
+```json
+{
+  "knowledgeScope": "saved_agent",
+  "savedAgentId": "6790abc1234567890def1111"
+}
+```
+
+Notes:
+- `knowledgeScope: "app"` remains the default and preserves previous behavior.
+- `knowledgeScope: "saved_agent"` lets one owner reuse a shared knowledge base across multiple apps.
+- Activating a saved agent does not replace the app’s XMPP/JID wrapper; it swaps the reusable persona/runtime/base knowledge underneath it.
+
+---
+
+## 🤖 P2: AI-assisted dev loop (test bot, inspect RAG, fetch widget)
+
+Once you already have an app selected with app-token auth:
+
+- Call `ethora-auth-use-app`
+- Call `ethora-bot-get-v2` to inspect current bot status, trigger, prompt, widget flags, and runtime LLM settings
+- Call `ethora-agents-list-v2` / `ethora-agents-activate-v2` to inspect or switch the reusable saved agent behind the current app wrapper
+- Call `ethora-sources-site-list-v2` and `ethora-sources-docs-list-v2` to inspect indexed sources
+- Call `ethora-sources-site-tags-update-v2` or `ethora-sources-docs-tags-update-v2` to segment retrieval by tags
+- Call `ethora-chats-message-v2` to send a private or group test message
+- Call `ethora-chats-history-v2` to read the saved response/history back
+- Call `ethora-bot-widget-v2` to fetch the widget embed config and public widget URL metadata
+
+Example: send a private test message
+
+```json
+{
+  "text": "Summarize the indexed FAQ in 3 bullets.",
+  "mode": "private",
+  "nickname": "SDK Tester"
+}
+```
+
+Example: read recent history for that private session
+
+```json
+{
+  "mode": "private",
+  "nickname": "SDK Tester",
+  "limit": 10
+}
+```
+
+Example: send a group-room test message
+
+```json
+{
+  "text": "What documents are currently indexed for this app?",
+  "mode": "group",
+  "roomJid": "support_demo@conference.xmpp.example.com"
+}
+```
+
+Example: apply retrieval tags to a crawled source
+
+```json
+{
+  "sourceId": "6790abc1234567890def1234",
+  "tags": ["support", "faq", "billing"]
+}
+```
+
+Notes:
+- `mode: "private"` uses a persisted private test conversation keyed by `nickname`.
+- `mode: "group"` lets you exercise room-style flows by passing `roomJid`.
+- `ethora-bot-message-v2` and `ethora-bot-history-v2` remain available as compatibility aliases, but `ethora-chats-*` is the primary surface.
+- Saved-agent knowledge can be inspected by passing `knowledgeScope: "saved_agent"` and `savedAgentId` to the source list/tag/delete tools.
 
 ---
 

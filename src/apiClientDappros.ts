@@ -24,11 +24,14 @@ export const httpTokens = {
 export const ethoraContext = {
   authMode: "user" as "user" | "app" | "b2b",
   currentAppId: "" as string,
+  currentAgentId: "" as string,
 }
 
 export const httpClientDappros = axios.create({
   baseURL: appConfig.apiUrl,
 });
+
+export const httpClientEthora = httpClientDappros
 
 // Small helper used by `ethora-doctor`
 export async function apiPing(timeoutMs = 3000) {
@@ -161,6 +164,7 @@ export function getClientState() {
     hasRefreshToken: Boolean(httpTokens.refreshToken),
     authMode: ethoraContext.authMode,
     currentAppId: ethoraContext.currentAppId,
+    currentAgentId: ethoraContext.currentAgentId,
     enableDangerousTools: Boolean(appConfig.enableDangerousTools),
   }
 }
@@ -180,6 +184,11 @@ export function selectApp(params: { appId: string; appToken?: string; authMode?:
     // If caller provided appToken, default to app auth.
     ethoraContext.authMode = "app"
   }
+  return getClientState()
+}
+
+export function selectAgent(params: { agentId: string }) {
+  ethoraContext.currentAgentId = String(params.agentId || "").trim()
   return getClientState()
 }
 
@@ -314,6 +323,7 @@ export function botGetV2() {
 
 export function botUpdateV2(payload: {
   status?: "on" | "off"
+  savedAgentId?: string
   trigger?: "any_message" | "/bot"
   prompt?: string
   greetingMessage?: string
@@ -321,9 +331,103 @@ export function botUpdateV2(payload: {
   isRAG?: boolean
   botFirstName?: string
   botLastName?: string
+  botDisplayName?: string
+  botAvatarUrl?: string
+  ragTags?: string[]
+  llmProvider?: string
+  llmModel?: string
+  widgetPublicEnabled?: boolean
+  widgetPublicUrl?: string
 }) {
   return httpClientDappros.put(`/v2/bot`, payload)
 }
+
+export function agentsListV2() {
+  return httpClientDappros.get(`/v2/agents`)
+}
+
+export function agentsGetV2(agentId: string) {
+  return httpClientDappros.get(`/v2/agents/${String(agentId || "").trim()}`)
+}
+
+export function agentsCreateV2(payload: {
+  name?: string
+  slug?: string
+  summary?: string
+  prompt?: string
+  greetingMessage?: string
+  trigger?: "any_message" | "/bot"
+  botDisplayName?: string
+  botAvatarUrl?: string
+  isRAG?: boolean
+  ragTags?: string[]
+  llmProvider?: string
+  llmModel?: string
+  visibility?: "private" | "public"
+  isPublished?: boolean
+  categories?: string[]
+  meta?: Record<string, any>
+}) {
+  return httpClientDappros.post(`/v2/agents`, payload || {})
+}
+
+export function agentsUpdateV2(agentId: string, payload: {
+  name?: string
+  slug?: string
+  summary?: string
+  prompt?: string
+  greetingMessage?: string
+  trigger?: "any_message" | "/bot"
+  botDisplayName?: string
+  botAvatarUrl?: string
+  isRAG?: boolean
+  ragTags?: string[]
+  llmProvider?: string
+  llmModel?: string
+  visibility?: "private" | "public"
+  isPublished?: boolean
+  categories?: string[]
+  meta?: Record<string, any>
+}) {
+  return httpClientDappros.put(`/v2/agents/${String(agentId || "").trim()}`, payload || {})
+}
+
+export function agentsCloneV2(agentId: string, payload?: {
+  name?: string
+  slug?: string
+  summary?: string
+}) {
+  return httpClientDappros.post(`/v2/agents/${String(agentId || "").trim()}/clone`, payload || {})
+}
+
+export function agentsActivateV2(agentId: string) {
+  return httpClientDappros.post(`/v2/agents/${String(agentId || "").trim()}/activate`, {})
+}
+
+export function botWidgetGetV2() {
+  return httpClientDappros.get(`/v2/bot/widget`)
+}
+
+export function botMessageCreateV2(payload: {
+  text: string
+  mode?: "private" | "group"
+  nickname?: string
+  roomJid?: string
+}) {
+  return httpClientDappros.post(`/v2/chats/messages`, payload)
+}
+
+export function botHistoryGetV2(params?: {
+  mode?: "private" | "group"
+  nickname?: string
+  roomJid?: string
+  limit?: number
+}) {
+  return httpClientDappros.get(`/v2/chats/history`, { params: params || {} })
+}
+
+export const chatsMessageCreateV2 = botMessageCreateV2
+export const chatsHistoryGetV2 = botHistoryGetV2
 
 // sources (v1-style routes, user auth)
 export function sourcesSiteCrawl(appId: string, url: string, followLink: boolean) {
@@ -351,19 +455,27 @@ export function sourcesDocsDelete(appId: string, docId: string) {
 }
 
 // sources (v2 app-token endpoints)
-export function sourcesSiteCrawlV2(payload: { url: string; followLink?: boolean }, opts?: { timeoutMs?: number }) {
+export function sourcesSiteCrawlV2(payload: { url: string; followLink?: boolean; knowledgeScope?: "app" | "saved_agent"; savedAgentId?: string }, opts?: { timeoutMs?: number }) {
   return httpClientDappros.post(`/v2/sources/site-crawl`, payload, { timeout: opts?.timeoutMs })
 }
 
-export function sourcesSiteReindexV2(payload: { urlId: string }, opts?: { timeoutMs?: number }) {
+export function sourcesSiteListV2(params?: { knowledgeScope?: "app" | "saved_agent"; savedAgentId?: string }) {
+  return httpClientDappros.get(`/v2/sources/site-crawl`, { params: params || {} })
+}
+
+export function sourcesSiteReindexV2(payload: { urlId: string; knowledgeScope?: "app" | "saved_agent"; savedAgentId?: string }, opts?: { timeoutMs?: number }) {
   return httpClientDappros.post(`/v2/sources/site-crawl-reindex`, payload, { timeout: opts?.timeoutMs })
 }
 
-export function sourcesSiteDeleteUrlV2Single(payload: { url: string }) {
+export function sourcesSiteTagsUpdateV2(sourceId: string, tags: string[], extra?: { knowledgeScope?: "app" | "saved_agent"; savedAgentId?: string }) {
+  return httpClientDappros.patch(`/v2/sources/site-crawl/${sourceId}/tags`, { tags, ...(extra || {}) })
+}
+
+export function sourcesSiteDeleteUrlV2Single(payload: { url: string; knowledgeScope?: "app" | "saved_agent"; savedAgentId?: string }) {
   return httpClientDappros.delete(`/v2/sources/site-crawl/url`, { data: payload })
 }
 
-export function sourcesSiteDeleteUrlV2Batch(payload: { urls: string[] }) {
+export function sourcesSiteDeleteUrlV2Batch(payload: { urls: string[]; knowledgeScope?: "app" | "saved_agent"; savedAgentId?: string }) {
   return httpClientDappros.delete(`/v2/sources/site-crawl-v2/url`, { data: payload })
 }
 
@@ -371,8 +483,16 @@ export function sourcesDocsUploadV2(formData: any, headers?: any) {
   return httpClientDappros.post(`/v2/sources/docs`, formData, { headers })
 }
 
-export function sourcesDocsDeleteV2(docId: string) {
-  return httpClientDappros.delete(`/v2/sources/docs/${docId}`)
+export function sourcesDocsListV2(params?: { knowledgeScope?: "app" | "saved_agent"; savedAgentId?: string }) {
+  return httpClientDappros.get(`/v2/sources/docs`, { params: params || {} })
+}
+
+export function sourcesDocsTagsUpdateV2(docId: string, tags: string[], extra?: { knowledgeScope?: "app" | "saved_agent"; savedAgentId?: string }) {
+  return httpClientDappros.patch(`/v2/sources/docs/${docId}/tags`, { tags, ...(extra || {}) })
+}
+
+export function sourcesDocsDeleteV2(docId: string, params?: { knowledgeScope?: "app" | "saved_agent"; savedAgentId?: string }) {
+  return httpClientDappros.delete(`/v2/sources/docs/${docId}`, { params: params || {} })
 }
 
 // users v2 batch (async jobs; b2b auth)
