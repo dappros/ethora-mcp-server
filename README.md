@@ -1,11 +1,11 @@
-# Ethora MCP Server (Model Context Protocol)
+# Ethora MCP CLI (Model Context Protocol)
 
 [![npm](https://img.shields.io/npm/v/@ethora/mcp-server.svg)](https://www.npmjs.com/package/@ethora/mcp-server)
 [![Node](https://img.shields.io/badge/node-%E2%89%A518.x-blue.svg)](#)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 
-An MCP (Model Context Protocol) server that connects popular MCP clients to the **Ethora** platform.  
-Use it from **Cursor**, **VS Code MCP**, **Claude Desktop**, or **Windsurf/Cline** to log in, manage apps and chats, and interact with wallets (ERC-20).
+An MCP (Model Context Protocol) CLI that simplifies using **Ethora** platform in AI-assisted or agentic mode.  
+Use it from **Cursor**, **VS Code MCP**, **Claude Code**, or **Windsurf/Cline** to log in, manage apps, users and chats, and interact with wallets.
 
 ---
 
