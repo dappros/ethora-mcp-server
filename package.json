@@ -22,7 +22,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/dappros/ethora-mcp-server.git"
+    "url": "git+https://github.com/dappros/ethora-mcp-cli.git"
   },
   "keywords": ["ethora", "ethora-mcp", "ethora-app", "ethora-admin", "mcp"],
   "author": "",
@@ -31,9 +31,9 @@
     "node": ">=18.0.0"
   },
   "bugs": {
-    "url": "https://github.com/dappros/ethora-mcp-server/issues"
+    "url": "https://github.com/dappros/ethora-mcp-cli/issues"
   },
-  "homepage": "https://github.com/dappros/ethora-mcp-server#readme",
+  "homepage": "https://github.com/dappros/ethora-mcp-cli#readme",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.16.0",
     "axios": "^1.11.0",

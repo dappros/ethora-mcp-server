@@ -1,10 +1,10 @@
-# Ethora MCP Server (Model Context Protocol)
+# Ethora MCP CLI (Model Context Protocol)
 
 [![npm](https://img.shields.io/npm/v/@ethora/mcp-server.svg)](https://www.npmjs.com/package/@ethora/mcp-server)
 [![Node](https://img.shields.io/badge/node-%E2%89%A518.x-blue.svg)](#)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 
-An MCP (Model Context Protocol) server that connects popular MCP clients to the **Ethora** platform.  
+An MCP (Model Context Protocol) CLI/server that connects popular MCP clients to the **Ethora** platform. This runs locally on a developer machine via stdio rather than as a hosted Ethora service.  
 Use it from **Cursor**, **VS Code MCP**, **Claude Desktop**, or **Windsurf/Cline** to log in, manage apps and chats, and interact with wallets (ERC-20).
 
 ---
@@ -201,7 +201,7 @@ All tools return JSON in a consistent envelope:
 ```json
 {
   "mcpServers": {
-    "ethora-mcp-server": {
+    "ethora-mcp-cli": {
       "command": "npx",
       "args": ["-y", "@ethora/mcp-server"]
     }
@@ -220,7 +220,7 @@ All tools return JSON in a consistent envelope:
 ```json
  "mcp": {
     "servers": {
-      "ethora-mcp-server": {
+      "ethora-mcp-cli": {
         "command": "npx",
         "args": [
           "-y", "@ethora/mcp-server"
@@ -243,7 +243,7 @@ All tools return JSON in a consistent envelope:
 ```json
 {
   "mcpServers": {
-    "ethora-mcp-server": {
+    "ethora-mcp-cli": {
       "command": "npx",
       "args": ["-y", "@ethora/mcp-server"]
     }
@@ -261,7 +261,7 @@ All tools return JSON in a consistent envelope:
    ```json
    {
      "mcpServers": {
-       "ethora-mcp-server": {
+      "ethora-mcp-cli": {
          "command": "npx",
          "args": ["-y", "@ethora/mcp-server"]
        }
@@ -527,8 +527,8 @@ This repo runs **report-only** scans on pushes/PRs:
 Clone and run locally:
 
 ```bash
-git clone https://github.com/dappros/ethora-mcp-server.git
-cd ethora-mcp-server
+git clone https://github.com/dappros/ethora-mcp-cli.git
+cd ethora-mcp-cli
 npm install
 npm run build
 npm start
