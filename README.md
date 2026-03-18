@@ -7,6 +7,8 @@
 An MCP (Model Context Protocol) CLI that simplifies using **Ethora** platform in AI-assisted or agentic mode.  
 Use it from **Cursor**, **VS Code MCP**, **Claude Code**, or **Windsurf/Cline** to log in, manage apps, users and chats, and interact with wallets.
 
+**Part of the [Ethora SDK ecosystem](https://github.com/dappros/ethora#ecosystem)** — see all SDKs, tools, and sample apps. Follow cross-SDK updates in the [Release Notes](https://github.com/dappros/ethora/blob/main/RELEASE-NOTES.md).
+
 ---
 
 ## ✨ What you get
