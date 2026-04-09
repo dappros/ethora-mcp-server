@@ -13,15 +13,29 @@ function md(strings: TemplateStringsArray, ...values: any[]) {
 const AUTH_MAP_MD = md`
 ## Ethora auth map (quick reference)
 
-Ethora has multiple token types depending on the caller:
+Ethora MCP has two common usage modes:
+
+### A) Local developer / admin flow
+- Typical user: developer, tenant admin, or app owner trying the MCP server from Cursor or Claude Desktop
+- Main auth mode: \`user\`
+- Bootstrap credential: **App JWT** via \`ETHORA_APP_JWT\`
+- Session credential: user JWT returned by \`ethora-user-login\`
+
+### B) Server / agent automation flow
+- Typical user: backend integration, CI runner, or autonomous agent
+- Main auth mode: \`b2b\` first, then often \`app\`
+- Tenant-actor credential: **B2B token** via \`ETHORA_B2B_TOKEN\`
+- App-scoped credential: **appToken** after app selection or token creation
+
+Ethora uses multiple token types depending on the caller:
 
 ### 1) **App JWT** (\`appJwt\`)
 - **Where it’s used**: login/register endpoints (user auth bootstrap)
 - **How it’s provided**: env \`ETHORA_APP_JWT\` (or via \`ethora-configure\`)
-- **Typical caller**: frontend app / SDK / MCP when doing \`ethora-user-login\`
+- **Typical caller**: local MCP session doing \`ethora-user-login\`
 
 ### 2) **App Token** (\`appToken\`)
-- **Where it’s used**: app-scoped B2B operations (preferred for partners): broadcast, sources ingest, bot management
+- **Where it’s used**: app-scoped automation after you already know the target app: broadcast, sources ingest, bot management
 - **How it’s obtained**: created per-app (returned from app creation / visible in admin)
 - **How it’s provided**: \`ethora-app-select { appId, appToken }\` then \`ethora-auth-use-app\`
 
@@ -31,9 +45,10 @@ Ethora has multiple token types depending on the caller:
 - **How it’s provided**: env \`ETHORA_B2B_TOKEN\` (or via \`ethora-configure\`), then \`ethora-auth-use-b2b\`
 
 ### Rule of thumb
-- Need to **log in a user** → use **App JWT**
-- Need to run **B2B operations for one app** (broadcast/sources/bot) → use **App Token**
-- Need to **create apps / bootstrap** in a partner integration → use **B2B Token** first, then switch into **App Token**
+- First time using Ethora MCP locally → start with **User Auth**
+- Need to **log in a user** → use **App JWT** then \`ethora-user-login\`
+- Need to **create apps / manage tenant resources** from your own backend → use **B2B Token**
+- Need to run **app-scoped operations for one app** (broadcast/sources/bot) → switch into **App Token**
 `
 
 const CHAT_COMPONENT_QUICKSTART_MD = md`
@@ -74,16 +89,29 @@ ETHORA_CHAT_APP_SECRET=your_app_secret
 const RECIPES_MD = md`
 ## Common recipes
 
+### User-auth quickstart
+1) \`ethora-configure\` with \`{ apiUrl, appJwt }\`
+2) \`ethora-auth-use-user\`
+3) \`ethora-user-login\`
+4) Use user-auth tools such as \`ethora-files-upload-v2\`
+
 ### B2B bootstrap AI
 1) \`ethora-configure\` with \`{ apiUrl, b2bToken }\`
 2) \`ethora-auth-use-b2b\`
 3) \`ethora-b2b-app-bootstrap-ai\` with \`displayName\`, optional \`crawlUrl\` / \`docs[]\`, and optional \`llmProvider\` / \`llmModel\`
+4) If you want app-scoped follow-up actions, call \`ethora-app-select\` with \`{ appId, appToken }\`, then \`ethora-auth-use-app\`
 
 ### Broadcast (app-token)
 1) \`ethora-app-select\` with \`{ appId, appToken }\`
 2) \`ethora-auth-use-app\`
 3) \`ethora-chats-broadcast-v2\`
 4) \`ethora-wait-broadcast-job-v2\`
+
+### Broadcast (B2B explicit appId)
+1) \`ethora-configure\` with \`{ apiUrl, b2bToken }\`
+2) \`ethora-auth-use-b2b\`
+3) \`ethora-chats-broadcast-v2\` with \`{ appId, ... }\`
+4) \`ethora-wait-broadcast-job-v2\` with \`{ appId, jobId }\`
 
 ### Sources ingest (app-token)
 1) \`ethora-app-select\` with \`{ appId, appToken }\`
@@ -92,34 +120,15 @@ const RECIPES_MD = md`
 4) \`ethora-sources-site-list-v2\` / \`ethora-sources-docs-list-v2\`
 5) \`ethora-sources-site-tags-update-v2\` / \`ethora-sources-docs-tags-update-v2\`
 
-### Files upload (user)
-1) \`ethora-auth-use-user\`
-2) \`ethora-user-login\`
-3) \`ethora-files-upload-v2\`
-
 ### Bot management (app-token)
 1) \`ethora-app-select\` with \`{ appId, appToken }\`
 2) \`ethora-auth-use-app\`
 3) \`ethora-bot-get-v2\` / \`ethora-bot-update-v2\`
 
-### Saved agents (app-token)
-1) \`ethora-app-select\` with \`{ appId, appToken }\`
-2) \`ethora-auth-use-app\`
-3) \`ethora-agents-list-v2\` / \`ethora-agents-create-v2\`
-4) \`ethora-agents-activate-v2\`
-
-### Shared knowledge on saved agent (app-token)
-1) \`ethora-app-select\` with \`{ appId, appToken }\`
-2) \`ethora-auth-use-app\`
-3) \`ethora-sources-site-crawl-v2\` or \`ethora-sources-docs-upload-v2\` with \`knowledgeScope: "saved_agent"\` and \`savedAgentId\`
-4) \`ethora-sources-site-list-v2\` / \`ethora-sources-docs-list-v2\` with the same scope params
-
-### Chat automation test loop (app-token)
-1) \`ethora-app-select\` with \`{ appId, appToken }\`
-2) \`ethora-auth-use-app\`
-3) \`ethora-chats-message-v2\`
-4) \`ethora-chats-history-v2\`
-5) \`ethora-bot-widget-v2\`
+### Files upload (user)
+1) \`ethora-auth-use-user\`
+2) \`ethora-user-login\`
+3) \`ethora-files-upload-v2\`
 `
 
 export function registerPromptsAndResources(server: McpServer) {
@@ -215,7 +224,7 @@ export function registerPromptsAndResources(server: McpServer) {
     "ethora-recipes",
     {
       title: "Ethora recipes",
-      description: "Common MCP tool sequences: bootstrap, broadcast, sources ingest/tags, files upload, bot management, chat testing.",
+      description: "Common MCP tool sequences for local user-auth and server-side B2B/app-token flows.",
       argsSchema: {},
     },
     () => ({

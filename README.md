@@ -5,11 +5,47 @@
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 
 An MCP (Model Context Protocol) CLI/server that connects popular MCP clients to the **Ethora** platform. This runs locally on a developer machine via stdio rather than as a hosted Ethora service.  
-Use it from **Cursor**, **VS Code MCP**, **Claude Desktop**, or **Windsurf/Cline** to log in, manage apps and chats, and interact with wallets (ERC-20).
+Use it from **Cursor**, **VS Code MCP**, **Claude Desktop**, or **Windsurf/Cline** to log in, manage apps and chats, automate B2B workflows, and interact with wallets (ERC-20).
 
 ---
 
 ## ✨ What you get
+
+## 🔐 Two typical usage modes
+
+### 1) User Auth mode
+
+Best for:
+
+- developers trying Ethora locally
+- tenant admins / app owners using MCP manually
+- flows that start with `ethora-user-login`
+
+How it works:
+
+- configure `ETHORA_APP_JWT` once for login/register bootstrap
+- switch to `ethora-auth-use-user`
+- call `ethora-user-login`
+- use user-auth tools such as files and legacy owner/admin endpoints
+
+### 2) B2B mode
+
+Best for:
+
+- permanent backend integrations
+- partner provisioning flows
+- autonomous agents operating Ethora without a human user session
+
+How it works:
+
+- configure `ETHORA_B2B_TOKEN`
+- switch to `ethora-auth-use-b2b` for explicit tenant-actor `/v2/apps/:appId/...` routes
+- optionally switch into `ethora-auth-use-app` after `ethora-app-select` when you want app-scoped convenience routes powered by `appToken`
+
+Rule of thumb:
+
+- first-time local use usually starts with **User Auth**
+- repeatable automation usually starts with **B2B**, then often moves into **app-token** mode for one selected app
 
 ### Prompts & Resources (P2: dev-facing docs)
 
@@ -37,20 +73,20 @@ Use it from **Cursor**, **VS Code MCP**, **Claude Desktop**, or **Windsurf/Cline
 Tip: to list runnable recipes without calling `ethora-help`, call `ethora-run-recipe` with `goal: "auto"` and omit `recipeId`.
 
 - **Session / Config**
-  - `ethora-configure` — set API URL + App JWT (in-memory for this MCP session)
-  - `ethora-status` — show configured API URL + whether auth tokens are present
+  - `ethora-configure` — set API URL plus App JWT / B2B token / appToken for this MCP session
+  - `ethora-status` — show configured API URL, active auth mode, and which credentials are present
   - `ethora-help` — task-oriented help (recommended next calls + “one-click recipes” based on current state)
   - `ethora-run-recipe` — execute a built-in recipe by id (sequential steps; no shell, no file writes)
-  - `ethora-doctor` — validate config + ping the configured Ethora API
-  - `ethora-app-select` — select current appId and optionally set appToken (B2B)
-  - `ethora-auth-use-app` — switch to app-token auth mode (B2B)
+  - `ethora-doctor` — validate config + ping the configured Ethora API for both user and B2B usage
+  - `ethora-app-select` — select current appId and optionally set appToken
+  - `ethora-auth-use-app` — switch to app-token auth mode for app-scoped operations
   - `ethora-auth-use-user` — switch to user-session auth mode
-  - `ethora-auth-use-b2b` — switch to B2B `x-custom-token` auth mode (server token)
+  - `ethora-auth-use-b2b` — switch to tenant-actor B2B `x-custom-token` auth mode
 
 - **Chats (v2)**
-  - `ethora-chats-broadcast-v2` — enqueue broadcast job (requires app-token auth)
-  - `ethora-chats-broadcast-job-v2` — get broadcast job status/results (requires app-token auth)
-  - `ethora-wait-broadcast-job-v2` — poll broadcast job until completed/failed (requires app-token auth)
+  - `ethora-chats-broadcast-v2` — enqueue broadcast job using app-token auth or B2B + explicit `appId`
+  - `ethora-chats-broadcast-job-v2` — get broadcast job status/results using app-token auth or B2B + explicit `appId`
+  - `ethora-wait-broadcast-job-v2` — poll broadcast job until completed/failed using app-token auth or B2B + explicit `appId`
   - `ethora-chats-message-v2` — send a test/automation message through the app chat surface (requires app-token auth)
   - `ethora-chats-history-v2` — read persisted automation/test history for private or group sessions (requires app-token auth)
 
@@ -61,10 +97,10 @@ Tip: to list runnable recipes without calling `ethora-help`, call `ethora-run-re
 
 - **Files (v2)**
 - **Bot / Agent (v2)**
-  - `ethora-bot-get-v2` — get bot status/settings (app-token auth)
-  - `ethora-bot-update-v2` — update bot settings (app-token auth)
-  - `ethora-bot-enable-v2` — enable bot (app-token auth)
-  - `ethora-bot-disable-v2` — disable bot (app-token auth)
+  - `ethora-bot-get-v2` — get bot status/settings using app-token auth or B2B + explicit `appId`
+  - `ethora-bot-update-v2` — update bot settings using app-token auth or B2B + explicit `appId`
+  - `ethora-bot-enable-v2` — enable bot using app-token auth or B2B + explicit `appId`
+  - `ethora-bot-disable-v2` — disable bot using app-token auth or B2B + explicit `appId`
   - `ethora-bot-widget-v2` — get widget/embed config and public widget URL metadata (app-token auth)
   - `ethora-agents-list-v2` — list reusable saved agents for the current app owner (app-token auth)
   - `ethora-agents-get-v2` — get one reusable saved agent (app-token auth)
@@ -86,18 +122,18 @@ Tip: to list runnable recipes without calling `ethora-help`, call `ethora-run-re
   - `ethora-sources-site-delete-url-v2` — batch delete URLs (requires user auth)
   - `ethora-sources-docs-upload` — upload docs for ingestion (requires user auth)
   - `ethora-sources-docs-delete` — delete ingested doc by id (requires user auth)
-  - `ethora-sources-site-crawl-v2` — crawl a URL into app-local or saved-agent shared knowledge (requires app-token auth; no user creds)
-  - `ethora-sources-site-reindex-v2` — reindex URL by urlId (requires app-token auth)
+  - `ethora-sources-site-crawl-v2` — crawl a URL using app-token auth or B2B + explicit `appId`
+  - `ethora-sources-site-reindex-v2` — reindex URL by urlId using app-token auth or B2B + explicit `appId`
   - `ethora-sources-site-crawl-v2-wait` — single-call long-timeout helper for crawl (app-token auth)
   - `ethora-sources-site-reindex-v2-wait` — single-call long-timeout helper for reindex (app-token auth)
-  - `ethora-sources-site-list-v2` — list crawled site sources and current tags for `knowledgeScope=app` or `knowledgeScope=saved_agent` (requires app-token auth)
-  - `ethora-sources-site-tags-update-v2` — set/update tags for a crawled site source (requires app-token auth)
-  - `ethora-sources-site-delete-url-v2` — delete by URL (requires app-token auth)
-  - `ethora-sources-site-delete-url-v2-batch` — batch delete (requires app-token auth)
-  - `ethora-sources-docs-upload-v2` — upload docs into app-local or saved-agent shared knowledge (requires app-token auth)
-  - `ethora-sources-docs-list-v2` — list indexed documents and current tags for `knowledgeScope=app` or `knowledgeScope=saved_agent` (requires app-token auth)
-  - `ethora-sources-docs-tags-update-v2` — set/update tags for an indexed document (requires app-token auth)
-  - `ethora-sources-docs-delete-v2` — delete doc by id (requires app-token auth)
+  - `ethora-sources-site-list-v2` — list crawled site sources and current tags using app-token auth or B2B + explicit `appId`
+  - `ethora-sources-site-tags-update-v2` — set/update tags for a crawled site source using app-token auth or B2B + explicit `appId`
+  - `ethora-sources-site-delete-url-v2` — delete one crawled URL by URL using app-token auth or B2B + explicit `appId`
+  - `ethora-sources-site-delete-url-v2-batch` — batch delete crawled source records by id using app-token auth or B2B + explicit `appId`
+  - `ethora-sources-docs-upload-v2` — upload docs for ingestion using app-token auth or B2B + explicit `appId`
+  - `ethora-sources-docs-list-v2` — list indexed documents and current tags using app-token auth or B2B + explicit `appId`
+  - `ethora-sources-docs-tags-update-v2` — set/update tags for an indexed document using app-token auth or B2B + explicit `appId`
+  - `ethora-sources-docs-delete-v2` — delete doc by id using app-token auth or B2B + explicit `appId`
 
 - **Auth & Accounts**
   - `ethora-user-login` — login user (email + password)
@@ -153,9 +189,13 @@ No global install is required.
 
 ## 🔐 Configuration (env vars)
 
-This MCP server needs:
+This MCP server supports both the local user-auth flow and the server-side B2B flow.
+
+Core values:
+
 - **Ethora API URL** (where to send requests)
-- **Ethora App JWT** (used for login/register endpoints)
+- **Ethora App JWT** (used only for login/register bootstrap in user-auth mode)
+- **Ethora B2B Token** (used for tenant-actor server-to-server flows)
 
 You can provide these either:
 - via **env vars**, or
@@ -166,14 +206,14 @@ You can provide these either:
 - `ETHORA_API_URL`: full API URL (example: `https://api.ethora.com/v1`, `http://localhost:8080/v1`)
 - `ETHORA_BASE_URL`: base host URL (example: `https://api.ethora.com`, `http://localhost:8080`)  
   If provided, the server will default to `.../v1`.
-- `ETHORA_APP_JWT` (or `ETHORA_APP_TOKEN`): App JWT string, usually starting with `JWT ...`
+- `ETHORA_APP_JWT`: App JWT string, usually starting with `JWT ...`
 - `ETHORA_B2B_TOKEN`: B2B server token for `x-custom-token` auth (JWT with `type=server`)
 - `ETHORA_MCP_ENABLE_DANGEROUS_TOOLS`: enable destructive tools (default: disabled). Set to `true` to expose:
   - app deletion tools
   - wallet transfer tools
   - bulk delete tools
 
-> Security: **never** commit App JWTs to git. Configure them via env vars or the client’s secret store.
+> Security: **never** commit App JWTs, B2B tokens, or appTokens to git. Configure them via env vars, the MCP client secret store, or your own backend.
 
 ---
 
@@ -196,7 +236,7 @@ All tools return JSON in a consistent envelope:
 
 1. Open **Cursor → Settings → MCP**
 2. Click **Add new global MCP server**
-3. Add an entry for the GrowthBook MCP, following the pattern below:
+3. Add an entry for the Ethora MCP server, following the pattern below:
 
 ```json
 {
@@ -279,10 +319,15 @@ After the server shows as **connected** in your client:
 
 - Run `list tools` (client command) to verify Ethora tools are available.
 - Check config/connectivity: call `ethora-doctor` (or `ethora-status`)
-- Configure (optional): call `ethora-configure` with `apiUrl` / `appJwt`
-- Try a login: call `ethora-user-login`
-- List applications: call `ethora-app-list`
-- Check wallet: call `ethora-wallet-get-balance`
+- For a first local/manual test:
+  - call `ethora-configure` with `apiUrl` / `appJwt`
+  - call `ethora-auth-use-user`
+  - call `ethora-user-login`
+  - then try `ethora-app-list` or `ethora-wallet-get-balance`
+- For a server-side/B2B test:
+  - call `ethora-configure` with `apiUrl` / `b2bToken`
+  - call `ethora-auth-use-b2b`
+  - then try `ethora-b2b-app-create` or `ethora-app-tokens-list-v2`
 
 ---
 
@@ -380,116 +425,15 @@ Provider/model note:
 
 ---
 
-## 🧠 Saved agents and hybrid knowledge
+## 🤖 App automation loop
 
-Ethora now distinguishes between:
+Once you already have an app selected with `appToken` auth:
 
-- **App bot wrapper**: the app-scoped XMPP/chat/widget identity returned by `ethora-bot-get-v2`
-- **Saved agent**: a reusable persona/runtime config that can be listed, created, cloned, updated, and activated across apps owned by the same creator
-
-Recommended mental model:
-
-- Keep `/v2/bot` and `ethora-bot-*` for the current app’s active wrapper/runtime
-- Use `/v2/agents` and `ethora-agents-*` for reusable templates and agent switching
-- Use source tools with `knowledgeScope: "app"` for app-local overlays
-- Use source tools with `knowledgeScope: "saved_agent"` plus `savedAgentId` for shared base knowledge
-
-Example: create a saved agent
-
-```json
-{
-  "name": "Acme Support Base",
-  "prompt": "You are the Acme support assistant.",
-  "botDisplayName": "Acme Support",
-  "isRAG": true,
-  "ragTags": ["support", "faq"],
-  "llmProvider": "openai",
-  "llmModel": "gpt-4o-mini"
-}
-```
-
-Example: activate a saved agent for the current app
-
-```json
-{
-  "agentId": "6790abc1234567890def1111"
-}
-```
-
-Example: upload shared knowledge to a saved agent
-
-```json
-{
-  "files": [
-    {
-      "name": "support-playbook.pdf",
-      "mimeType": "application/pdf",
-      "base64": "BASE64_PDF_CONTENT_HERE"
-    }
-  ],
-  "knowledgeScope": "saved_agent",
-  "savedAgentId": "6790abc1234567890def1111"
-}
-```
-
-Example: list only shared site/doc knowledge for a saved agent
-
-```json
-{
-  "knowledgeScope": "saved_agent",
-  "savedAgentId": "6790abc1234567890def1111"
-}
-```
-
-Notes:
-- `knowledgeScope: "app"` remains the default and preserves previous behavior.
-- `knowledgeScope: "saved_agent"` lets one owner reuse a shared knowledge base across multiple apps.
-- Activating a saved agent does not replace the app’s XMPP/JID wrapper; it swaps the reusable persona/runtime/base knowledge underneath it.
-
----
-
-## 🤖 P2: AI-assisted dev loop (test bot, inspect RAG, fetch widget)
-
-Once you already have an app selected with app-token auth:
-
-- Call `ethora-auth-use-app`
-- Call `ethora-bot-get-v2` to inspect current bot status, trigger, prompt, widget flags, and runtime LLM settings
-- Call `ethora-agents-list-v2` / `ethora-agents-activate-v2` to inspect or switch the reusable saved agent behind the current app wrapper
-- Call `ethora-sources-site-list-v2` and `ethora-sources-docs-list-v2` to inspect indexed sources
-- Call `ethora-sources-site-tags-update-v2` or `ethora-sources-docs-tags-update-v2` to segment retrieval by tags
-- Call `ethora-chats-message-v2` to send a private or group test message
-- Call `ethora-chats-history-v2` to read the saved response/history back
-- Call `ethora-bot-widget-v2` to fetch the widget embed config and public widget URL metadata
-
-Example: send a private test message
-
-```json
-{
-  "text": "Summarize the indexed FAQ in 3 bullets.",
-  "mode": "private",
-  "nickname": "SDK Tester"
-}
-```
-
-Example: read recent history for that private session
-
-```json
-{
-  "mode": "private",
-  "nickname": "SDK Tester",
-  "limit": 10
-}
-```
-
-Example: send a group-room test message
-
-```json
-{
-  "text": "What documents are currently indexed for this app?",
-  "mode": "group",
-  "roomJid": "support_demo@conference.xmpp.example.com"
-}
-```
+- call `ethora-auth-use-app`
+- call `ethora-bot-get-v2` to inspect current bot status and prompt settings
+- call `ethora-sources-site-list-v2` and `ethora-sources-docs-list-v2` to inspect indexed sources
+- call `ethora-sources-site-tags-update-v2` or `ethora-sources-docs-tags-update-v2` to organize retrieval by tags
+- call `ethora-chats-message-v2` / `ethora-chats-history-v2` if your backend exposes the chat automation surface on the same API host
 
 Example: apply retrieval tags to a crawled source
 
@@ -500,11 +444,14 @@ Example: apply retrieval tags to a crawled source
 }
 ```
 
-Notes:
-- `mode: "private"` uses a persisted private test conversation keyed by `nickname`.
-- `mode: "group"` lets you exercise room-style flows by passing `roomJid`.
-- `ethora-bot-message-v2` and `ethora-bot-history-v2` remain available as compatibility aliases, but `ethora-chats-*` is the primary surface.
-- Saved-agent knowledge can be inspected by passing `knowledgeScope: "saved_agent"` and `savedAgentId` to the source list/tag/delete tools.
+Example: apply retrieval tags to an indexed document
+
+```json
+{
+  "docId": "6790abc1234567890def1235",
+  "tags": ["support", "faq"]
+}
+```
 
 ---
 
