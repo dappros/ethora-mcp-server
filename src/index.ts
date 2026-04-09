@@ -2,6 +2,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { registerTools } from "./tools.js";
+import { registerPromptsAndResources } from "./prompts.js";
 
 export const server = new McpServer(
   {
@@ -11,6 +12,7 @@ export const server = new McpServer(
 );
 
 registerTools(server);
+registerPromptsAndResources(server);
 
 async function runServer() {
   try {
@@ -28,7 +30,7 @@ async function runServer() {
 }
 
 runServer().catch((error) => {
-  console.error("Failed to start Graphlit MCP Server.", error);
+  console.error("Failed to start Ethora MCP Server.", error);
 
   process.exit(1);
 });
