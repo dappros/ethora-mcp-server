@@ -9,9 +9,17 @@ Use it from **Cursor**, **VS Code MCP**, **Claude Desktop**, or **Windsurf/Cline
 
 **Part of the [Ethora SDK ecosystem](https://github.com/dappros/ethora#ecosystem)** — see all SDKs, tools, and sample apps. Follow cross-SDK updates in the [Release Notes](https://github.com/dappros/ethora/blob/main/RELEASE-NOTES.md).
 
+- npm: <https://www.npmjs.com/package/@ethora/mcp-server>
+- Default Ethora API: `https://api.chat.ethora.com/v1` (Swagger: <https://api.chat.ethora.com/api-docs/#/>)
+
 ---
 
 ## ✨ What you get
+
+- Talk to the Ethora platform directly from your IDE or AI agent client (Cursor, VS Code MCP, Claude Desktop, Windsurf / Cline).
+- Both **user-auth** flows (login/register, files, owner/admin endpoints) and **B2B / app-token** flows (tenant provisioning, broadcast jobs, async user batches, AI bot config).
+- Built-in recipes, prompts, and generators for the most common Ethora workflows (Vite/Next chat-component setup, B2B bootstrap, AI-bot enablement, RAG sources).
+- Standard tool response envelope (`{ ok, ts, meta, data | error }`) so agent code can reason about success/failure consistently.
 
 ## 🔐 Two typical usage modes
 
@@ -205,8 +213,8 @@ You can provide these either:
 
 ### Supported env vars
 
-- `ETHORA_API_URL`: full API URL (example: `https://api.ethora.com/v1`, `http://localhost:8080/v1`)
-- `ETHORA_BASE_URL`: base host URL (example: `https://api.ethora.com`, `http://localhost:8080`)  
+- `ETHORA_API_URL`: full API URL (example: `https://api.chat.ethora.com/v1`, `http://localhost:8080/v1`)
+- `ETHORA_BASE_URL`: base host URL (example: `https://api.chat.ethora.com`, `http://localhost:8080`)  
   If provided, the server will default to `.../v1`.
 - `ETHORA_APP_JWT`: App JWT string, usually starting with `JWT ...`
 - `ETHORA_B2B_TOKEN`: B2B server token for `x-custom-token` auth (JWT with `type=server`)
@@ -251,7 +259,7 @@ All tools return JSON in a consistent envelope:
 }
 ```
 
-3. Save. You should see **green active** when connected.
+4. Save. You should see **green active** when connected.
 
 
 ### VS Code (MCP extension)
@@ -311,9 +319,7 @@ All tools return JSON in a consistent envelope:
    }
    ```
 
-   ---
-
-   ---
+---
 
 ## 🧪 Quick test
 
