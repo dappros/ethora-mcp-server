@@ -458,6 +458,38 @@ export function agentsActivateV2(agentId: string) {
   return httpClientDappros.post(`/v2/agents/${String(agentId || "").trim()}/activate`, {})
 }
 
+// Phase 1 (Agents): additional wrappers backing the new MCP tools.
+export function agentsSetVisibilityV2(idOrAddress: string, visibility: "private" | "unlisted" | "public") {
+  return httpClientDappros.post(`/v2/agents/${String(idOrAddress || "").trim()}/visibility`, { visibility })
+}
+
+export function agentsSoulV2(idOrAddress: string, payload: { soulMd?: string; append?: string }) {
+  return httpClientDappros.post(`/v2/agents/${String(idOrAddress || "").trim()}/soul`, payload || {})
+}
+
+export function agentsInviteToChatV2(idOrAddress: string, payload: { appId?: string; chatId?: string; chatJid?: string }) {
+  // Use the per-app variant when appId is provided so tenantActor (B2B) auth lands on the right route.
+  if (payload?.appId) {
+    return httpClientDappros.post(
+      `/v2/apps/${String(payload.appId).trim()}/agents/${String(idOrAddress || "").trim()}/invite-to-chat`,
+      payload || {}
+    )
+  }
+  return httpClientDappros.post(`/v2/agents/${String(idOrAddress || "").trim()}/invite-to-chat`, payload || {})
+}
+
+export function botInstancesListV2(params?: { appId?: string; agentId?: string }) {
+  return httpClientDappros.get(`/v2/bot-instances`, { params })
+}
+
+export function botInstanceGetV2(id: string) {
+  return httpClientDappros.get(`/v2/bot-instances/${String(id || "").trim()}`)
+}
+
+export function botInstanceStatusV2(id: string, status: "on" | "off") {
+  return httpClientDappros.post(`/v2/bot-instances/${String(id || "").trim()}/status`, { status })
+}
+
 export function botWidgetGetV2() {
   return httpClientDappros.get(`/v2/bot/widget`)
 }

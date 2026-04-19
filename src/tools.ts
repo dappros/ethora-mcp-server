@@ -8,6 +8,13 @@ import {
     agentsGetV2,
     agentsListV2,
     agentsUpdateV2,
+    // Phase 1 (Agents) additions
+    agentsSetVisibilityV2,
+    agentsSoulV2,
+    agentsInviteToChatV2,
+    botInstancesListV2,
+    botInstanceGetV2,
+    botInstanceStatusV2,
     appCreate,
     appCreateV2,
     appCreateChat,
@@ -2066,6 +2073,153 @@ function agentsActivateV2Tool(server: McpServer) {
     )
 }
 
+// ----------------------------------------------------------------------------
+// Phase 1 (Agents) — additional tools.
+// ----------------------------------------------------------------------------
+
+function agentSetVisibilityTool(server: McpServer) {
+    server.registerTool(
+        "ethora-agent-set-visibility",
+        {
+            description: "Set an Agent's visibility (private | unlisted | public). Public agents can be invited cross-app by anyone who knows the address.",
+            inputSchema: {
+                agentIdOrAddress: z.string().min(1),
+                visibility: z.enum(["private", "unlisted", "public"]),
+            },
+        },
+        async function ({ agentIdOrAddress, visibility }) {
+            const meta = getDefaultMeta("ethora-agent-set-visibility")
+            try {
+                ensureAppAuthForTool()
+                const res = await agentsSetVisibilityV2(agentIdOrAddress, visibility)
+                return asToolResult(ok(res.data, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
+function agentInviteToChatTool(server: McpServer) {
+    server.registerTool(
+        "ethora-agent-invite-to-chat",
+        {
+            description: "Invite an Agent into a chat. Lazily creates a per-App BotInstance (Ethora user with isBot:true) if one does not already exist for (agent, app). Spawns the XMPP client live; no ai-service restart required.",
+            inputSchema: {
+                agentIdOrAddress: z.string().min(1).describe("Either Mongo _id (24 hex chars) or EOA-style address."),
+                appId: z.string().optional().describe("Required in B2B mode unless already selected via ethora-app-select."),
+                chatId: z.string().optional().describe("Mongo Chat _id (preferred when invoking from admin)."),
+                chatJid: z.string().optional().describe("Fully-qualified room JID (preferred when invoking from MCP CLI / chat-command flow)."),
+            },
+        },
+        async function ({ agentIdOrAddress, appId, chatId, chatJid }) {
+            const meta = getDefaultMeta("ethora-agent-invite-to-chat")
+            try {
+                ensureAppAuthForTool()
+                const ctx = resolveAppScopedV2Context(appId)
+                const payload: any = { chatId, chatJid }
+                if (ctx.mode === "b2b" && ctx.appId) payload.appId = ctx.appId
+                const res = await agentsInviteToChatV2(agentIdOrAddress, payload)
+                return asToolResult(ok(res.data, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
+function agentSoulAppendTool(server: McpServer) {
+    server.registerTool(
+        "ethora-agent-soul-append",
+        {
+            description: "Append a fragment to an Agent's SOUL.MD (its evolving identity / private notes). Operator-driven; the Agent itself can also self-edit via the same endpoint when called by ai-service.",
+            inputSchema: {
+                agentIdOrAddress: z.string().min(1),
+                append: z.string().min(1),
+            },
+        },
+        async function ({ agentIdOrAddress, append }) {
+            const meta = getDefaultMeta("ethora-agent-soul-append")
+            try {
+                ensureAppAuthForTool()
+                const res = await agentsSoulV2(agentIdOrAddress, { append })
+                return asToolResult(ok(res.data, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
+function agentSoulSetTool(server: McpServer) {
+    server.registerTool(
+        "ethora-agent-soul-set",
+        {
+            description: "Replace an Agent's SOUL.MD with the provided markdown. Operator-driven; alternative to -append.",
+            inputSchema: {
+                agentIdOrAddress: z.string().min(1),
+                soulMd: z.string().min(0).describe("Replace SOUL.MD contents. Pass empty string to clear."),
+            },
+        },
+        async function ({ agentIdOrAddress, soulMd }) {
+            const meta = getDefaultMeta("ethora-agent-soul-set")
+            try {
+                ensureAppAuthForTool()
+                const res = await agentsSoulV2(agentIdOrAddress, { soulMd })
+                return asToolResult(ok(res.data, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
+function botInstancesListTool(server: McpServer) {
+    server.registerTool(
+        "ethora-bot-instances-list",
+        {
+            description: "List BotInstances. Filter by appId (caller's App by default) and/or agentId.",
+            inputSchema: {
+                appId: z.string().optional(),
+                agentId: z.string().optional(),
+            },
+        },
+        async function ({ appId, agentId }) {
+            const meta = getDefaultMeta("ethora-bot-instances-list")
+            try {
+                ensureAppAuthForTool()
+                const res = await botInstancesListV2({ appId, agentId })
+                return asToolResult(ok(res.data, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
+function botInstanceStatusTool(server: McpServer) {
+    server.registerTool(
+        "ethora-bot-instance-status",
+        {
+            description: "Turn a specific BotInstance on or off. Off detaches it from XMPP; on re-spawns the XMPP client live.",
+            inputSchema: {
+                botInstanceId: z.string().min(1),
+                status: z.enum(["on", "off"]),
+            },
+        },
+        async function ({ botInstanceId, status }) {
+            const meta = getDefaultMeta("ethora-bot-instance-status")
+            try {
+                ensureAppAuthForTool()
+                const res = await botInstanceStatusV2(botInstanceId, status)
+                return asToolResult(ok(res.data, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
 function botEnableV2Tool(server: McpServer) {
     server.registerTool(
         "ethora-bot-enable-v2",
@@ -2245,8 +2399,15 @@ async function runB2BAppBootstrapAi(args: {
     llmProvider?: string
     llmModel?: string
     savedAgentId?: string
+    // Phase 1 (Agents) extensions: optionally create a brand-new Agent inside the new
+    // App and invite it into the App's first default room as part of the bootstrap.
+    agentDisplayName?: string
+    agentPrompt?: string
+    agentVisibility?: "private" | "unlisted" | "public"
+    inviteToDefaultRoom?: boolean
 }) {
-    const { displayName, setAsCurrent, crawlUrl, followLink, docs, enableBot, botTrigger, llmProvider, llmModel, savedAgentId } = args
+    const { displayName, setAsCurrent, crawlUrl, followLink, docs, enableBot, botTrigger, llmProvider, llmModel, savedAgentId,
+        agentDisplayName, agentPrompt, agentVisibility, inviteToDefaultRoom } = args
 
     ensureB2BAuthForTool()
 
@@ -2325,11 +2486,52 @@ async function runB2BAppBootstrapAi(args: {
         }
     }
 
+    // 6) Phase 1 (Agents): create a fresh Agent and (optionally) invite it into the App's
+    //    default room. This is the path the AI-assisted Phase 1 demo uses when bootstrapping
+    //    an App with an Agent that has its own persona + RAG, separate from the legacy aiBot.
+    let agentResult: any = null
+    let inviteResult: any = null
+    if (agentDisplayName || agentPrompt) {
+        if (!appToken) throw new Error("Agent creation requested but no appToken available")
+        setAuthMode("app")
+        try {
+            const created = await agentsCreateV2({
+                name: agentDisplayName || `${displayName} Bot`,
+                prompt: agentPrompt || "You are a helpful assistant.",
+                visibility: agentVisibility === "unlisted" ? "private" : (agentVisibility || "private") as any,
+            } as any)
+            agentResult = created.data?.agent
+            steps.push({ step: "agentsCreateV2", ok: true, agentId: agentResult?.id })
+
+            // unlisted -> set after create (createSchema accepts only private|public via legacy alias path).
+            if (agentVisibility === "unlisted" && agentResult?.id) {
+                await agentsSetVisibilityV2(agentResult.id, "unlisted")
+                steps.push({ step: "agentsSetVisibilityV2", ok: true, visibility: "unlisted" })
+            }
+
+            if (inviteToDefaultRoom !== false && agentResult?.id) {
+                // Look up the default room created with the App.
+                const rooms = await appGetDefaultRoomsWithAppId(appId)
+                const firstRoom = rooms?.data?.result?.[0] || rooms?.data?.[0]
+                const chatId = firstRoom?._id || firstRoom?.chatId
+                if (chatId) {
+                    const r = await agentsInviteToChatV2(agentResult.id, { appId, chatId })
+                    inviteResult = r.data
+                    steps.push({ step: "agentInviteToChat", ok: true, chatId })
+                } else {
+                    steps.push({ step: "agentInviteToChat", ok: false, message: "no default room found" })
+                }
+            }
+        } catch (e: any) {
+            steps.push({ step: "agentBootstrap", ok: false, error: e?.message || String(e) })
+        }
+    }
+
     // Final: set default auth mode for next steps
     if (shouldSetCurrent && appToken) setAuthMode("app")
     else setAuthMode("b2b")
 
-    return { appId, appToken: appToken || undefined, app, crawl: crawlResult, docs: docsResult, bot: botEnableResult, steps, state: getClientState() }
+    return { appId, appToken: appToken || undefined, app, crawl: crawlResult, docs: docsResult, bot: botEnableResult, agent: agentResult, invite: inviteResult, steps, state: getClientState() }
 }
 
 // Minimal namespace aliases to reduce auth-mode mistakes for agents.
@@ -2456,13 +2658,20 @@ function b2bAppBootstrapAiTool(server: McpServer) {
                 botTrigger: z.string().optional().describe("Optional bot trigger (e.g. '/bot' or 'any_message')"),
                 llmProvider: z.string().optional().describe("Optional generation provider for the default AI bot (example: 'openai' or 'openai-compatible')."),
                 llmModel: z.string().optional().describe("Optional generation model for the default AI bot (example: 'gpt-4o-mini')."),
+                // Phase 1 (Agents) extensions
+                agentDisplayName: z.string().optional().describe("Phase 1: create a new Agent with this display name as part of bootstrap."),
+                agentPrompt: z.string().optional().describe("Phase 1: persona/instructions for the newly-created Agent."),
+                agentVisibility: z.enum(["private", "unlisted", "public"]).optional().describe("Phase 1: visibility for the newly-created Agent."),
+                inviteToDefaultRoom: z.boolean().optional().describe("Phase 1: if true (default), invite the newly-created Agent into the App's first default room."),
             },
         },
-        async function ({ displayName, setAsCurrent, crawlUrl, followLink, docs, enableBot, botTrigger, llmProvider, llmModel, savedAgentId }) {
+        async function ({ displayName, setAsCurrent, crawlUrl, followLink, docs, enableBot, botTrigger, llmProvider, llmModel, savedAgentId,
+            agentDisplayName, agentPrompt, agentVisibility, inviteToDefaultRoom }) {
             const meta = getDefaultMeta("ethora-b2b-app-bootstrap-ai")
             const prev = (getClientState() as any).authMode as any
             try {
-                const res = await runB2BAppBootstrapAi({ displayName, setAsCurrent, crawlUrl, followLink, docs, enableBot, botTrigger, llmProvider, llmModel, savedAgentId })
+                const res = await runB2BAppBootstrapAi({ displayName, setAsCurrent, crawlUrl, followLink, docs, enableBot, botTrigger, llmProvider, llmModel, savedAgentId,
+                    agentDisplayName, agentPrompt, agentVisibility, inviteToDefaultRoom })
                 return asToolResult(ok(res, meta))
             } catch (error) {
                 // restore previous mode best-effort
@@ -3301,6 +3510,13 @@ export function registerTools(server: McpServer) {
     agentsUpdateV2Tool(server);
     agentsCloneV2Tool(server);
     agentsActivateV2Tool(server);
+    // Phase 1 (Agents) additions: visibility, soul.md, invite-to-chat, BotInstance lifecycle.
+    agentSetVisibilityTool(server);
+    agentInviteToChatTool(server);
+    agentSoulAppendTool(server);
+    agentSoulSetTool(server);
+    botInstancesListTool(server);
+    botInstanceStatusTool(server);
     chatsMessageCreateV2Tool(server);
     chatsHistoryGetV2Tool(server);
     botMessageCreateV2Tool(server);

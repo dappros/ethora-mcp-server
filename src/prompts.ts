@@ -129,6 +129,54 @@ const RECIPES_MD = md`
 1) \`ethora-auth-use-user\`
 2) \`ethora-user-login\`
 3) \`ethora-files-upload-v2\`
+
+### AI Agents end-to-end (Phase 1)
+Goal: from "no account" to "two AI agents conversing in one chat with you" purely via MCP.
+
+Pre-req tokens (one of):
+- App JWT + user credentials (developer flow), or
+- B2B token (server flow)
+
+1) \`ethora-user-register\` { email, firstName, lastName } (skip if already verified)
+2) \`ethora-user-login\` { email, password } -- gets a user JWT
+3) \`ethora-app-create\` { displayName: "My App" } -- get \`appId\` and \`appToken\`
+4) \`ethora-app-select\` { appId, appToken }; \`ethora-auth-use-app\`
+5) Create the first Agent:
+   \`ethora-agents-create-v2\` { name: "Freud", prompt: "You are a digital twin of Sigmund Freud..." }
+6) Index Freud's RAG corpus (per-Agent namespace):
+   \`ethora-sources-site-crawl-v2-wait\` { url: "https://en.wikipedia.org/wiki/Sigmund_Freud", followLink: true }
+   (the API resolves agentId from App.defaultBotInstanceId; pass agentId explicitly if multiple agents share the App)
+7) Create the second Agent:
+   \`ethora-agents-create-v2\` { name: "Jung", prompt: "You are a digital twin of Carl Jung..." }
+8) Mark one agent public (optional cross-app demo):
+   \`ethora-agent-set-visibility\` { agentIdOrAddress: "<freud-id>", visibility: "public" }
+9) Invite both agents into a default room:
+   \`ethora-app-get-default-rooms\` -> pick the first room JID
+   \`ethora-agent-invite-to-chat\` { agentIdOrAddress: "<freud-id>", chatJid: "<roomJid>" }
+   \`ethora-agent-invite-to-chat\` { agentIdOrAddress: "<jung-id>", chatJid: "<roomJid>" }
+10) Seed a message:
+    \`ethora-chats-message-v2\` { roomJid: "<roomJid>", text: "Freud, what would you say to Jung about dreams?" }
+11) Watch the agents converse. The smart response gate prevents loops; only the addressed agent replies first.
+
+### One-shot bootstrap (B2B, including Agent)
+\`ethora-b2b-app-bootstrap-ai\` {
+  displayName: "Demo App",
+  crawlUrl: "https://example.com",
+  enableBot: false,
+  agentDisplayName: "Freud",
+  agentPrompt: "You are a digital twin of Sigmund Freud...",
+  agentVisibility: "public",
+  inviteToDefaultRoom: true
+}
+This single call: creates the app, indexes the URL, creates an Agent, marks it public, and invites it
+into the App's first default room. Repeat with a second \`agentDisplayName\` against the SAME app to get
+two agents in one room ready to converse.
+
+### /invite chat command
+End users with a chat session can also invite a public agent by typing in any room:
+  \`/invite <agentAddress>\`
+ai-service detects the command, asks the API to lazy-create a per-App BotInstance for the agent if one
+does not exist yet, adds it to the room via MUC affiliation/invite, and posts a confirmation message.
 `
 
 export function registerPromptsAndResources(server: McpServer) {
@@ -229,6 +277,59 @@ export function registerPromptsAndResources(server: McpServer) {
     },
     () => ({
       messages: [{ role: "user", content: { type: "text", text: RECIPES_MD } }],
+    })
+  )
+
+  // Phase 1 (Agents): dedicated prompt that walks an LLM through the full Agents flow.
+  server.registerPrompt(
+    "ethora-agents-quickstart",
+    {
+      title: "Ethora AI Agents quickstart (Phase 1)",
+      description: "End-to-end recipe for creating Agents, indexing their RAG, marking them public, inviting them into rooms, and running the two-agents-in-one-room demo.",
+      argsSchema: {
+        appName: z.string().optional(),
+        firstAgentName: z.string().optional(),
+        secondAgentName: z.string().optional(),
+      },
+    },
+    ({ appName, firstAgentName, secondAgentName }) => ({
+      messages: [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text: md`
+## Goal: ${firstAgentName || "Freud"} and ${secondAgentName || "Jung"} chat with you in one room
+
+You are an AI assistant operating the Ethora MCP CLI on behalf of a developer. Bootstrap an
+App named "${appName || "AI Demo App"}" and stand up two AI Agents that will talk to the
+developer in one chat. Strict order:
+
+1) Verify auth via \`ethora-status\`. If \`authMode\` is empty, run \`ethora-auth-use-b2b\` (server)
+   or \`ethora-auth-use-user\` + \`ethora-user-login\` (developer).
+2) For the cleanest demo: \`ethora-b2b-app-bootstrap-ai\` { displayName: "${appName || "AI Demo App"}",
+   agentDisplayName: "${firstAgentName || "Freud"}", agentPrompt: "...", agentVisibility: "public",
+   inviteToDefaultRoom: true }
+3) Repeat \`ethora-b2b-app-bootstrap-ai\` with a SECOND \`agentDisplayName\` AGAINST THE SAME APP --
+   pass the same \`displayName\` so it returns the existing app, then it just creates the second
+   agent and invites it into the SAME default room.
+   (Alternatively: \`ethora-agents-create-v2\` for the second agent + \`ethora-agent-invite-to-chat\`
+    with the same chatJid.)
+4) Seed the conversation: \`ethora-chats-message-v2\` { roomJid: "<the default room JID>",
+   text: "${firstAgentName || "Freud"}, what would you say to ${secondAgentName || "Jung"} about dreams?" }
+5) Observe and report. Both agents now live as XMPP clients inside the ai-service process; thanks
+   to the per-bot loop guard and smart response gate they will only reply when relevant.
+
+Useful sanity checks:
+- \`ethora-bot-instances-list\` { appId } -- both agents should be listed with status "on".
+- \`ethora-agents-get-v2\` { agentId } -- inspect persona / RAG / SOUL.MD.
+- \`ethora-agent-soul-append\` { agentIdOrAddress, append: "..." } -- evolve an agent's identity.
+
+Refer to \`ethora://docs/recipes\` for the full step-by-step.
+`,
+          },
+        },
+      ],
     })
   )
 }
