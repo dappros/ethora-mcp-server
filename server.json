@@ -1,0 +1,57 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.dappros/ethora-mcp-cli",
+  "description": "MCP server for the Ethora chat/messaging platform: login, manage apps and chat rooms, broadcast messages, deploy AI bots with RAG sources, and use ERC-20 wallet tools. Supports user-auth and B2B/app-token flows.",
+  "repository": {
+    "url": "https://github.com/dappros/ethora-mcp-cli",
+    "source": "github"
+  },
+  "version": "26.05.1",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@ethora/mcp-server",
+      "version": "26.05.1",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "ETHORA_API_URL",
+          "description": "Full Ethora API URL. Defaults to https://api.chat.ethora.com/v1 if neither ETHORA_API_URL nor ETHORA_BASE_URL is set.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false
+        },
+        {
+          "name": "ETHORA_BASE_URL",
+          "description": "Base host URL (e.g. https://api.chat.ethora.com). The server appends /v1 automatically. Use ETHORA_API_URL instead if you need a non-/v1 path.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false
+        },
+        {
+          "name": "ETHORA_APP_JWT",
+          "description": "App JWT used for the user-auth bootstrap flow (login/register). Usually starts with 'JWT '. Optional; can also be set at runtime via the ethora-configure tool.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": true
+        },
+        {
+          "name": "ETHORA_B2B_TOKEN",
+          "description": "B2B server token used for tenant-actor x-custom-token auth (JWT with type=server). Required for B2B / app provisioning flows. Optional; can also be set at runtime.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": true
+        },
+        {
+          "name": "ETHORA_MCP_ENABLE_DANGEROUS_TOOLS",
+          "description": "Set to 'true' to expose destructive tools (app deletion, wallet transfers, bulk delete). Disabled by default.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false
+        }
+      ]
+    }
+  ]
+}
