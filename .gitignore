@@ -50,6 +50,9 @@ web_modules/
 # Optional npm cache directory
 .npm
 
+# npm auth — never commit (publish token lives here at publish time)
+.npmrc
+
 # Optional eslint cache
 .eslintcache
 

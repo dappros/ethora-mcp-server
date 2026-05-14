@@ -1,7 +1,7 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.dappros/ethora-mcp-cli",
-  "description": "MCP server for the Ethora chat/messaging platform: login, manage apps and chat rooms, broadcast messages, deploy AI bots with RAG sources, and use ERC-20 wallet tools. Supports user-auth and B2B/app-token flows.",
+  "description": "MCP server for the Ethora chat & messaging platform: chat ops, AI bots, RAG, ERC-20 wallet.",
   "repository": {
     "url": "https://github.com/dappros/ethora-mcp-cli",
     "source": "github"
