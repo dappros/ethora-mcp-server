@@ -1,20 +1,20 @@
 export function normalizeApiUrl(input: string): string {
   const raw = String(input || "").trim()
-  if (!raw) return "https://api.ethora.com/v1"
+  if (!raw) return "https://api.chat.ethora.com/v1"
 
   const s = raw.replace(/\/+$/, "")
   if (s.endsWith("/v1") || s.endsWith("/v2")) return s
 
-  // Default to the v1 REST API if caller provided only a base host like https://api.ethora.com
+  // Default to the v1 REST API if caller provided only a base host like https://api.chat.ethora.com
   return `${s}/v1`
 }
 
 export const appConfig = {
-  // Prefer ETHORA_API_URL (full), fall back to ETHORA_BASE_URL (host), then public Ethora API.
+  // Prefer ETHORA_API_URL (full), fall back to ETHORA_BASE_URL (host), then the public Ethora Cloud API.
   apiUrl: normalizeApiUrl(
     process.env.ETHORA_API_URL ??
       process.env.ETHORA_BASE_URL ??
-      "https://api.ethora.com/v1"
+      "https://api.chat.ethora.com/v1"
   ),
 
   // For login/register endpoints Ethora expects an App JWT. Never hardcode it in repo.

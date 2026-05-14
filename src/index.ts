@@ -7,7 +7,7 @@ import { registerPromptsAndResources } from "./prompts.js";
 export const server = new McpServer(
   {
     name: "Ethora MCP Server",
-    version: "1.0.0",
+    version: "26.5.1",
   }
 );
 

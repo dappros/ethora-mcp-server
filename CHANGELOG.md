@@ -9,6 +9,9 @@ All notable changes to this package are documented here. For cross-SDK release n
 - Add `llms-install.md` with crisp, no-questions setup instructions for AI coding agents (e.g. Cline) — config block, per-client config-file locations, optional env vars, and a credential-free verification step (`ethora-status`).
 - Add `assets/icon-400.png` (400×400 brand mark) for marketplace listings.
 - Reframe the README opening to lead with chat/messaging + AI agents / chatbots; ERC-20 wallet tooling is still documented in the tool list but no longer in the headline.
+- **Fix: default API URL.** The hardcoded fallback in `config.ts` was the pre-migration host `https://api.ethora.com/v1`, which now returns `410 Gone`. A fresh `npx @ethora/mcp-server` with no `ETHORA_API_URL` set was therefore pointing at a dead endpoint. Corrected to `https://api.chat.ethora.com/v1` (which the README and `server.json` already documented as the default).
+- **Fix: MCP `serverInfo` version.** Was hardcoded `1.0.0` in `index.ts`; now `26.5.1` to match the package version that MCP clients display.
+- Add `docs/cline-quickstart.md` — a human-followable step-by-step walkthrough for installing and testing the server in the Cline CLI.
 
 ## 26.5.1
 
