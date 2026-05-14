@@ -173,6 +173,7 @@ export function getClientState() {
     currentAppId: ethoraContext.currentAppId,
     currentAgentId: ethoraContext.currentAgentId,
     enableDangerousTools: Boolean(appConfig.enableDangerousTools),
+    enableAliases: Boolean(appConfig.enableAliases),
   }
 }
 

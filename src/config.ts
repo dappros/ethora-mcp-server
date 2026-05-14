@@ -31,4 +31,12 @@ export const appConfig = {
     String(process.env.ETHORA_MCP_ENABLE_DANGEROUS_TOOLS ?? "")
       .trim()
       .toLowerCase() === "true",
+
+  // Back-compat alias tools (dot-namespaced ethora.b2b.* + ethora-bot-message/history-v2)
+  // are off-by-default to keep the tool surface lean; the canonical tools cover the same ground.
+  // Set ETHORA_MCP_ENABLE_ALIASES=true to expose them.
+  enableAliases:
+    String(process.env.ETHORA_MCP_ENABLE_ALIASES ?? "")
+      .trim()
+      .toLowerCase() === "true",
 }

@@ -27,6 +27,16 @@ Use it from **Cursor**, **VS Code MCP**, **Claude Desktop**, or **Windsurf/Cline
 - Built-in recipes, prompts, and generators for the most common Ethora workflows (Vite/Next chat-component setup, B2B bootstrap, AI-bot enablement, RAG sources).
 - Standard tool response envelope (`{ ok, ts, meta, data | error }`) so agent code can reason about success/failure consistently.
 
+## 🚦 Just trying it? (60-second quickstart)
+
+Don't read the auth modes yet. Once the server is connected in your client, ask your agent to run, in order:
+
+1. **`ethora-doctor`** — confirms the server is up and can reach the Ethora API. No credentials needed.
+2. **`ethora-configure`** with your `appJwt` → **`ethora-auth-use-user`** → **`ethora-user-login`** with an email + password.
+3. **`ethora-app-list`** — you're in; this lists your apps.
+
+That's the local-developer path. Need server-side automation instead? Jump to [B2B mode](#2-b2b-mode). Lost at any point, call **`ethora-help`** — it reads your current state and tells you the next call.
+
 ## 🔐 Two typical usage modes
 
 ### 1) User Auth mode
@@ -291,6 +301,17 @@ claude mcp add ethora -- npx -y @ethora/mcp-server
 ```
 
 Add `--scope user` to make it available in every project. Verify with `claude mcp list`.
+
+To pre-configure credentials, pass them as env vars with `-e` (recommended over the `ethora-configure` tool — see note below):
+
+```bash
+claude mcp add ethora \
+  -e ETHORA_API_URL=https://api.chat.ethora.com/v1 \
+  -e ETHORA_B2B_TOKEN=<your-b2b-token> \
+  -- npx -y @ethora/mcp-server
+```
+
+> **Secrets note:** prefer env vars (above) or your MCP client's secret store for credentials. The `ethora-configure` tool also works, but it passes secrets as tool arguments, which means they end up in the conversation transcript. Use it for quick local testing, not for tokens you care about.
 
 ### Claude Desktop
 

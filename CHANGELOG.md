@@ -2,8 +2,13 @@
 
 All notable changes to this package are documented here. For cross-SDK release notes, see [ethora/RELEASE-NOTES.md](https://github.com/dappros/ethora/blob/main/RELEASE-NOTES.md).
 
-## Unreleased
+## 26.5.3
 
+- **Add MCP tool annotations to all 80 tools** (`readOnlyHint` / `destructiveHint` / `idempotentHint` / `openWorldHint`). MCP clients use these to auto-approve read-only tools and warn on destructive ones — a UX improvement across every client, not just one.
+- **Trim every tool description ~40%** (avg 692 → ~410 chars). Kept the structured `Auth:` / `Errors:` signal; the side-effect/idempotency prose moved into the machine-readable annotations above. Combined with the alias gating below, the default `tools/list` manifest drops from ~27.5K to ~21K tokens — lighter on every client's context budget.
+- **Gate the 7 back-compat alias tools behind `ETHORA_MCP_ENABLE_ALIASES`** (off by default): the 5 dot-namespaced `ethora.b2b.*` tools + `ethora-bot-message-v2` + `ethora-bot-history-v2`. The canonical tools (`ethora-chats-message-v2`/`-history-v2`, `ethora-b2b-*`, `ethora-auth-use-b2b`, `ethora-wait-broadcast-job-v2`) cover the same ground. Same deny-by-default pattern as `ETHORA_MCP_ENABLE_DANGEROUS_TOOLS`.
+- Add `scripts/sync-version.mjs` + `npm run sync-version` — stamps the version from `package.json` into `server.json`, `.plugin/plugin.json`, and `src/index.ts` in one step, removing the multi-file version-drift risk.
+- README: add the env-var auth path for Claude Code (`claude mcp add … -e KEY=VAL …`) with a note that `ethora-configure` puts secrets into the conversation transcript; add a "Just trying it?" 60-second quickstart box so new developers aren't parsing the three auth modes first.
 - Expand the README's MCP-client coverage: one-click **Install in VS Code / VS Code Insiders** buttons alongside Add to Cursor, and copy-paste setup for **Claude Code** (`claude mcp add`), **GitHub Copilot** (shares VS Code's `.vscode/mcp.json`), **Gemini CLI** (`~/.gemini/settings.json`), and **Codex CLI** (`~/.codex/config.toml`, `mcp_servers` table), plus the existing Claude Desktop / Windsurf / Cline. Standardised the server key to `ethora` across all examples.
 - Fix the Add-to-Cursor button: GitHub's markdown sanitiser strips the `cursor://` scheme, so it now uses the `https://cursor.com/en/install-mcp?…` wrapper that redirects to the deeplink.
 - Add Open Plugin support so the repo is discoverable by Open-Plugin-aware directories (e.g. cursor.directory's "Auto (GitHub)" detect):
