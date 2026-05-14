@@ -1,0 +1,38 @@
+# Smithery configuration file: https://smithery.ai/docs/config#smitheryyaml
+
+startCommand:
+  type: stdio
+  configSchema:
+    # JSON Schema for the optional configuration of the Ethora MCP server.
+    # All fields are optional — the server runs against the Ethora Cloud
+    # API by default and credentials can also be set at runtime via the
+    # ethora-configure tool.
+    type: object
+    properties:
+      ethoraApiUrl:
+        type: string
+        description: >-
+          Full Ethora API URL. Defaults to https://api.chat.ethora.com/v1
+          if omitted.
+      ethoraAppJwt:
+        type: string
+        description: >-
+          App JWT used to bootstrap login/register in user-auth mode.
+          Optional.
+      ethoraB2bToken:
+        type: string
+        description: >-
+          B2B server token for tenant-actor x-custom-token flows.
+          Optional.
+  commandFunction:
+    # Produces the CLI command Smithery uses to start the MCP server on stdio.
+    |-
+    config => ({
+      command: 'npx',
+      args: ['-y', '@ethora/mcp-server'],
+      env: {
+        ...(config.ethoraApiUrl ? { ETHORA_API_URL: config.ethoraApiUrl } : {}),
+        ...(config.ethoraAppJwt ? { ETHORA_APP_JWT: config.ethoraAppJwt } : {}),
+        ...(config.ethoraB2bToken ? { ETHORA_B2B_TOKEN: config.ethoraB2bToken } : {})
+      }
+    })

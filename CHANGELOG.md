@@ -5,6 +5,7 @@ All notable changes to this package are documented here. For cross-SDK release n
 ## Unreleased
 
 - Reframe the `package.json` and `server.json` descriptions to lead with chat/messaging + AI agents / chatbots and drop the ERC-20 wallet mention, matching Ethora's product positioning. The wallet tools themselves are unchanged. Ships with the next published version.
+- Add `smithery.yaml` so the server can be discovered/installed via [Smithery](https://smithery.ai). Declares the stdio start command and the optional `ETHORA_API_URL` / `ETHORA_APP_JWT` / `ETHORA_B2B_TOKEN` config.
 
 ## 26.5.1
 
