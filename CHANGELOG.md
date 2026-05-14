@@ -2,6 +2,10 @@
 
 All notable changes to this package are documented here. For cross-SDK release notes, see [ethora/RELEASE-NOTES.md](https://github.com/dappros/ethora/blob/main/RELEASE-NOTES.md).
 
+## Unreleased
+
+- Reframe the `package.json` and `server.json` descriptions to lead with chat/messaging + AI agents / chatbots and drop the ERC-20 wallet mention, matching Ethora's product positioning. The wallet tools themselves are unchanged. Ships with the next published version.
+
 ## 26.5.1
 
 - Add `mcpName` to `package.json` and a `server.json` manifest so the package can be published to the official [MCP Registry](https://registry.modelcontextprotocol.io/) (`io.github.dappros/ethora-mcp-cli`).
