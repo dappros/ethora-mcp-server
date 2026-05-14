@@ -546,8 +546,8 @@ This repo runs **report-only** scans on pushes/PRs:
 Clone and run locally:
 
 ```bash
-git clone https://github.com/dappros/ethora-mcp-cli.git
-cd ethora-mcp-cli
+git clone https://github.com/dappros/ethora-mcp-server.git
+cd ethora-mcp-server
 npm install
 npm run build
 npm start

@@ -1,9 +1,9 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.dappros/ethora-mcp-cli",
+  "name": "io.github.dappros/ethora-mcp-server",
   "description": "MCP server for the Ethora chat & messaging platform: chat ops, AI agents, RAG, automation.",
   "repository": {
-    "url": "https://github.com/dappros/ethora-mcp-cli",
+    "url": "https://github.com/dappros/ethora-mcp-server",
     "source": "github"
   },
   "version": "26.5.3",
