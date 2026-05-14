@@ -1,4 +1,4 @@
-# Ethora MCP Server CLI (Model Context Protocol)
+# Ethora MCP Server (Model Context Protocol)
 
 [![npm](https://img.shields.io/npm/v/@ethora/mcp-server.svg)](https://www.npmjs.com/package/@ethora/mcp-server)
 [![Node](https://img.shields.io/badge/node-%E2%89%A518.x-blue.svg)](#)
