@@ -4,6 +4,8 @@ All notable changes to this package are documented here. For cross-SDK release n
 
 ## Unreleased
 
+- Expand the README's MCP-client coverage: one-click **Install in VS Code / VS Code Insiders** buttons alongside Add to Cursor, and copy-paste setup for **Claude Code** (`claude mcp add`), **GitHub Copilot** (shares VS Code's `.vscode/mcp.json`), **Gemini CLI** (`~/.gemini/settings.json`), and **Codex CLI** (`~/.codex/config.toml`, `mcp_servers` table), plus the existing Claude Desktop / Windsurf / Cline. Standardised the server key to `ethora` across all examples.
+- Fix the Add-to-Cursor button: GitHub's markdown sanitiser strips the `cursor://` scheme, so it now uses the `https://cursor.com/en/install-mcp?…` wrapper that redirects to the deeplink.
 - Add Open Plugin support so the repo is discoverable by Open-Plugin-aware directories (e.g. cursor.directory's "Auto (GitHub)" detect):
   - `.plugin/plugin.json` — an [Open Plugin Specification v1.0.0](https://github.com/vercel-labs/open-plugin-spec) manifest. Its `version` field is a fourth version string to keep in sync on release (alongside `package.json`, `server.json`, and `index.ts` serverInfo).
   - `mcp.json` — standard MCP server config at the repo root. Auto-detectors scan for this *file* (they don't read the manifest's inline config), and Cursor's own plugin layout uses `mcp.json`. Not `.mcp.json` (leading dot) deliberately — that avoids colliding with Claude Code's project-config convention. The manifest's `mcpServers` field points at `./mcp.json` as the single source of truth.

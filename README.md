@@ -5,8 +5,10 @@
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 
 [![Add to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=ethora&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBldGhvcmEvbWNwLXNlcnZlciJdfQ%3D%3D)
+[![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_Server-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect?url=vscode%3Amcp%2Finstall%3F%257B%2522name%2522%253A%2522ethora%2522%252C%2522command%2522%253A%2522npx%2522%252C%2522args%2522%253A%255B%2522-y%2522%252C%2522%2540ethora%252Fmcp-server%2522%255D%257D)
+[![Install in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-Install_Server-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect?url=vscode-insiders%3Amcp%2Finstall%3F%257B%2522name%2522%253A%2522ethora%2522%252C%2522command%2522%253A%2522npx%2522%252C%2522args%2522%253A%255B%2522-y%2522%252C%2522%2540ethora%252Fmcp-server%2522%255D%257D)
 
-> One-click install for Cursor (button above). For VS Code, Claude Desktop, Windsurf, and Cline, see [Using with MCP Clients](#-using-with-mcp-clients) below.
+> One-click install for Cursor and VS Code (buttons above). For Claude Code, Claude Desktop, GitHub Copilot, Gemini CLI, Codex CLI, Windsurf, and Cline, see [Using with MCP Clients](#-using-with-mcp-clients) below.
 
 An MCP (Model Context Protocol) CLI/server that connects popular MCP clients to the **Ethora** platform — an open-source **chat & messaging platform with a built-in AI agent / chatbot framework**. This runs locally on a developer machine via stdio rather than as a hosted Ethora service.  
 Use it from **Cursor**, **VS Code MCP**, **Claude Desktop**, or **Windsurf/Cline** to manage apps and chat rooms, broadcast messages, deploy AI agents / chatbots with RAG sources, and automate B2B provisioning workflows. (ERC-20 wallet tools are also included — see the tool list below.)
@@ -246,16 +248,16 @@ All tools return JSON in a consistent envelope:
 
 ## 🚀 Using with MCP Clients
 
+Every client runs the same thing — `npx -y @ethora/mcp-server` over stdio. One-click buttons exist for **Cursor** and **VS Code** (top of this README). For the rest it's a short config block or a one-line command.
+
 ### Cursor
 
-1. Open **Cursor → Settings → MCP**
-2. Click **Add new global MCP server**
-3. Add an entry for the Ethora MCP server, following the pattern below:
+Use the **[Add to Cursor](https://cursor.com/en/install-mcp?name=ethora&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBldGhvcmEvbWNwLXNlcnZlciJdfQ%3D%3D)** button above, or manually: **Settings → MCP → Add new global MCP server**:
 
 ```json
 {
   "mcpServers": {
-    "ethora-mcp-cli": {
+    "ethora": {
       "command": "npx",
       "args": ["-y", "@ethora/mcp-server"]
     }
@@ -263,41 +265,41 @@ All tools return JSON in a consistent envelope:
 }
 ```
 
-4. Save. You should see **green active** when connected.
+### VS Code (and GitHub Copilot)
 
-
-### VS Code (MCP extension)
-
-1. Open **User Settings (JSON)**
-2. Add an MCP entry:
+Use the **Install in VS Code** button above, or add a `.vscode/mcp.json` file (project-level) — note the key is `servers`:
 
 ```json
- "mcp": {
-    "servers": {
-      "ethora-mcp-cli": {
-        "command": "npx",
-        "args": [
-          "-y", "@ethora/mcp-server"
-        ]
-      }
+{
+  "servers": {
+    "ethora": {
+      "command": "npx",
+      "args": ["-y", "@ethora/mcp-server"]
     }
   }
+}
 ```
 
-3. Save. The server will auto-start on first use.
+GitHub Copilot's **agent mode** in VS Code reads this same `.vscode/mcp.json` — no separate setup. (For a user-level install instead, put the `servers` block under `"mcp"` in your User Settings JSON.)
 
+### Claude Code
+
+One command:
+
+```bash
+claude mcp add ethora -- npx -y @ethora/mcp-server
+```
+
+Add `--scope user` to make it available in every project. Verify with `claude mcp list`.
 
 ### Claude Desktop
 
-1. **Settings → Developer**
-2. Click **Edit Config**
-3. Open `claude_desktop_config.json`
-4. Add the following configuration:
+**Settings → Developer → Edit Config**, open `claude_desktop_config.json`:
 
 ```json
 {
   "mcpServers": {
-    "ethora-mcp-cli": {
+    "ethora": {
       "command": "npx",
       "args": ["-y", "@ethora/mcp-server"]
     }
@@ -305,23 +307,60 @@ All tools return JSON in a consistent envelope:
 }
 ```
 
-### Windsurf (Cline)
+### Gemini CLI
 
-1. Run:
-   ```bash
-   npx -y @ethora/mcp-server
-   ```
-2. Configure your `mcp_config.json` similarly:
-   ```json
-   {
-     "mcpServers": {
-      "ethora-mcp-cli": {
-         "command": "npx",
-         "args": ["-y", "@ethora/mcp-server"]
-       }
-     }
-   }
-   ```
+Add to `~/.gemini/settings.json` (global) or `.gemini/settings.json` (per project):
+
+```json
+{
+  "mcpServers": {
+    "ethora": {
+      "command": "npx",
+      "args": ["-y", "@ethora/mcp-server"]
+    }
+  }
+}
+```
+
+### Codex CLI
+
+Add to `~/.codex/config.toml` — note the table name is `mcp_servers` (underscore; `mcp-servers` is silently ignored):
+
+```toml
+[mcp_servers.ethora]
+command = "npx"
+args = ["-y", "@ethora/mcp-server"]
+```
+
+### Windsurf
+
+**Settings → Cascade → MCP Servers → View raw config** (`~/.codeium/windsurf/mcp_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "ethora": {
+      "command": "npx",
+      "args": ["-y", "@ethora/mcp-server"]
+    }
+  }
+}
+```
+
+### Cline
+
+Open the MCP servers panel and edit `cline_mcp_settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "ethora": {
+      "command": "npx",
+      "args": ["-y", "@ethora/mcp-server"]
+    }
+  }
+}
+```
 
 ---
 
