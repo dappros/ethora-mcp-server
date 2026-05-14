@@ -130,18 +130,36 @@ envelope.
 
 ## Step 6 — Use it from a Cline session
 
-With the server configured, start Cline and let the agent drive it. Cline needs
-an LLM provider configured first (`cline auth` for a Cline account, or pass
-`--provider` / `--key` for another provider):
+With the server configured, let the Cline agent drive it. Cline needs an LLM
+provider configured first — `cline auth` for a Cline account, or
+`cline auth anthropic --apikey <key>` to bring your own:
 
 ```bash
-cline "Use the ethora MCP server: call ethora-status and summarise the result."
+cline "Connect to the 'ethora' MCP server and call its ethora-status tool. Report the exact JSON it returns."
 ```
 
-Cline will connect to the Ethora server, call `ethora-status`, and report back.
-From here you can ask it to configure credentials (`ethora-configure`), create
-an app, deploy an AI agent/chatbot with RAG sources, broadcast a message, and so
-on — all 76 tools are available to the agent.
+Cline connects to the Ethora server, the agent invokes the tool (shown as
+`ethora__ethora-status`), and reports back:
+
+```json
+{
+  "ok": true,
+  "ts": "2026-05-14T11:31:12.699Z",
+  "meta": { "tool": "ethora-status", "apiUrl": "https://api.chat.ethora.com/v1", "authMode": "user", "currentAppId": "" },
+  "data": {
+    "apiUrl": "https://api.chat.ethora.com/v1",
+    "hasAppJwt": false, "hasAppToken": false, "hasB2BToken": false,
+    "hasUserToken": false, "hasRefreshToken": false, "authMode": "user",
+    "currentAppId": "", "currentAgentId": "", "enableDangerousTools": false
+  }
+}
+```
+
+**Proves:** the full loop works — Cline's agent connects to the Ethora MCP
+server, calls a tool, and gets back a valid result. From here you can ask it to
+configure credentials (`ethora-configure`), create an app, deploy an AI
+agent/chatbot with RAG sources, broadcast a message, and so on — all 76 tools
+are available to the agent.
 
 ## Next steps
 
