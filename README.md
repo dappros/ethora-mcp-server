@@ -4,7 +4,7 @@
 [![Node](https://img.shields.io/badge/node-%E2%89%A518.x-blue.svg)](#)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 
-[![Add to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](cursor://anysphere.cursor-deeplink/mcp/install?name=ethora&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBldGhvcmEvbWNwLXNlcnZlciJdfQ==)
+[![Add to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=ethora&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBldGhvcmEvbWNwLXNlcnZlciJdfQ%3D%3D)
 
 > One-click install for Cursor (button above). For VS Code, Claude Desktop, Windsurf, and Cline, see [Using with MCP Clients](#-using-with-mcp-clients) below.
 
