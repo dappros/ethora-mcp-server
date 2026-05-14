@@ -1,6 +1,6 @@
 {
   "name": "@ethora/mcp-server",
-  "version": "26.5.1",
+  "version": "26.5.2",
   "mcpName": "io.github.dappros/ethora-mcp-cli",
   "description": "MCP server for the Ethora chat & messaging platform: login, manage apps and chat rooms, broadcast messages, and deploy AI agents / chatbots with RAG sources.",
   "main": "dist/index.js",
