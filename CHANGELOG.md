@@ -6,6 +6,9 @@ All notable changes to this package are documented here. For cross-SDK release n
 
 - Reframe the `package.json` and `server.json` descriptions to lead with chat/messaging + AI agents / chatbots and drop the ERC-20 wallet mention, matching Ethora's product positioning. The wallet tools themselves are unchanged. Ships with the next published version.
 - Add `smithery.yaml` so the server can be discovered/installed via [Smithery](https://smithery.ai). Declares the stdio start command and the optional `ETHORA_API_URL` / `ETHORA_APP_JWT` / `ETHORA_B2B_TOKEN` config.
+- Add `llms-install.md` with crisp, no-questions setup instructions for AI coding agents (e.g. Cline) — config block, per-client config-file locations, optional env vars, and a credential-free verification step (`ethora-status`).
+- Add `assets/icon-400.png` (400×400 brand mark) for marketplace listings.
+- Reframe the README opening to lead with chat/messaging + AI agents / chatbots; ERC-20 wallet tooling is still documented in the tool list but no longer in the headline.
 
 ## 26.5.1
 

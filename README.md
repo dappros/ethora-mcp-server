@@ -4,8 +4,8 @@
 [![Node](https://img.shields.io/badge/node-%E2%89%A518.x-blue.svg)](#)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 
-An MCP (Model Context Protocol) CLI/server that connects popular MCP clients to the **Ethora** platform. This runs locally on a developer machine via stdio rather than as a hosted Ethora service.  
-Use it from **Cursor**, **VS Code MCP**, **Claude Desktop**, or **Windsurf/Cline** to log in, manage apps and chats, automate B2B workflows, and interact with wallets (ERC-20).
+An MCP (Model Context Protocol) CLI/server that connects popular MCP clients to the **Ethora** platform — an open-source **chat & messaging platform with a built-in AI agent / chatbot framework**. This runs locally on a developer machine via stdio rather than as a hosted Ethora service.  
+Use it from **Cursor**, **VS Code MCP**, **Claude Desktop**, or **Windsurf/Cline** to manage apps and chat rooms, broadcast messages, deploy AI agents / chatbots with RAG sources, and automate B2B provisioning workflows. (ERC-20 wallet tools are also included — see the tool list below.)
 
 **Part of the [Ethora SDK ecosystem](https://github.com/dappros/ethora#ecosystem)** — see all SDKs, tools, and sample apps. Follow cross-SDK updates in the [Release Notes](https://github.com/dappros/ethora/blob/main/RELEASE-NOTES.md).
 
