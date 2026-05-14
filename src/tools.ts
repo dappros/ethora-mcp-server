@@ -1507,8 +1507,11 @@ function userLoginWithEmailTool(server: McpServer) {
     server.registerTool(
         'ethora-user-login',
         {
-            description: 'Login to Ethora with email and password',
-            inputSchema: { email: z.string().email().describe("email for login"), password: z.string().describe("password for login") }
+            description: "Authenticate as an existing Ethora user with email + password.\n\nAuth: user-auth mode (call `ethora-auth-use-user` first) and a configured `appJwt` (env or `ethora-configure`).\nSide effects: stores the resulting user session token in this MCP session; unlocks user-auth tools (`ethora-app-list`, `ethora-app-create`, `ethora-files-*`, `ethora-wallet-*`).\nIdempotent: yes — safe to retry on transport failures.\nFailure modes: 401/403 on bad credentials; 404 if the email isn't registered; 429 if the Ethora server's per-IP login rate limit is hit (retry with backoff).\nRelated: `ethora-user-register` (create account first), `ethora-auth-use-user` (switch mode), `ethora-status` (verify session).",
+            inputSchema: {
+                email: z.string().email().describe("User's registered email address (RFC 5322). Must match an account created via `ethora-user-register` and verified via the link sent to that address."),
+                password: z.string().describe("Plain-text password the user set during registration. Sent over TLS to the Ethora API; never echoed back or logged.")
+            }
         },
         async function ({ email, password }) {
             try {
@@ -1526,8 +1529,12 @@ function userRegisterWithEmailTool(server: McpServer) {
         'ethora-user-register',
         {
             title: 'Ethora registration',
-            description: 'Ethora registration with email (required), firstName (required), lastName (required)',
-            inputSchema: { email: z.string().email(), firstName: z.string(), lastName: z.string() }
+            description: "Register a new Ethora end-user account by email + first/last name.\n\nAuth: user-auth mode and a configured `appJwt` (env or `ethora-configure`) — the JWT tells the server which app the new user belongs to.\nSide effects: creates a pending user record on the Ethora server and triggers a verification email to the address; the user must click the link in that email before `ethora-user-login` will succeed.\nIdempotent: safe to retry on transport failures (server deduplicates by email within an app). Calling twice with a fresh email creates one account; calling with an already-registered email returns 422.\nFailure modes: 422 with a validation error if the email is already registered, if names violate server rules, or if the configured `appJwt` is invalid; 401 if no `appJwt` is configured.\nWhen to use: end-user self-serve sign-up flows. For bulk B2B user provisioning prefer `ethora-users-batch-create-v2`.",
+            inputSchema: {
+                email: z.string().email().describe("Email address for the new user. Must be RFC-5322 valid and not already registered within this app. The user will receive a verification link they must click before login works."),
+                firstName: z.string().describe("First name shown in the user's profile and message attributions across chat rooms and the app UI."),
+                lastName: z.string().describe("Last name shown in the user's profile. Required by the server; do not omit unless your Ethora deployment explicitly accepts empty strings.")
+            }
         },
         async function ({ email, firstName, lastName }) {
             try {
@@ -1555,7 +1562,7 @@ function appListTool(server: McpServer) {
     server.registerTool(
         'ethora-app-list',
         {
-            description: 'List application, user should login first',
+            description: "List all Ethora apps (tenants) owned by the currently logged-in user.\n\nAuth: user-auth mode and an active user session (call `ethora-user-login` first).\nSide effects: none — read-only.\nIdempotent: yes — repeated calls return the same set unless an app is created/deleted in between.\nFailure modes: 401 if not logged in; returns an empty list if the user owns no apps.\nReturns: an array where each entry includes `appId` (24-char hex ObjectId), `displayName`, `domainName`, ownership and bot-status metadata. Pass `appId` into `ethora-app-update`, `ethora-app-delete`, or `ethora-app-select` for app-scoped flows.",
         },
         async function () {
             try {
@@ -1572,8 +1579,10 @@ function appCreateTool(server: McpServer) {
     server.registerTool(
         'ethora-app-create',
         {
-            description: 'Create a new app for the logged-in user.',
-            inputSchema: { displayName: z.string().describe("display name for app") }
+            description: "Create a new Ethora app (tenant) owned by the currently logged-in user.\n\nAuth: user-auth mode and an active user session (call `ethora-user-login` first).\nSide effects: provisions a new app record on the server, allocates a fresh 24-char hex `appId`, sets the caller as owner. Each app counts against the owner's plan limit.\nIdempotent: no — calling twice creates two apps. Use `ethora-app-list` first if you want to reuse an existing app.\nFailure modes: 401 if not logged in; 402/403 if the owner's plan limit is reached; 422 if `displayName` violates server rules.\nReturns: the new app object including `appId`. Pass it to `ethora-app-update` (set domainName/colors/bot), `ethora-app-select` (switch into app-token flows), or `ethora-app-delete` (remove).\nWhen to use: interactive setup by a logged-in user. For server-to-server provisioning prefer `ethora-b2b-app-create` or the one-call orchestrator `ethora-b2b-app-bootstrap-ai`.",
+            inputSchema: {
+                displayName: z.string().describe("Human-readable app name shown to users in the app picker and on the public landing page. Not required to be unique across accounts.")
+            }
         },
         async function ({ displayName }) {
             try {
@@ -1590,8 +1599,10 @@ function appDeleteTool(server: McpServer) {
     server.registerTool(
         'ethora-app-delete',
         {
-            description: 'Delete an app by appId for the logged-in user',
-            inputSchema: { appId: z.string().describe("appId for app") }
+            description: "Permanently delete an Ethora app the caller owns.\n\n**Destructive and irreversible.** Gated behind `ETHORA_MCP_ENABLE_DANGEROUS_TOOLS=true`; the tool refuses to register otherwise.\nAuth: user-auth mode and an active user session; the caller must be the app owner.\nSide effects: removes the app record, its chat rooms, files, indexed RAG sources, and bot configuration. End users of the app are immediately signed out and their messages become inaccessible.\nIdempotent: the first successful call returns success; subsequent calls return 404. Safe to retry on 5xx after confirming the app is still present via `ethora-app-list`.\nFailure modes: 403 if the caller does not own the app; 404 if `appId` does not exist; 401 if not logged in.\nWhen to use: explicit tear-down. Prefer `ethora-app-update` with `botStatus: \"off\"` if you just want to deactivate the AI bot.",
+            inputSchema: {
+                appId: z.string().describe("24-char hex MongoDB ObjectId of the app to delete. Obtain from `ethora-app-list` or the response of `ethora-app-create`.")
+            }
         },
         async function ({ appId }) {
             try {
@@ -1608,14 +1619,14 @@ function appUpdateTool(server: McpServer) {
     server.registerTool(
         'ethora-app-update',
         {
-            description: 'Updates the application fields for the logged-in user who has created the app.',
-            inputSchema: { 
-                appId: z.string().optional().describe("appId for app (defaults to current app if selected)"),
-                displayName: z.string().optional().describe("displayName of the application"),
-                domainName: z.string().optional().describe("If the domainName is set to 'abcd', your web application will be available at abcd.ethora.com."),
-                appDescription: z.string().optional().describe("Set the application description"),
-                primaryColor: z.string().optional().describe("Set thie color of the application in #F54927 format"),
-                botStatus: z.enum(["on", "off"]).optional().describe("Set the bot status to on or off, if on bot is enabled")
+            description: "Update mutable fields on an existing Ethora app the caller owns (displayName, domainName, appDescription, primaryColor, botStatus).\n\nAuth: user-auth mode and an active user session; the caller must own the app.\nSide effects: **partial update** — only the fields you pass are changed; omitted fields keep their previous values. `domainName` changes affect the public URL (`<domain>.ethora.com`) immediately. `botStatus: \"on\"` enables the bot only if the app has a configured prompt (use `ethora-bot-update-v2` / `ethora-bot-enable-v2` for the AI bot lifecycle).\nIdempotent: yes — repeating an update with the same values is a no-op.\nFailure modes: 401 if not logged in; 403 if not the owner; 404 if `appId` is invalid; 422 on field validation failure (e.g. `domainName` already taken, `primaryColor` not in `#RRGGBB` format).\nWhen to use: change branding, route the web app under a custom subdomain, or quickly toggle the bot on/off without re-running setup.",
+            inputSchema: {
+                appId: z.string().optional().describe("24-char hex ObjectId of the app to update. Optional — defaults to the app most recently passed to `ethora-app-select`."),
+                displayName: z.string().optional().describe("New human-readable app name. Visible in the app picker and on the public landing page."),
+                domainName: z.string().optional().describe("Subdomain to host the web app at. Setting `abcd` makes the web app available at `abcd.ethora.com`. Must be unique across all Ethora apps; lower-case alphanumerics and dashes only."),
+                appDescription: z.string().optional().describe("Long-form description shown on the public app landing page."),
+                primaryColor: z.string().optional().describe("Primary brand color in hex `#RRGGBB` format (e.g. `#F54927`). Used throughout the app UI."),
+                botStatus: z.enum(["on", "off"]).optional().describe("`on` enables the AI bot for new conversations (requires a configured prompt — see `ethora-bot-update-v2`); `off` disables it. Does not change the bot's configured prompt or sources.")
             }
         },
         async function ({ appId, displayName, domainName, appDescription, primaryColor, botStatus }) {
@@ -1655,7 +1666,7 @@ function appGetDefaultRoomsTool(server: McpServer) {
     server.registerTool(
         'ethora-app-get-default-rooms',
         {
-            description: 'Get the default rooms for Ethora application',
+            description: "List the default chat rooms (MUC rooms) of the currently selected Ethora app — every new user of the app auto-joins these.\n\nAuth: user-auth mode and an active user session. Operates against the currently selected app — call `ethora-app-select` first, or use `ethora-app-get-default-rooms-with-app-id` to pass `appId` explicitly.\nSide effects: none — read-only.\nIdempotent: yes.\nFailure modes: 400 if no app is currently selected in this MCP session; 401 if not logged in.\nReturns: array of rooms with their JIDs and titles. Use the JIDs with `ethora-chats-broadcast-v2`, `ethora-app-create-chat` (add more), or `ethora-app-delete-chat` (remove).",
         },
         async function () {
             try {
@@ -1672,9 +1683,9 @@ function getDefaultRoomsWithAppIdTool(server: McpServer) {
     server.registerTool(
         'ethora-app-get-default-rooms-with-app-id',
         {
-            description: 'Get the default rooms for the application by appId. You should have read access to the application.',
+            description: "List the default chat rooms of a specific Ethora app, passed via `appId` (or defaulted to the currently selected app).\n\nAuth: user-auth mode and an active user session. The caller must have read access to the app — either ownership, or membership of at least one of its rooms.\nSide effects: none — read-only.\nIdempotent: yes.\nFailure modes: 400 if neither `appId` is passed nor an app is currently selected; 401 if not logged in; 403 if the caller lacks read access; 404 if `appId` does not exist.\nReturns: array of rooms with their JIDs and titles. Use `ethora-app-get-default-rooms` for the simpler \"current app only\" variant.",
             inputSchema: {
-                appId: z.string().optional().describe("appId for app (defaults to current app if selected)"),
+                appId: z.string().optional().describe("24-char hex ObjectId of the app whose default rooms you want to read. Optional — defaults to the app most recently passed to `ethora-app-select`."),
             }
         },
         async function ({ appId }) {
@@ -1697,11 +1708,11 @@ function craeteAppChatTool(server: McpServer) {
     server.registerTool(
         'ethora-app-create-chat',
         {
-            description: 'Create a new chat for the logged-in user who has created the app.',
+            description: "Create a new chat room (MUC room) inside an Ethora app the caller owns.\n\nAuth: user-auth mode and an active user session; the caller must own the app.\nSide effects: provisions a new MUC room with the given `title`. If `pinned: true` the room is added to the app's default rooms list — every new user of the app will auto-join it from that point on. Existing users are **not** auto-added; for that, see the chat membership v2 endpoints.\nIdempotent: no — calling twice with the same title creates two distinct rooms with different JIDs.\nFailure modes: 401 if not logged in; 403 if the caller does not own the app; 404 if `appId` is invalid; 422 if `title` is empty or violates server rules.\nReturns: the new room object including its JID. Use the JID with `ethora-chats-broadcast-v2` to send messages or `ethora-app-delete-chat` to remove.",
             inputSchema: {
-                appId: z.string().optional().describe("appId for app (defaults to current app if selected)"),
-                title: z.string().describe("title for chat"),
-                pinned: z.boolean().describe("pinned for chat"),
+                appId: z.string().optional().describe("24-char hex ObjectId of the app to create the chat room in. Optional — defaults to the app most recently passed to `ethora-app-select`."),
+                title: z.string().describe("Display name for the new chat room. Visible to all members; not required to be unique within the app."),
+                pinned: z.boolean().describe("If `true`, the room is added to the app's default rooms list — every new user of the app auto-joins it. If `false`, the room exists but users must be added explicitly."),
             }
         },
         async function ({ appId, title, pinned }) {
@@ -1724,10 +1735,10 @@ function appDeleteChatTool(server: McpServer) {
     server.registerTool(
         'ethora-app-delete-chat',
         {
-            description: 'Delete a chat for the logged-in user who has created the app.',
+            description: "Permanently delete a chat room from an Ethora app the caller owns.\n\n**Destructive and irreversible.** Gated behind `ETHORA_MCP_ENABLE_DANGEROUS_TOOLS=true`; the tool refuses to register otherwise.\nAuth: user-auth mode and an active user session; the caller must own the app.\nSide effects: removes the MUC room, its message archive, and all member affiliations. Participants will see \"room destroyed\" on their next reconnect.\nIdempotent: yes after success — subsequent calls return 404.\nFailure modes: 401 if not logged in; 403 if not the owner; 404 if `chatJid` is not a room in the app.\nWhen to use: explicit room tear-down. To remove only from the default rooms list (without destroying the room) update the default-rooms config rather than deleting.",
             inputSchema: {
-                appId: z.string().optional().describe("appId for app (defaults to current app if selected)"),
-                chatJid: z.string().describe("title for chat"),
+                appId: z.string().optional().describe("24-char hex ObjectId of the app the chat room belongs to. Optional — defaults to the app most recently passed to `ethora-app-select`."),
+                chatJid: z.string().describe("Room JID (XMPP address) of the chat to delete, e.g. `<roomId>@conference.<host>`. Obtain from `ethora-app-get-default-rooms` or the response of `ethora-app-create-chat`."),
             }
         },
         async function ({ appId, chatJid }) {
@@ -1750,7 +1761,7 @@ function walletGetBalanceTool(server: McpServer) {
     server.registerTool(
         'ethora-wallet-get-balance',
         {
-            description: 'Retrieve the cryptocurrency wallet balance of the authenticated user'
+            description: "Read the on-chain wallet balance for the currently authenticated user, across the ERC-20 token(s) the Ethora backend tracks for them.\n\nAuth: user-auth mode and an active user session (call `ethora-user-login` first).\nSide effects: none — read-only, no gas consumed.\nIdempotent: yes — safe to call repeatedly.\nFailure modes: 401 if not logged in; 503 if the wallet RPC is temporarily unreachable (safe to retry on 503 with backoff).\nReturns: balances in the units the Ethora backend reports (typically whole-token integers — confirm with your deployment). Pair with `ethora-wallet-erc20-transfer` to spend.",
         },
         async function () {
             try {
@@ -1767,10 +1778,10 @@ function walletERC20TransferTool(server: McpServer) {
     server.registerTool(
         'ethora-wallet-erc20-transfer',
         {
-            description: 'Transfer ERC20 tokens to another wallet',
+            description: "Send ERC-20 tokens from the authenticated user's wallet to another wallet address.\n\n**Destructive and irreversible.** Gated behind `ETHORA_MCP_ENABLE_DANGEROUS_TOOLS=true`; the tool refuses to register otherwise.\nAuth: user-auth mode and an active user session (call `ethora-user-login` first).\nSide effects: submits a signed transaction on-chain; consumes the sender's gas/native-coin balance; reduces the sender's ERC-20 balance by `amount`; the recipient's balance increases asynchronously once the transaction is mined.\nIdempotent: **no** — calling twice sends twice. Confirm on-chain status (via `ethora-wallet-get-balance` or a block explorer) before retrying after a 5xx; do not auto-retry blindly.\nFailure modes: 400 on invalid `toWallet` address format; 401 if not logged in; 402 on insufficient ERC-20 balance or gas; 5xx on RPC failure.",
             inputSchema: {
-                toWallet: z.string().describe("to address for transfer"),
-                amount: z.number().describe("amount for transfer"),
+                toWallet: z.string().describe("Recipient wallet address. Must be a valid 0x-prefixed 40-character hex string. Double-check before calling — transfers cannot be reversed."),
+                amount: z.number().describe("Amount to transfer, in the same units returned by `ethora-wallet-get-balance` (typically whole-token integers — confirm with your deployment)."),
             }
         },
         async function ({ toWallet, amount }) {
