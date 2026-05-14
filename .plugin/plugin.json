@@ -24,12 +24,5 @@
     "cline",
     "windsurf"
   ],
-  "mcpServers": {
-    "mcpServers": {
-      "ethora": {
-        "command": "npx",
-        "args": ["-y", "@ethora/mcp-server"]
-      }
-    }
-  }
+  "mcpServers": "./mcp.json"
 }

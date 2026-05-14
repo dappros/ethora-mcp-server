@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "ethora": {
+      "command": "npx",
+      "args": ["-y", "@ethora/mcp-server"]
+    }
+  }
+}

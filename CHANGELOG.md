@@ -4,7 +4,10 @@ All notable changes to this package are documented here. For cross-SDK release n
 
 ## Unreleased
 
-- Add `.plugin/plugin.json` — an [Open Plugin Specification v1.0.0](https://github.com/vercel-labs/open-plugin-spec) manifest declaring the server inline under `mcpServers`. Lets Open-Plugin-aware directories (e.g. cursor.directory's auto-detect) discover the server from the GitHub repo. Repo-only — not shipped in the npm tarball (`files` is `["dist"]`), so no effect on the published package. NB: its `version` field is a fourth version string to keep in sync on release (alongside `package.json`, `server.json`, and `index.ts` serverInfo).
+- Add Open Plugin support so the repo is discoverable by Open-Plugin-aware directories (e.g. cursor.directory's "Auto (GitHub)" detect):
+  - `.plugin/plugin.json` — an [Open Plugin Specification v1.0.0](https://github.com/vercel-labs/open-plugin-spec) manifest. Its `version` field is a fourth version string to keep in sync on release (alongside `package.json`, `server.json`, and `index.ts` serverInfo).
+  - `mcp.json` — standard MCP server config at the repo root. Auto-detectors scan for this *file* (they don't read the manifest's inline config), and Cursor's own plugin layout uses `mcp.json`. Not `.mcp.json` (leading dot) deliberately — that avoids colliding with Claude Code's project-config convention. The manifest's `mcpServers` field points at `./mcp.json` as the single source of truth.
+  - Both files are repo-only — not shipped in the npm tarball (`files` is `["dist"]`), so no effect on the published package.
 
 ## 26.5.2
 
