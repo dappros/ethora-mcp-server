@@ -169,12 +169,12 @@ function configureTool(server: McpServer) {
     server.registerTool(
         "ethora-configure",
         {
-            description: "Configure Ethora API URL plus user-auth bootstrap and B2B/app credentials for this MCP session (in-memory).",
+            description: "Set the Ethora API URL and credentials for this MCP session.\n\nAuth: none required — this is the tool that establishes auth material.\nSide effects: stores values **in memory only**, scoped to this MCP process; nothing is written to disk and the values reset when the server restarts. Each call merges — fields you omit keep their previous value. An alternative to setting the same values via env vars (ETHORA_API_URL / ETHORA_APP_JWT / ETHORA_APP_TOKEN / ETHORA_B2B_TOKEN).\nIdempotent: yes.\nFailure modes: rarely fails; returns an error only if a value is structurally invalid.\nReturns: the resulting (redacted) client state. Follow with `ethora-status` to confirm, `ethora-doctor` to test connectivity, then an `ethora-auth-use-*` tool to pick the active mode.",
             inputSchema: {
-                apiUrl: z.string().optional().describe("Ethora API URL (e.g. https://api.ethora.com/v1 or http://localhost:8080/v1)"),
-                appJwt: z.string().optional().describe("Ethora App JWT used only for login/register bootstrap in user-auth mode."),
-                appToken: z.string().optional().describe("Optional per-app appToken for broadcast, sources, and bot flows."),
-                b2bToken: z.string().optional().describe("Ethora B2B token for x-custom-token auth (type=server)."),
+                apiUrl: z.string().optional().describe("Full Ethora API URL including the version path, e.g. `https://api.chat.ethora.com/v1` or `http://localhost:8080/v1`. If you only have the host, set ETHORA_BASE_URL env instead and the server appends `/v1`."),
+                appJwt: z.string().optional().describe("Ethora App JWT, used only to bootstrap login/register in user-auth mode. Usually starts with `JWT `. Secret — never commit it."),
+                appToken: z.string().optional().describe("Per-app appToken for app-scoped flows (broadcast, sources, bot). Setting this makes app-token auth available via `ethora-auth-use-app`. Secret."),
+                b2bToken: z.string().optional().describe("B2B server token for tenant-actor `x-custom-token` auth (a JWT with `type=server`). Required for B2B provisioning flows. Secret."),
             },
         },
         async function ({ apiUrl, appJwt, appToken, b2bToken }) {
@@ -192,7 +192,7 @@ function statusTool(server: McpServer) {
     server.registerTool(
         "ethora-status",
         {
-            description: "Show current Ethora MCP client state, including the active auth mode and which credentials are present.",
+            description: "Report the current Ethora MCP session state: configured API URL, active auth mode, which credentials are present, and the currently selected appId/agentId.\n\nAuth: none required.\nSide effects: none — read-only.\nIdempotent: yes.\nFailure modes: effectively none.\nReturns: a state object with booleans like `hasAppJwt` / `hasB2BToken` / `hasUserToken` (credential *values* are never echoed back). Use it to decide which `ethora-auth-use-*` tool to call next, or run `ethora-doctor` for an active connectivity check.",
         },
         async function () {
             try {
@@ -208,10 +208,10 @@ function helpTool(server: McpServer) {
     server.registerTool(
         "ethora-help",
         {
-            description: "Task-oriented help: explains the main Ethora auth modes and recommends next tool calls based on current state.",
+            description: "Task-oriented orientation for this MCP server: explains the three Ethora auth modes (user / app-token / B2B) and recommends the next tool calls + one-click recipes based on the current session state.\n\nAuth: none required — inspects state, makes no API calls.\nSide effects: none — read-only.\nIdempotent: yes; recommendations change only as the session state changes.\nFailure modes: effectively none.\nWhen to use: call this first if you're unsure which auth mode or tool sequence fits your goal. To then run a recommended sequence, pass its recipe id to `ethora-run-recipe`.",
             inputSchema: {
                 goal: z.enum(["auto", "b2b-bootstrap-ai", "broadcast", "sources-ingest", "files-upload", "bot-manage", "chat-test", "user-login"]).optional()
-                    .describe("Optional goal hint to tailor recommendations. Defaults to auto."),
+                    .describe("Goal hint to tailor the recommendations and recipe list. Omit or use `auto` to get recommendations inferred from the current session state."),
             },
         },
         async function ({ goal }) {
@@ -751,13 +751,13 @@ function runRecipeTool(server: McpServer) {
     server.registerTool(
         "ethora-run-recipe",
         {
-            description: "Execute a built-in ethora-help recipe by id (sequential steps, no shell, no file writes).",
+            description: "Execute a built-in recipe — an ordered sequence of this server's own tool calls — by id. Recipes capture common flows (B2B bootstrap, broadcast, sources ingest, etc.).\n\nAuth: depends on the recipe's steps; each step uses whatever auth mode/credentials it needs, so configure those first (see `ethora-help` for the right recipe + prerequisites).\nSide effects: runs entirely in-process — **no shell, no file writes**. Real side effects come only from the underlying tool steps (which may create apps, send messages, etc.). Use `dryRun: true` to preview the resolved steps without executing any of them.\nIdempotent: only as idempotent as the steps it runs — a recipe that calls `ethora-app-create` is not idempotent.\nFailure modes: stops at the first failing step and returns what completed plus the error; a missing required `vars` entry fails fast before any step runs.\nReturns: per-step results. Omit `recipeId` to list the runnable recipes for the given `goal` (or `goal: \"auto\"`).",
             inputSchema: {
-                recipeId: z.string().min(1).optional().describe("Recipe id. If omitted, lists runnable recipes for the selected goal."),
+                recipeId: z.string().min(1).optional().describe("Id of the recipe to run. Omit to instead list the runnable recipes for the selected `goal` (get ids from `ethora-help`)."),
                 goal: z.enum(["auto", "b2b-bootstrap-ai", "broadcast", "sources-ingest", "files-upload", "bot-manage", "chat-test", "user-login"]).optional()
-                    .describe("Optional goal scope to look up recipes; defaults to auto."),
-                vars: z.record(z.any()).optional().describe("Variables to substitute (appId, appToken, b2bToken, appJwt, email, password, apiUrl, etc)."),
-                dryRun: z.boolean().optional().describe("If true, only returns resolved steps without executing."),
+                    .describe("Goal scope used to look up recipes when `recipeId` is omitted. Defaults to `auto`."),
+                vars: z.record(z.any()).optional().describe("Key/value substitutions injected into recipe steps (e.g. appId, appToken, b2bToken, appJwt, email, password, apiUrl). A recipe declares which vars it requires; missing required vars fail the run before any step executes."),
+                dryRun: z.boolean().optional().describe("If true, resolve and return the step list with `vars` substituted but execute nothing. Use this to preview a recipe before running it for real."),
             },
         },
         async function ({ recipeId, goal, vars, dryRun }) {
@@ -982,9 +982,9 @@ function doctorTool(server: McpServer) {
     server.registerTool(
         "ethora-doctor",
         {
-            description: "Validate configuration and connectivity for both local user-auth and server-side B2B flows (pings /v1/ping via the configured API URL).",
+            description: "Diagnose the session: validate that the config is internally consistent for the active auth mode and actively ping the Ethora API.\n\nAuth: none required, but the report is tailored to whatever auth mode/credentials are currently set.\nSide effects: makes one real network call — `GET /v1/ping` against the configured API URL. No state is changed.\nIdempotent: yes.\nFailure modes: the tool itself rarely throws; instead it returns `suggestions` for misconfigurations and a `ping.ok: false` block (with the error) when the API is unreachable.\nReturns: `{ state, checks, ping, suggestions }`. Run this after `ethora-configure` to confirm everything is wired up before attempting real operations.",
             inputSchema: {
-                timeoutMs: z.number().int().min(500).max(20000).optional().describe("HTTP timeout for the ping request"),
+                timeoutMs: z.number().int().min(500).max(20000).optional().describe("HTTP timeout in milliseconds for the ping request. Defaults to 3000. Raise it on slow links, lower it to fail fast."),
             },
         },
         async function ({ timeoutMs }) {
@@ -1082,7 +1082,7 @@ function authUseAppTool(server: McpServer) {
     server.registerTool(
         "ethora-auth-use-app",
         {
-            description: "Switch auth mode to app-token (B2B) for subsequent API calls (requires appToken to be configured).",
+            description: "Switch this session's active auth mode to app-token, so subsequent app-scoped calls authenticate with the configured `appToken`.\n\nAuth: requires an `appToken` to already be configured (via `ethora-configure`, the ETHORA_APP_TOKEN env var, or `ethora-app-select` with an `appToken`).\nSide effects: changes session state only (the active auth mode); no API call, no server-side change.\nIdempotent: yes.\nFailure modes: returns an error if no `appToken` is configured — set one first.\nWhen to use: after `ethora-app-select` when you want app-scoped convenience routes (`/v2/...` resolved against the selected app). For explicit tenant-actor routes use `ethora-auth-use-b2b` instead.",
         },
         async function () {
             try {
@@ -1098,7 +1098,7 @@ function authUseUserTool(server: McpServer) {
     server.registerTool(
         "ethora-auth-use-user",
         {
-            description: "Switch auth mode to user session for subsequent API calls (requires `ethora-user-login`).",
+            description: "Switch this session's active auth mode to user-session, so subsequent calls authenticate as a logged-in Ethora user.\n\nAuth: switching the mode itself needs nothing, but user-auth tools only work once `ethora-user-login` has stored a user token. Login also requires a configured `appJwt`.\nSide effects: changes session state only; no API call, no server-side change.\nIdempotent: yes.\nFailure modes: none on the switch itself; downstream user-auth tools return 401 until `ethora-user-login` succeeds.\nWhen to use: first-time local/manual use — switch to this mode, then call `ethora-user-login`. For repeatable automation prefer `ethora-auth-use-b2b`.",
         },
         async function () {
             try {
@@ -1114,7 +1114,7 @@ function authUseB2BTool(server: McpServer) {
     server.registerTool(
         "ethora-auth-use-b2b",
         {
-            description: "Switch auth mode to B2B (x-custom-token) for subsequent API calls (requires b2bToken).",
+            description: "Switch this session's active auth mode to B2B, so subsequent calls authenticate as a tenant actor via the `x-custom-token` header.\n\nAuth: requires a `b2bToken` to already be configured (via `ethora-configure` or the ETHORA_B2B_TOKEN env var) — a JWT with `type=server`.\nSide effects: changes session state only; no API call, no server-side change.\nIdempotent: yes.\nFailure modes: returns an error if no `b2bToken` is configured — set one first.\nWhen to use: server-side automation and partner provisioning. B2B tools take an explicit `appId` (or use the one from `ethora-app-select`). Pairs with `ethora-b2b-app-create`, `ethora-b2b-app-bootstrap-ai`, `ethora-users-batch-create-v2`, and the `ethora-app-tokens-*-v2` tools.",
         },
         async function () {
             try {
@@ -1140,11 +1140,11 @@ function appSelectTool(server: McpServer) {
     server.registerTool(
         "ethora-app-select",
         {
-            description: "Select the current app context and optionally configure appToken. Many app-scoped tools can omit appId after this.",
+            description: "Set the current app context for this session so app-scoped tools can omit their `appId` argument.\n\nAuth: none required to set the context; the tools you then call still need their own auth mode.\nSide effects: session state only — stores `currentAppId` and, if given, `appToken`. If `appToken` is supplied the active auth mode defaults to app-token unless `authMode` overrides it. No API call, no server-side change.\nIdempotent: yes — calling again just overwrites the selection.\nFailure modes: effectively none; passing an `appId` that doesn't exist is not validated here — the first app-scoped API call will surface the 404.\nWhen to use: once per app you're working with, before broadcast/sources/bot/agents tools. Pairs with `ethora-auth-use-app`.",
             inputSchema: {
-                appId: z.string().describe("Ethora appId to set as current context"),
-                appToken: z.string().optional().describe("Optional per-app appToken. If provided, auth mode defaults to app-token."),
-                authMode: z.enum(["app", "user", "b2b"]).optional().describe("Optional auth mode to keep after selecting the app context."),
+                appId: z.string().describe("24-char hex Ethora appId to set as the current context. Get it from `ethora-app-list`, `ethora-app-create`, or a B2B create/provision response."),
+                appToken: z.string().optional().describe("Per-app appToken to store alongside the appId. If provided, the active auth mode switches to app-token (unless `authMode` says otherwise). Secret."),
+                authMode: z.enum(["app", "user", "b2b"]).optional().describe("Auth mode to keep after selecting the app. Omit to let the mode default to app-token when an `appToken` is given, or stay unchanged otherwise."),
             },
         },
         async function ({ appId, appToken, authMode }) {
@@ -1161,9 +1161,9 @@ function agentSelectTool(server: McpServer) {
     server.registerTool(
         "ethora-agent-select",
         {
-            description: "Select current saved agent context for this MCP session.",
+            description: "Set the current saved-agent context for this session, so agent-scoped tools can omit their `agentId` argument.\n\nAuth: none required to set the context.\nSide effects: session state only — stores `currentAgentId`. No API call, no server-side change.\nIdempotent: yes.\nFailure modes: effectively none; the `agentId` is not validated here — a bad id surfaces on the first agent-scoped API call.\nWhen to use: after `ethora-agents-list-v2` / `ethora-agents-create-v2`, before repeatedly calling `ethora-agents-get-v2`, `ethora-agents-update-v2`, `ethora-agents-clone-v2`, or `ethora-agents-activate-v2` against the same agent.",
             inputSchema: {
-                agentId: z.string().min(1),
+                agentId: z.string().min(1).describe("Id of a saved agent owned by the current app. Get it from `ethora-agents-list-v2` or the response of `ethora-agents-create-v2`."),
             },
         },
         async function ({ agentId }) {
@@ -1180,14 +1180,13 @@ function chatsBroadcastTool(server: McpServer) {
     server.registerTool(
         "ethora-chats-broadcast-v2",
         {
-            description: "Enqueue a v2 broadcast job for an app using app-token auth or B2B auth with explicit appId.",
+            description: "Enqueue an asynchronous broadcast job that posts a message to one or more chat rooms of an app.\n\nAuth: app-token mode (after `ethora-app-select` + `ethora-auth-use-app`) OR B2B mode with an explicit `appId`.\nSide effects: creates a background job on the server and returns immediately with a `jobId` — the messages are **not** sent synchronously. Targeting is exclusive: pass `allRooms: true`, or a `chatIds` list, or a `chatNames` list — not a mix.\nIdempotent: no — each call enqueues a new job; calling twice broadcasts twice.\nFailure modes: 401/403 on missing/wrong auth; 400 if no target is specified or targets conflict; 404 if `appId` or a target room doesn't exist.\nReturns: `{ jobId, ... }`. Track it with `ethora-chats-broadcast-job-v2` (one-shot status) or `ethora-wait-broadcast-job-v2` (poll to completion).",
             inputSchema: {
-                appId: z.string().optional().describe("Required in B2B mode unless already selected via ethora-app-select."),
-                // backend supports targeting by allRooms OR chatIds/chatNames
-                text: z.string().min(1).describe("Message text to broadcast"),
-                allRooms: z.boolean().optional().describe("If true, broadcast to all rooms in the app"),
-                chatIds: z.array(z.string()).optional().describe("Optional list of chatIds to target"),
-                chatNames: z.array(z.string()).optional().describe("Optional list of chat JIDs/localparts to target"),
+                appId: z.string().optional().describe("24-char hex appId to broadcast in. Required in B2B mode unless already set via `ethora-app-select`; ignored in app-token mode (the token determines the app)."),
+                text: z.string().min(1).describe("Plain-text message body to broadcast to the targeted rooms."),
+                allRooms: z.boolean().optional().describe("If true, broadcast to every room in the app. Mutually exclusive with `chatIds` and `chatNames`."),
+                chatIds: z.array(z.string()).optional().describe("Explicit list of chat ids to target. Mutually exclusive with `allRooms` and `chatNames`."),
+                chatNames: z.array(z.string()).optional().describe("Explicit list of chat JIDs or localparts to target. Mutually exclusive with `allRooms` and `chatIds`."),
             },
         },
         async function ({ appId, text, allRooms, chatIds, chatNames }) {
@@ -1213,10 +1212,10 @@ function chatsBroadcastJobTool(server: McpServer) {
     server.registerTool(
         "ethora-chats-broadcast-job-v2",
         {
-            description: "Fetch v2 broadcast job status/results using app-token auth or B2B auth with explicit appId.",
+            description: "Fetch the current status and results of a broadcast job by `jobId` (one-shot, no polling).\n\nAuth: app-token mode OR B2B mode with an explicit `appId` — must match the auth used to enqueue the job.\nSide effects: none — read-only.\nIdempotent: yes.\nFailure modes: 401/403 on missing/wrong auth; 404 if the `jobId` is unknown for this app.\nReturns: the job object including its `state` (`pending` / `running` / `completed` / `failed`) and per-room results. For a blocking wait-until-done, use `ethora-wait-broadcast-job-v2` instead of polling this yourself.",
             inputSchema: {
-                appId: z.string().optional().describe("Required in B2B mode unless already selected via ethora-app-select."),
-                jobId: z.string().describe("Broadcast job id"),
+                appId: z.string().optional().describe("24-char hex appId the job belongs to. Required in B2B mode unless already set via `ethora-app-select`; ignored in app-token mode."),
+                jobId: z.string().describe("Job id returned by `ethora-chats-broadcast-v2`."),
             },
         },
         async function ({ appId, jobId }) {
@@ -1241,12 +1240,12 @@ function waitBroadcastJobTool(server: McpServer) {
     server.registerTool(
         "ethora-wait-broadcast-job-v2",
         {
-            description: "Poll broadcast job status until completed/failed using app-token auth or B2B auth with explicit appId.",
+            description: "Block until a broadcast job reaches a terminal state (`completed` or `failed`), or until a timeout — a convenience wrapper around repeated `ethora-chats-broadcast-job-v2` calls.\n\nAuth: app-token mode OR B2B mode with an explicit `appId` — must match the auth used to enqueue the job.\nSide effects: none server-side — read-only polling. Blocks this MCP call for up to `timeoutMs`.\nIdempotent: yes.\nFailure modes: 401/403 on missing/wrong auth; 404 if the `jobId` is unknown.\nReturns: `{ done: true, state, job }` when the job finished, or `{ done: false, reason: \"timeout\", job }` if `timeoutMs` elapsed first (the job may still finish later — re-check with `ethora-chats-broadcast-job-v2`).",
             inputSchema: {
-                appId: z.string().optional().describe("Required in B2B mode unless already selected via ethora-app-select."),
-                jobId: z.string().min(1),
-                timeoutMs: z.number().int().min(1000).max(300000).optional().describe("Max wait time (default 60000)"),
-                intervalMs: z.number().int().min(250).max(10000).optional().describe("Poll interval (default 1000)"),
+                appId: z.string().optional().describe("24-char hex appId the job belongs to. Required in B2B mode unless already set via `ethora-app-select`; ignored in app-token mode."),
+                jobId: z.string().min(1).describe("Job id returned by `ethora-chats-broadcast-v2`."),
+                timeoutMs: z.number().int().min(1000).max(300000).optional().describe("Maximum time to wait, in milliseconds. Default 60000. Caps at 300000 (5 min)."),
+                intervalMs: z.number().int().min(250).max(10000).optional().describe("Delay between status checks, in milliseconds. Default 1000. Lower = more responsive but more API calls."),
             },
         },
         async function ({ appId, jobId, timeoutMs, intervalMs }) {
@@ -1280,13 +1279,13 @@ function filesUploadV2Tool(server: McpServer) {
     server.registerTool(
         "ethora-files-upload-v2",
         {
-            description: "Upload files via POST /v2/files (requires user auth). Input is base64 to avoid local filesystem access.",
+            description: "Upload one or more files to the authenticated user's Ethora file storage (`POST /v2/files`).\n\nAuth: user-auth mode with an active user session (`ethora-user-login` first).\nSide effects: creates file records server-side owned by the logged-in user; each upload is a new record (no overwrite-by-name).\nIdempotent: no — re-uploading creates duplicate records.\nInput design: files are passed as base64 so the MCP server never touches your local filesystem. Client-side guardrail rejects any single file over 50MB before upload; the Ethora server enforces its own limits too.\nFailure modes: 401 if not logged in; 413 if the server's size limit is exceeded; 422 on an unsupported mime type. Per-call limit: 1–5 files.\nReturns: the created file records (with ids). Manage them with `ethora-files-get-v2` and `ethora-files-delete-v2`.",
             inputSchema: {
                 files: z.array(z.object({
-                    name: z.string().min(1),
-                    mimeType: z.string().min(1),
-                    base64: z.string().min(1).describe("Base64 content (may include data:...;base64, prefix)"),
-                })).min(1).max(5),
+                    name: z.string().min(1).describe("File name including extension, e.g. `report.pdf`."),
+                    mimeType: z.string().min(1).describe("MIME type of the content, e.g. `application/pdf`, `image/png`, `text/plain`."),
+                    base64: z.string().min(1).describe("File content, base64-encoded. A `data:...;base64,` prefix is accepted and stripped. Max 50MB decoded per file."),
+                })).min(1).max(5).describe("1 to 5 files to upload in this call."),
             },
         },
         async function ({ files }) {
@@ -1315,9 +1314,9 @@ function filesGetV2Tool(server: McpServer) {
     server.registerTool(
         "ethora-files-get-v2",
         {
-            description: "List files or get file by id via GET /v2/files (requires user auth).",
+            description: "List the authenticated user's files, or fetch one file's metadata by id (`GET /v2/files`).\n\nAuth: user-auth mode with an active user session.\nSide effects: none — read-only.\nIdempotent: yes.\nFailure modes: 401 if not logged in; 404 if a specific `id` is given but not found / not owned by the user.\nReturns: an array of file records when `id` is omitted, or a single record when `id` is given. Use the ids with `ethora-files-delete-v2`.",
             inputSchema: {
-                id: z.string().optional().describe("Optional file id"),
+                id: z.string().optional().describe("File id to fetch a single record. Omit to list all files owned by the logged-in user."),
             },
         },
         async function ({ id }) {
@@ -1336,8 +1335,8 @@ function filesDeleteV2Tool(server: McpServer) {
     server.registerTool(
         "ethora-files-delete-v2",
         {
-            description: "Delete file by id via DELETE /v2/files/:id (requires user auth).",
-            inputSchema: { id: z.string().min(1) },
+            description: "Permanently delete one of the authenticated user's files by id (`DELETE /v2/files/:id`).\n\nAuth: user-auth mode with an active user session.\nSide effects: removes the file record and its stored content. Not reversible.\nIdempotent: yes after success — a second call returns 404.\nFailure modes: 401 if not logged in; 403 if the file is not owned by the user; 404 if the `id` does not exist.\nGet ids from `ethora-files-get-v2`.",
+            inputSchema: { id: z.string().min(1).describe("Id of the file to delete. Get it from `ethora-files-get-v2`.") },
         },
         async function ({ id }) {
             try {
@@ -1355,11 +1354,11 @@ function sourcesSiteCrawlTool(server: McpServer) {
     server.registerTool(
         "ethora-sources-site-crawl",
         {
-            description: "Crawl a site URL and ingest into Sources (requires user auth).",
+            description: "Crawl a website URL and ingest its content into an app's RAG sources, so the app's AI bot can answer from it (legacy user-auth route).\n\nAuth: user-auth mode with an active user session; the user must own the app.\nSide effects: starts a crawl + embedding job on the server; pages become queryable RAG context once indexing finishes (not synchronous). With `followLink: true` the crawler also follows in-domain links, which can ingest many pages.\nIdempotent: no — re-crawling the same URL adds/updates source records; combined with `followLink` it can fan out broadly.\nFailure modes: 401 if not logged in; 403 if the user doesn't own the app; 400 if `url` is malformed; 404 if `appId` is invalid.\nRelated: `ethora-sources-site-reindex` (refresh), `ethora-sources-site-delete-url` (remove), `ethora-sources-docs-upload` (ingest documents instead of a URL). For app-token / B2B flows use `ethora-sources-site-crawl-v2`.",
             inputSchema: {
-                appId: z.string().optional().describe("Defaults to current app if selected"),
-                url: z.string().min(1),
-                followLink: z.boolean().default(false),
+                appId: z.string().optional().describe("24-char hex appId to ingest into. Optional — defaults to the app set via `ethora-app-select`."),
+                url: z.string().min(1).describe("Absolute URL to crawl, e.g. `https://example.com/docs`."),
+                followLink: z.boolean().default(false).describe("If true, also crawl in-domain links reachable from `url`. Can ingest many pages — use with care. Default false (single page)."),
             },
         },
         async function ({ appId, url, followLink }) {
@@ -1379,10 +1378,10 @@ function sourcesSiteReindexTool(server: McpServer) {
     server.registerTool(
         "ethora-sources-site-reindex",
         {
-            description: "Reindex a crawled URL by urlId (requires user auth).",
+            description: "Re-crawl and re-embed a previously crawled URL by its `urlId`, refreshing the RAG content for that page (legacy user-auth route).\n\nAuth: user-auth mode with an active user session; the user must own the app.\nSide effects: starts a refresh job on the server; the page's existing source record is updated in place once indexing finishes (not synchronous).\nIdempotent: effectively yes — re-running just refreshes the same record again.\nFailure modes: 401 if not logged in; 403 if the user doesn't own the app; 404 if `appId` or `urlId` is unknown.\nWhen to use: the source page changed and you want the bot to pick up the new content. Get `urlId` values from `ethora-sources-site-list-v2`. For app-token / B2B flows use `ethora-sources-site-reindex-v2`.",
             inputSchema: {
-                appId: z.string().optional().describe("Defaults to current app if selected"),
-                urlId: z.string().min(1),
+                appId: z.string().optional().describe("24-char hex appId the URL belongs to. Optional — defaults to the app set via `ethora-app-select`."),
+                urlId: z.string().min(1).describe("Id of a previously crawled URL record. Get it from `ethora-sources-site-list-v2`."),
             },
         },
         async function ({ appId, urlId }) {
@@ -1402,10 +1401,10 @@ function sourcesSiteDeleteUrlTool(server: McpServer) {
     server.registerTool(
         "ethora-sources-site-delete-url",
         {
-            description: "Delete a crawled site URL by exact url string (requires user auth).",
+            description: "Remove a single crawled URL from an app's RAG sources, matched by its exact url string (legacy user-auth route).\n\nAuth: user-auth mode with an active user session; the user must own the app.\nSide effects: deletes the source record and its embeddings; the app's bot can no longer answer from that page. Not reversible (re-add via `ethora-sources-site-crawl`).\nIdempotent: yes — deleting an already-removed URL is a no-op / 404.\nFailure modes: 401 if not logged in; 403 if the user doesn't own the app; 404 if the exact `url` string isn't a crawled source.\nNote: matches on the exact URL string — get the stored value from `ethora-sources-site-list-v2`. To delete several at once use `ethora-sources-site-delete-records-v1`.",
             inputSchema: {
-                appId: z.string().optional().describe("Defaults to current app if selected"),
-                url: z.string().min(1),
+                appId: z.string().optional().describe("24-char hex appId the URL belongs to. Optional — defaults to the app set via `ethora-app-select`."),
+                url: z.string().min(1).describe("Exact crawled URL string to remove (must match what was stored — get it from `ethora-sources-site-list-v2`)."),
             },
         },
         async function ({ appId, url }) {
@@ -1425,10 +1424,10 @@ function sourcesSiteDeleteUrlV2Tool(server: McpServer) {
     server.registerTool(
         "ethora-sources-site-delete-records-v1",
         {
-            description: "Legacy owner/admin flow: delete multiple crawled source records through the pre-v2 user-auth route.",
+            description: "Bulk-remove crawled URLs from an app's RAG sources in one call, matched by exact url strings (legacy owner/admin user-auth route).\n\nAuth: user-auth mode with an active user session; the user must own the app.\nSide effects: deletes each matching source record and its embeddings. Not reversible.\nIdempotent: yes — URLs not present are skipped.\nFailure modes: 401 if not logged in; 403 if the user doesn't own the app; 404 if `appId` is invalid. Per-call limit: 1–100 URLs.\nWhen to use: cleaning up many pages at once. For the single-URL variant use `ethora-sources-site-delete-url`; for app-token / B2B flows use `ethora-sources-site-delete-url-v2-batch`.",
             inputSchema: {
-                appId: z.string().optional().describe("Defaults to current app if selected"),
-                urls: z.array(z.string().min(1)).min(1).max(100),
+                appId: z.string().optional().describe("24-char hex appId the URLs belong to. Optional — defaults to the app set via `ethora-app-select`."),
+                urls: z.array(z.string().min(1)).min(1).max(100).describe("Exact crawled URL strings to remove, 1–100 per call. Get the stored values from `ethora-sources-site-list-v2`."),
             },
         },
         async function ({ appId, urls }) {
@@ -1448,14 +1447,14 @@ function sourcesDocsUploadTool(server: McpServer) {
     server.registerTool(
         "ethora-sources-docs-upload",
         {
-            description: "Upload docs for ingestion (requires user auth). Input is base64 to avoid local filesystem access.",
+            description: "Upload documents (PDF, text, etc.) into an app's RAG sources so the app's AI bot can answer from them (legacy user-auth route).\n\nAuth: user-auth mode with an active user session; the user must own the app.\nSide effects: stores each document and starts a parse + embedding job; content becomes queryable RAG context once indexing finishes (not synchronous).\nIdempotent: no — re-uploading the same document creates another source record.\nInput design: files are base64 so the MCP server never reads your local filesystem. Client-side guardrail rejects any single file over 50MB; the server enforces its own limits too.\nFailure modes: 401 if not logged in; 403 if the user doesn't own the app; 413 if too large; 422 on an unsupported document type. Per-call limit: 1–5 files.\nRelated: `ethora-sources-docs-delete` (remove), `ethora-sources-site-crawl` (ingest a URL instead). For app-token / B2B flows use `ethora-sources-docs-upload-v2`.",
             inputSchema: {
-                appId: z.string().optional().describe("Defaults to current app if selected"),
+                appId: z.string().optional().describe("24-char hex appId to ingest into. Optional — defaults to the app set via `ethora-app-select`."),
                 files: z.array(z.object({
-                    name: z.string().min(1),
-                    mimeType: z.string().min(1),
-                    base64: z.string().min(1),
-                })).min(1).max(5),
+                    name: z.string().min(1).describe("Document file name including extension, e.g. `handbook.pdf`."),
+                    mimeType: z.string().min(1).describe("MIME type, e.g. `application/pdf`, `text/plain`, `text/markdown`."),
+                    base64: z.string().min(1).describe("Document content, base64-encoded. A `data:...;base64,` prefix is accepted. Max 50MB decoded per file."),
+                })).min(1).max(5).describe("1 to 5 documents to ingest in this call."),
             },
         },
         async function ({ appId, files }) {
@@ -1484,10 +1483,10 @@ function sourcesDocsDeleteTool(server: McpServer) {
     server.registerTool(
         "ethora-sources-docs-delete",
         {
-            description: "Delete an ingested doc by docId (requires user auth).",
+            description: "Remove a previously ingested document from an app's RAG sources by `docId` (legacy user-auth route).\n\nAuth: user-auth mode with an active user session; the user must own the app.\nSide effects: deletes the document record and its embeddings; the app's bot can no longer answer from it. Not reversible (re-add via `ethora-sources-docs-upload`).\nIdempotent: yes after success — a second call returns 404.\nFailure modes: 401 if not logged in; 403 if the user doesn't own the app; 404 if `docId` is unknown.\nGet `docId` values from `ethora-sources-docs-list-v2`. For app-token / B2B flows use `ethora-sources-docs-delete-v2`.",
             inputSchema: {
-                appId: z.string().optional().describe("Defaults to current app if selected"),
-                docId: z.string().min(1),
+                appId: z.string().optional().describe("24-char hex appId the document belongs to. Optional — defaults to the app set via `ethora-app-select`."),
+                docId: z.string().min(1).describe("Id of the ingested document to delete. Get it from `ethora-sources-docs-list-v2`."),
             },
         },
         async function ({ appId, docId }) {
@@ -1799,9 +1798,9 @@ function b2bAppCreateTool(server: McpServer) {
     server.registerTool(
         "ethora-b2b-app-create",
         {
-            description: "Create a new app using B2B auth (x-custom-token).",
+            description: "Create a new Ethora app (tenant) server-side using B2B auth — the partner/integrator equivalent of `ethora-app-create`.\n\nAuth: B2B mode (`ethora-auth-use-b2b` + a configured `b2bToken`).\nSide effects: provisions a new app record owned by the B2B tenant and allocates a fresh 24-char hex `appId`. Does not create tokens, rooms, or a bot.\nIdempotent: no — calling twice creates two apps.\nFailure modes: 401/403 if not in B2B mode or the `b2bToken` is invalid; 422 if `displayName` violates server rules.\nReturns: the new app object including `appId`. Next steps: `ethora-app-tokens-create-v2` (mint an appToken), `ethora-app-select` (set context), `ethora-bot-update-v2` (configure the bot). For the all-in-one path use `ethora-b2b-app-bootstrap-ai` or `ethora-b2b-app-provision`.",
             inputSchema: {
-                displayName: z.string().min(1),
+                displayName: z.string().min(1).describe("Human-readable app name shown to users in the app picker and on the public landing page."),
             },
         },
         async function ({ displayName }) {
@@ -1820,10 +1819,10 @@ function b2bBotEnableTool(server: McpServer) {
     server.registerTool(
         "ethora-b2b-bot-enable",
         {
-            description: "Enable AI bot for an app (B2B auth). This triggers backend best-effort activation against configured AI service.",
+            description: "Turn on the AI bot for an app via B2B auth (sets `botStatus: \"on\"` on the app record).\n\nAuth: B2B mode (`ethora-auth-use-b2b` + a configured `b2bToken`).\nSide effects: flips the app's bot status to on; the backend then makes a **best-effort** activation against the configured AI service. The bot only actually responds if the app already has a prompt + LLM configured (see `ethora-bot-update-v2`) and the Ethora backend has AI service URL/secret set.\nIdempotent: yes — enabling an already-enabled bot is a no-op.\nFailure modes: 401/403 if not in B2B mode; 404 if `appId` is invalid; 400 if no `appId` is given and none is selected.\nNote: this is a thin convenience over `ethora-app-update`. For full bot configuration (prompt, LLM, RAG, greeting) use `ethora-bot-update-v2`; `ethora-bot-enable-v2` is the app-token-friendly equivalent.",
             inputSchema: {
-                appId: z.string().optional().describe("Defaults to current app if selected"),
-                botTrigger: z.string().optional().describe("Optional bot trigger (example: '/bot' or 'any_message')"),
+                appId: z.string().optional().describe("24-char hex appId whose bot to enable. Optional — defaults to the app set via `ethora-app-select`."),
+                botTrigger: z.string().optional().describe("When the bot responds: `/bot` (only messages starting with /bot) or `any_message` (every message). Omit to leave the existing trigger unchanged."),
             },
         },
         async function ({ appId, botTrigger }) {
@@ -1849,9 +1848,9 @@ function botGetV2Tool(server: McpServer) {
     server.registerTool(
         "ethora-bot-get-v2",
         {
-            description: "Get bot status/settings using app-token auth or B2B auth with explicit appId.",
+            description: "Read the current AI bot configuration for an app: status, trigger, prompt, greeting, LLM provider/model, RAG settings, widget config.\n\nAuth: app-token mode (after `ethora-app-select` + `ethora-auth-use-app`) OR B2B mode with an explicit `appId`.\nSide effects: none — read-only.\nIdempotent: yes.\nFailure modes: 401/403 on missing/wrong auth; 404 if `appId` is invalid.\nReturns: the bot settings object. Use it to inspect before changing things with `ethora-bot-update-v2`, or to confirm an `ethora-agents-activate-v2` took effect.",
             inputSchema: {
-                appId: z.string().optional().describe("Required in B2B mode unless already selected via ethora-app-select."),
+                appId: z.string().optional().describe("24-char hex appId. Required in B2B mode unless already set via `ethora-app-select`; ignored in app-token mode (the token determines the app)."),
             },
         },
         async function ({ appId }) {
@@ -1873,25 +1872,25 @@ function botUpdateV2Tool(server: McpServer) {
     server.registerTool(
         "ethora-bot-update-v2",
         {
-            description: "Update bot settings using app-token auth or B2B auth with explicit appId.",
+            description: "Configure the AI bot for an app — its prompt, LLM, trigger, greeting, RAG behavior, identity, and public widget settings.\n\nAuth: app-token mode (after `ethora-app-select` + `ethora-auth-use-app`) OR B2B mode with an explicit `appId`.\nSide effects: **partial update** — only the fields you pass are changed; omitted fields keep their values. Setting `status: \"on\"` activates the bot (best-effort against the configured AI service — needs a prompt + LLM and a backend AI service configured).\nIdempotent: yes — re-sending the same values is a no-op.\nFailure modes: 401/403 on missing/wrong auth; 404 if `appId` is invalid; 422 on field validation failure (e.g. an `llmProvider`/`llmModel` your backend doesn't have enabled).\nRelated: `ethora-bot-get-v2` (inspect first), `ethora-bot-enable-v2` / `ethora-bot-disable-v2` (just toggle status), `ethora-agents-activate-v2` (apply a saved agent's config instead of setting fields by hand).",
             inputSchema: {
-                appId: z.string().optional().describe("Required in B2B mode unless already selected via ethora-app-select."),
-                status: z.enum(["on", "off"]).optional(),
-                savedAgentId: z.string().optional(),
-                trigger: z.enum(["any_message", "/bot"]).optional(),
-                prompt: z.string().optional(),
-                greetingMessage: z.string().optional(),
-                chatId: z.string().optional(),
-                isRAG: z.boolean().optional(),
-                botFirstName: z.string().optional(),
-                botLastName: z.string().optional(),
-                botDisplayName: z.string().optional(),
-                botAvatarUrl: z.string().optional(),
-                ragTags: z.array(z.string().min(1)).optional(),
-                llmProvider: z.string().optional(),
-                llmModel: z.string().optional(),
-                widgetPublicEnabled: z.boolean().optional(),
-                widgetPublicUrl: z.string().optional(),
+                appId: z.string().optional().describe("24-char hex appId. Required in B2B mode unless already set via `ethora-app-select`; ignored in app-token mode."),
+                status: z.enum(["on", "off"]).optional().describe("`on` activates the bot, `off` deactivates it. Omit to leave the current status unchanged."),
+                savedAgentId: z.string().optional().describe("Id of a saved agent whose config should back this bot. Alternative to setting prompt/LLM/RAG fields individually."),
+                trigger: z.enum(["any_message", "/bot"]).optional().describe("When the bot responds: `any_message` (replies to every message) or `/bot` (only messages starting with /bot)."),
+                prompt: z.string().optional().describe("System prompt that defines the bot's persona and behavior."),
+                greetingMessage: z.string().optional().describe("Message the bot posts when a conversation starts."),
+                chatId: z.string().optional().describe("Restrict the bot to a single chat by id. Omit to apply app-wide."),
+                isRAG: z.boolean().optional().describe("If true, the bot retrieves from the app's indexed RAG sources (see the `ethora-sources-*` tools) when answering."),
+                botFirstName: z.string().optional().describe("Bot's first name in its user profile."),
+                botLastName: z.string().optional().describe("Bot's last name in its user profile."),
+                botDisplayName: z.string().optional().describe("Bot's display name shown in chat."),
+                botAvatarUrl: z.string().optional().describe("Public URL of the bot's avatar image."),
+                ragTags: z.array(z.string().min(1)).optional().describe("Restrict RAG retrieval to sources tagged with these tags (see `ethora-sources-site-tags-update-v2` / `ethora-sources-docs-tags-update-v2`)."),
+                llmProvider: z.string().optional().describe("LLM provider, e.g. `openai` or `openai-compatible`. Must be enabled in your Ethora backend's AI service config."),
+                llmModel: z.string().optional().describe("LLM model id, e.g. `gpt-4o-mini`. Must be available for the chosen `llmProvider`."),
+                widgetPublicEnabled: z.boolean().optional().describe("If true, expose the bot through a public embeddable chat widget."),
+                widgetPublicUrl: z.string().optional().describe("Public URL for the embeddable widget. Usually read via `ethora-bot-widget-v2` rather than set here."),
             },
         },
         async function ({ appId, ...payload }) {
@@ -1913,7 +1912,7 @@ function agentsListV2Tool(server: McpServer) {
     server.registerTool(
         "ethora-agents-list-v2",
         {
-            description: "List reusable saved agents for the current app owner via GET /v2/agents (app-token auth).",
+            description: "List the reusable saved agents owned by the current app (`GET /v2/agents`).\n\nAuth: app-token mode (after `ethora-app-select` + `ethora-auth-use-app`).\nSide effects: none — read-only.\nIdempotent: yes.\nFailure modes: 401/403 if not in app-token mode or the appToken is invalid; returns an empty list if the app has no saved agents.\nReturns: an array of agents with their ids, names, and config. A saved agent is a reusable bot definition — use the ids with `ethora-agents-get-v2`, `ethora-agents-update-v2`, `ethora-agents-clone-v2`, or `ethora-agents-activate-v2`.",
         },
         async function () {
             const meta = getDefaultMeta("ethora-agents-list-v2")
@@ -1932,9 +1931,9 @@ function agentsGetV2Tool(server: McpServer) {
     server.registerTool(
         "ethora-agents-get-v2",
         {
-            description: "Get one reusable saved agent via GET /v2/agents/:agentId (app-token auth).",
+            description: "Fetch one reusable saved agent's full config by id (`GET /v2/agents/:agentId`).\n\nAuth: app-token mode (after `ethora-app-select` + `ethora-auth-use-app`).\nSide effects: also sets this agent as the current agent context for the session (so later agent tools can omit `agentId`). No server-side change.\nIdempotent: yes.\nFailure modes: 401/403 on missing/wrong auth; 404 if `agentId` is not an agent of the current app.\nReturns: the agent object (prompt, LLM, RAG settings, visibility, etc.). Get ids from `ethora-agents-list-v2`.",
             inputSchema: {
-                agentId: z.string().min(1),
+                agentId: z.string().min(1).describe("Id of the saved agent to fetch. Get it from `ethora-agents-list-v2`."),
             },
         },
         async function ({ agentId }) {
@@ -1955,23 +1954,23 @@ function agentsCreateV2Tool(server: McpServer) {
     server.registerTool(
         "ethora-agents-create-v2",
         {
-            description: "Create a reusable saved agent via POST /v2/agents (app-token auth).",
+            description: "Create a new reusable saved agent — a named, reusable bot definition (prompt + LLM + RAG settings + identity) that can later be activated onto any app (`POST /v2/agents`).\n\nAuth: app-token mode (after `ethora-app-select` + `ethora-auth-use-app`).\nSide effects: creates an agent record owned by the current app; also sets it as the session's current agent context. Creating an agent does **not** activate it on the app — call `ethora-agents-activate-v2` for that.\nIdempotent: no — calling twice creates two agents.\nFailure modes: 401/403 on missing/wrong auth; 422 on field validation failure (e.g. duplicate `slug`, unsupported `llmProvider`/`llmModel`).\nReturns: the created agent including its id.",
             inputSchema: {
-                name: z.string().optional(),
-                slug: z.string().optional(),
-                summary: z.string().optional(),
-                prompt: z.string().optional(),
-                greetingMessage: z.string().optional(),
-                trigger: z.enum(["any_message", "/bot"]).optional(),
-                botDisplayName: z.string().optional(),
-                botAvatarUrl: z.string().optional(),
-                isRAG: z.boolean().optional(),
-                ragTags: z.array(z.string().min(1)).optional(),
-                llmProvider: z.string().optional(),
-                llmModel: z.string().optional(),
-                visibility: z.enum(["private", "public"]).optional(),
-                isPublished: z.boolean().optional(),
-                categories: z.array(z.string().min(1)).optional(),
+                name: z.string().optional().describe("Human-readable agent name."),
+                slug: z.string().optional().describe("URL-safe unique identifier for the agent within the app. Lower-case alphanumerics and dashes."),
+                summary: z.string().optional().describe("Short description of what the agent does."),
+                prompt: z.string().optional().describe("System prompt defining the agent's persona and behavior."),
+                greetingMessage: z.string().optional().describe("Message the agent posts when a conversation starts."),
+                trigger: z.enum(["any_message", "/bot"]).optional().describe("When the agent responds: `any_message` (every message) or `/bot` (only /bot-prefixed messages)."),
+                botDisplayName: z.string().optional().describe("Display name shown in chat when this agent is the active bot."),
+                botAvatarUrl: z.string().optional().describe("Public URL of the agent's avatar image."),
+                isRAG: z.boolean().optional().describe("If true, the agent retrieves from the app's indexed RAG sources when answering."),
+                ragTags: z.array(z.string().min(1)).optional().describe("Restrict RAG retrieval to sources carrying these tags."),
+                llmProvider: z.string().optional().describe("LLM provider, e.g. `openai` or `openai-compatible`. Must be enabled in your Ethora backend."),
+                llmModel: z.string().optional().describe("LLM model id, e.g. `gpt-4o-mini`. Must be available for the chosen provider."),
+                visibility: z.enum(["private", "public"]).optional().describe("`private` (only this app) or `public` (discoverable in the shared agent catalogue)."),
+                isPublished: z.boolean().optional().describe("If true and visibility is public, the agent is listed in the public catalogue."),
+                categories: z.array(z.string().min(1)).optional().describe("Catalogue categories for a public agent."),
             },
         },
         async function (payload) {
@@ -1993,24 +1992,24 @@ function agentsUpdateV2Tool(server: McpServer) {
     server.registerTool(
         "ethora-agents-update-v2",
         {
-            description: "Update a reusable saved agent via PUT /v2/agents/:agentId (app-token auth).",
+            description: "Update fields on an existing reusable saved agent (`PUT /v2/agents/:agentId`).\n\nAuth: app-token mode (after `ethora-app-select` + `ethora-auth-use-app`).\nSide effects: **partial update** — only the fields you pass change; omitted fields keep their values. Also sets this agent as the session's current agent context. If the agent is currently activated on the app, changes take effect on the live bot.\nIdempotent: yes — re-sending the same values is a no-op.\nFailure modes: 401/403 on missing/wrong auth; 404 if `agentId` is not an agent of the current app; 422 on field validation failure.\nGet `agentId` from `ethora-agents-list-v2`.",
             inputSchema: {
-                agentId: z.string().min(1),
-                name: z.string().optional(),
-                slug: z.string().optional(),
-                summary: z.string().optional(),
-                prompt: z.string().optional(),
-                greetingMessage: z.string().optional(),
-                trigger: z.enum(["any_message", "/bot"]).optional(),
-                botDisplayName: z.string().optional(),
-                botAvatarUrl: z.string().optional(),
-                isRAG: z.boolean().optional(),
-                ragTags: z.array(z.string().min(1)).optional(),
-                llmProvider: z.string().optional(),
-                llmModel: z.string().optional(),
-                visibility: z.enum(["private", "public"]).optional(),
-                isPublished: z.boolean().optional(),
-                categories: z.array(z.string().min(1)).optional(),
+                agentId: z.string().min(1).describe("Id of the saved agent to update. Get it from `ethora-agents-list-v2`."),
+                name: z.string().optional().describe("Human-readable agent name."),
+                slug: z.string().optional().describe("URL-safe unique identifier within the app. Lower-case alphanumerics and dashes."),
+                summary: z.string().optional().describe("Short description of what the agent does."),
+                prompt: z.string().optional().describe("System prompt defining the agent's persona and behavior."),
+                greetingMessage: z.string().optional().describe("Message the agent posts when a conversation starts."),
+                trigger: z.enum(["any_message", "/bot"]).optional().describe("When the agent responds: `any_message` (every message) or `/bot` (only /bot-prefixed messages)."),
+                botDisplayName: z.string().optional().describe("Display name shown in chat when this agent is the active bot."),
+                botAvatarUrl: z.string().optional().describe("Public URL of the agent's avatar image."),
+                isRAG: z.boolean().optional().describe("If true, the agent retrieves from the app's indexed RAG sources when answering."),
+                ragTags: z.array(z.string().min(1)).optional().describe("Restrict RAG retrieval to sources carrying these tags."),
+                llmProvider: z.string().optional().describe("LLM provider, e.g. `openai` or `openai-compatible`. Must be enabled in your Ethora backend."),
+                llmModel: z.string().optional().describe("LLM model id, e.g. `gpt-4o-mini`. Must be available for the chosen provider."),
+                visibility: z.enum(["private", "public"]).optional().describe("`private` (only this app) or `public` (discoverable in the shared agent catalogue)."),
+                isPublished: z.boolean().optional().describe("If true and visibility is public, the agent is listed in the public catalogue."),
+                categories: z.array(z.string().min(1)).optional().describe("Catalogue categories for a public agent."),
             },
         },
         async function ({ agentId, ...payload }) {
@@ -2031,12 +2030,12 @@ function agentsCloneV2Tool(server: McpServer) {
     server.registerTool(
         "ethora-agents-clone-v2",
         {
-            description: "Clone a reusable saved agent via POST /v2/agents/:agentId/clone (app-token auth).",
+            description: "Duplicate an existing saved agent into a new agent, optionally overriding its name/slug/summary (`POST /v2/agents/:agentId/clone`).\n\nAuth: app-token mode (after `ethora-app-select` + `ethora-auth-use-app`).\nSide effects: creates a new agent record copying the source agent's config; also sets the new agent as the session's current agent context. The source agent is unchanged.\nIdempotent: no — calling twice creates two clones.\nFailure modes: 401/403 on missing/wrong auth; 404 if the source `agentId` doesn't exist; 422 if an overridden `slug` collides.\nWhen to use: branch a working agent before experimenting, instead of mutating the original with `ethora-agents-update-v2`.",
             inputSchema: {
-                agentId: z.string().min(1),
-                name: z.string().optional(),
-                slug: z.string().optional(),
-                summary: z.string().optional(),
+                agentId: z.string().min(1).describe("Id of the source agent to clone. Get it from `ethora-agents-list-v2`."),
+                name: z.string().optional().describe("Name for the clone. Omit to inherit the source agent's name."),
+                slug: z.string().optional().describe("URL-safe unique slug for the clone. Omit to let the server derive one; must not collide with an existing agent."),
+                summary: z.string().optional().describe("Summary for the clone. Omit to inherit the source agent's summary."),
             },
         },
         async function ({ agentId, ...payload }) {
@@ -2058,9 +2057,9 @@ function agentsActivateV2Tool(server: McpServer) {
     server.registerTool(
         "ethora-agents-activate-v2",
         {
-            description: "Bind a saved agent as the active bot for the selected app via POST /v2/agents/:agentId/activate (app-token auth).",
+            description: "Bind a saved agent as the active AI bot for the current app — copies the agent's config onto the app's bot (`POST /v2/agents/:agentId/activate`).\n\nAuth: app-token mode (after `ethora-app-select` + `ethora-auth-use-app`).\nSide effects: the app's live bot now uses this agent's prompt/LLM/RAG/identity. Replaces whatever bot config was there before. Also sets this agent as the session's current agent context. Does not by itself set `status: \"on\"` if the bot was off — pair with `ethora-bot-enable-v2` if needed.\nIdempotent: yes — activating the already-active agent is a no-op.\nFailure modes: 401/403 on missing/wrong auth; 404 if `agentId` is not an agent of the current app.\nVerify with `ethora-bot-get-v2` afterwards.",
             inputSchema: {
-                agentId: z.string().min(1),
+                agentId: z.string().min(1).describe("Id of the saved agent to activate as the app's bot. Get it from `ethora-agents-list-v2`."),
             },
         },
         async function ({ agentId }) {
@@ -2081,10 +2080,10 @@ function botEnableV2Tool(server: McpServer) {
     server.registerTool(
         "ethora-bot-enable-v2",
         {
-            description: "Enable bot using app-token auth or B2B auth with explicit appId.",
+            description: "Turn the AI bot on for an app (sets bot `status: \"on\"`), optionally setting its trigger at the same time.\n\nAuth: app-token mode (after `ethora-app-select` + `ethora-auth-use-app`) OR B2B mode with an explicit `appId`.\nSide effects: activates the bot. It only actually responds if a prompt + LLM are configured (see `ethora-bot-update-v2` or `ethora-agents-activate-v2`) and the Ethora backend has an AI service configured.\nIdempotent: yes — enabling an already-on bot is a no-op.\nFailure modes: 401/403 on missing/wrong auth; 404 if `appId` is invalid.\nThin convenience over `ethora-bot-update-v2` for the common \"just turn it on\" case. Pair with `ethora-bot-disable-v2` to turn it off.",
             inputSchema: {
-                appId: z.string().optional().describe("Required in B2B mode unless already selected via ethora-app-select."),
-                trigger: z.enum(["any_message", "/bot"]).optional(),
+                appId: z.string().optional().describe("24-char hex appId. Required in B2B mode unless already set via `ethora-app-select`; ignored in app-token mode."),
+                trigger: z.enum(["any_message", "/bot"]).optional().describe("When the bot responds: `any_message` (every message) or `/bot` (only /bot-prefixed messages). Omit to leave the existing trigger unchanged."),
             },
         },
         async function ({ appId, trigger }) {
@@ -2106,9 +2105,9 @@ function botDisableV2Tool(server: McpServer) {
     server.registerTool(
         "ethora-bot-disable-v2",
         {
-            description: "Disable bot using app-token auth or B2B auth with explicit appId.",
+            description: "Turn the AI bot off for an app (sets bot `status: \"off\"`).\n\nAuth: app-token mode (after `ethora-app-select` + `ethora-auth-use-app`) OR B2B mode with an explicit `appId`.\nSide effects: deactivates the bot — it stops responding to messages. The bot's configured prompt/LLM/RAG and any activated agent are preserved, so re-enabling later restores the same behavior.\nIdempotent: yes — disabling an already-off bot is a no-op.\nFailure modes: 401/403 on missing/wrong auth; 404 if `appId` is invalid.\nThin convenience over `ethora-bot-update-v2`. Pair with `ethora-bot-enable-v2` to turn it back on.",
             inputSchema: {
-                appId: z.string().optional().describe("Required in B2B mode unless already selected via ethora-app-select."),
+                appId: z.string().optional().describe("24-char hex appId. Required in B2B mode unless already set via `ethora-app-select`; ignored in app-token mode."),
             },
         },
         async function ({ appId }) {
@@ -2130,7 +2129,7 @@ function botWidgetGetV2Tool(server: McpServer) {
     server.registerTool(
         "ethora-bot-widget-v2",
         {
-            description: "Get widget/embed config via GET /v2/bot/widget (app-token auth).",
+            description: "Read the public chat-widget / embed configuration for the current app's bot (`GET /v2/bot/widget`).\n\nAuth: app-token mode (after `ethora-app-select` + `ethora-auth-use-app`).\nSide effects: none — read-only.\nIdempotent: yes.\nFailure modes: 401/403 if not in app-token mode or the appToken is invalid.\nReturns: the widget config and the public widget URL metadata — what you need to embed the bot on a website. To enable/disable the public widget, set `widgetPublicEnabled` via `ethora-bot-update-v2`.",
         },
         async function () {
             const meta = getDefaultMeta("ethora-bot-widget-v2")
@@ -2149,12 +2148,12 @@ function chatsMessageCreateV2Tool(server: McpServer) {
     server.registerTool(
         "ethora-chats-message-v2",
         {
-            description: "Send a test message through the app chat/bot automation surface (app-token auth).",
+            description: "Send a message through the app's chat/bot automation surface — useful for testing the bot or driving automated conversations.\n\nAuth: app-token mode (after `ethora-app-select` + `ethora-auth-use-app`). Your Ethora backend must expose the chat automation surface on the same API host.\nSide effects: posts a real message into the app — in `private` mode to a 1:1 automation session keyed by `nickname`, in `group` mode into the room identified by `roomJid`. If the app's bot is enabled it will react to the message.\nIdempotent: no — each call posts another message.\nFailure modes: 401/403 on missing/wrong auth; 400 if `mode` is `group` but no `roomJid` is given (or `private` but no `nickname`); 404 if `roomJid` doesn't exist.\nRead back the resulting conversation with `ethora-chats-history-v2`. `ethora-bot-message-v2` is an identical alias.",
             inputSchema: {
-                text: z.string().min(1),
-                mode: z.enum(["private", "group"]).optional(),
-                nickname: z.string().optional(),
-                roomJid: z.string().optional(),
+                text: z.string().min(1).describe("Message body to send."),
+                mode: z.enum(["private", "group"]).optional().describe("`private` = 1:1 automation session keyed by `nickname`; `group` = a room identified by `roomJid`. Defaults to the backend's default mode."),
+                nickname: z.string().optional().describe("Sender/participant nickname for the private automation session. Required when `mode` is `private`."),
+                roomJid: z.string().optional().describe("Room JID to post into. Required when `mode` is `group`. Get it from `ethora-app-get-default-rooms`."),
             },
         },
         async function ({ text, mode, nickname, roomJid }) {
@@ -2174,12 +2173,12 @@ function chatsHistoryGetV2Tool(server: McpServer) {
     server.registerTool(
         "ethora-chats-history-v2",
         {
-            description: "Read persisted chat automation history for private/group test sessions (app-token auth).",
+            description: "Read the persisted message history of a chat automation session — the conversation produced by `ethora-chats-message-v2` and the bot's replies.\n\nAuth: app-token mode (after `ethora-app-select` + `ethora-auth-use-app`).\nSide effects: none — read-only.\nIdempotent: yes.\nFailure modes: 401/403 on missing/wrong auth; 400 if the `mode`/`nickname`/`roomJid` combination is incomplete; 404 if the room/session doesn't exist.\nReturns: the most recent messages (up to `limit`) for the identified session. `ethora-bot-history-v2` is an identical alias.",
             inputSchema: {
-                mode: z.enum(["private", "group"]).optional(),
-                nickname: z.string().optional(),
-                roomJid: z.string().optional(),
-                limit: z.number().int().min(1).max(100).optional(),
+                mode: z.enum(["private", "group"]).optional().describe("`private` = 1:1 automation session keyed by `nickname`; `group` = a room identified by `roomJid`. Should match what was used to send."),
+                nickname: z.string().optional().describe("Participant nickname for the private automation session. Required when `mode` is `private`."),
+                roomJid: z.string().optional().describe("Room JID to read history from. Required when `mode` is `group`."),
+                limit: z.number().int().min(1).max(100).optional().describe("Maximum number of most-recent messages to return. 1–100. Defaults to the backend's default page size."),
             },
         },
         async function ({ mode, nickname, roomJid, limit }) {
@@ -2199,12 +2198,12 @@ function botMessageCreateV2Tool(server: McpServer) {
     server.registerTool(
         "ethora-bot-message-v2",
         {
-            description: "Compatibility alias for ethora-chats-message-v2 (app-token auth).",
+            description: "Compatibility alias for `ethora-chats-message-v2` — identical behavior, kept for clients that expect a `bot-`prefixed name.\n\nSend a message through the app's chat/bot automation surface.\nAuth: app-token mode (after `ethora-app-select` + `ethora-auth-use-app`).\nSide effects: posts a real message into the app; the enabled bot will react to it. Not idempotent — each call posts another message.\nFailure modes: 401/403 on missing/wrong auth; 400 if the `mode`/`nickname`/`roomJid` combination is incomplete.\nPrefer `ethora-chats-message-v2` in new integrations.",
             inputSchema: {
-                text: z.string().min(1),
-                mode: z.enum(["private", "group"]).optional(),
-                nickname: z.string().optional(),
-                roomJid: z.string().optional(),
+                text: z.string().min(1).describe("Message body to send."),
+                mode: z.enum(["private", "group"]).optional().describe("`private` = 1:1 automation session keyed by `nickname`; `group` = a room identified by `roomJid`."),
+                nickname: z.string().optional().describe("Sender/participant nickname for the private automation session. Required when `mode` is `private`."),
+                roomJid: z.string().optional().describe("Room JID to post into. Required when `mode` is `group`."),
             },
         },
         async function ({ text, mode, nickname, roomJid }) {
@@ -2224,12 +2223,12 @@ function botHistoryGetV2Tool(server: McpServer) {
     server.registerTool(
         "ethora-bot-history-v2",
         {
-            description: "Compatibility alias for ethora-chats-history-v2 (app-token auth).",
+            description: "Compatibility alias for `ethora-chats-history-v2` — identical behavior, kept for clients that expect a `bot-`prefixed name.\n\nRead the persisted message history of a chat automation session.\nAuth: app-token mode (after `ethora-app-select` + `ethora-auth-use-app`).\nSide effects: none — read-only. Idempotent: yes.\nFailure modes: 401/403 on missing/wrong auth; 400 if the `mode`/`nickname`/`roomJid` combination is incomplete.\nPrefer `ethora-chats-history-v2` in new integrations.",
             inputSchema: {
-                mode: z.enum(["private", "group"]).optional(),
-                nickname: z.string().optional(),
-                roomJid: z.string().optional(),
-                limit: z.number().int().min(1).max(100).optional(),
+                mode: z.enum(["private", "group"]).optional().describe("`private` = 1:1 automation session keyed by `nickname`; `group` = a room identified by `roomJid`."),
+                nickname: z.string().optional().describe("Participant nickname for the private automation session. Required when `mode` is `private`."),
+                roomJid: z.string().optional().describe("Room JID to read history from. Required when `mode` is `group`."),
+                limit: z.number().int().min(1).max(100).optional().describe("Maximum number of most-recent messages to return. 1–100."),
             },
         },
         async function ({ mode, nickname, roomJid, limit }) {
@@ -2347,7 +2346,7 @@ async function runB2BAppBootstrapAi(args: {
 function b2bAliases(server: McpServer) {
     server.registerTool(
         "ethora.b2b.auth.use",
-        { description: "Alias for ethora-auth-use-b2b" },
+        { description: "Dot-namespaced alias for `ethora-auth-use-b2b` — switches the session's active auth mode to B2B (`x-custom-token`).\n\nAuth: requires a `b2bToken` to already be configured.\nSide effects: session state only; no API call.\nIdempotent: yes.\nProvided to reduce auth-mode mistakes for agents that prefer dotted names; behavior is identical to `ethora-auth-use-b2b`." },
         async function () {
             try {
                 return asToolResult(ok(setAuthMode("b2b"), getDefaultMeta("ethora.b2b.auth.use")))
@@ -2358,7 +2357,7 @@ function b2bAliases(server: McpServer) {
     )
     server.registerTool(
         "ethora.b2b.app.create",
-        { description: "Alias for ethora-b2b-app-create", inputSchema: { displayName: z.string().min(1) } },
+        { description: "Dot-namespaced alias for `ethora-b2b-app-create` — create a new Ethora app server-side.\n\nAuth: B2B mode (`ethora.b2b.auth.use` / `ethora-auth-use-b2b` + a configured `b2bToken`).\nSide effects: provisions a new app record owned by the B2B tenant and allocates a fresh `appId`. Not idempotent — each call creates a new app.\nFailure modes: 401/403 if not in B2B mode; 422 on an invalid `displayName`.\nProvided for agents that prefer dotted names. Prefer `ethora-b2b-app-create` in new integrations.", inputSchema: { displayName: z.string().min(1).describe("Human-readable app name shown to users in the app picker and on the public landing page.") } },
         async function ({ displayName }) {
             try {
                 ensureB2BAuthForTool()
@@ -2371,7 +2370,7 @@ function b2bAliases(server: McpServer) {
     )
     server.registerTool(
         "ethora.b2b.bot.enable",
-        { description: "Alias for ethora-b2b-bot-enable", inputSchema: { appId: z.string().optional(), botTrigger: z.string().optional() } },
+        { description: "Dot-namespaced alias for `ethora-b2b-bot-enable` — turn on the AI bot for an app (sets `botStatus: \"on\"`).\n\nAuth: B2B mode (`ethora.b2b.auth.use` / `ethora-auth-use-b2b` + a configured `b2bToken`).\nSide effects: flips the app's bot status to on; the backend then makes a best-effort activation. The bot only responds if a prompt + LLM are configured and the backend has an AI service set up.\nIdempotent: yes — enabling an already-on bot is a no-op.\nFailure modes: 401/403 if not in B2B mode; 404 if `appId` is invalid; 400 if no `appId` is given and none is selected.\nProvided for agents that prefer dotted names. Prefer `ethora-b2b-bot-enable` in new integrations.", inputSchema: { appId: z.string().optional().describe("24-char hex appId whose bot to enable. Optional — defaults to the app set via `ethora-app-select`."), botTrigger: z.string().optional().describe("When the bot responds: `/bot` or `any_message`. Omit to leave the existing trigger unchanged.") } },
         async function ({ appId, botTrigger }) {
             try {
                 ensureB2BAuthForTool()
@@ -2391,7 +2390,7 @@ function b2bAliases(server: McpServer) {
     )
     server.registerTool(
         "ethora.b2b.broadcast.wait",
-        { description: "Alias for ethora-wait-broadcast-job-v2", inputSchema: { jobId: z.string().min(1), timeoutMs: z.number().int().min(1000).max(300000).optional(), intervalMs: z.number().int().min(250).max(10000).optional() } },
+        { description: "Dot-namespaced sibling of `ethora-wait-broadcast-job-v2` — block until a broadcast job reaches a terminal state (`completed` / `failed`) or until a timeout.\n\nAuth: app-token mode (despite the `b2b` in the name, this variant uses app-token auth — `ethora-app-select` + `ethora-auth-use-app`). Use `ethora-wait-broadcast-job-v2` if you need the B2B-with-explicit-appId path.\nSide effects: none server-side — read-only polling. Blocks this MCP call for up to `timeoutMs`.\nIdempotent: yes.\nFailure modes: 401/403 if not in app-token mode; 404 if the `jobId` is unknown.\nReturns: `{ done: true, state, job }` when finished, or `{ done: false, reason: \"timeout\", job }` on timeout.", inputSchema: { jobId: z.string().min(1).describe("Job id returned by `ethora-chats-broadcast-v2`."), timeoutMs: z.number().int().min(1000).max(300000).optional().describe("Maximum time to wait, in milliseconds. Default 60000."), intervalMs: z.number().int().min(250).max(10000).optional().describe("Delay between status checks, in milliseconds. Default 1000.") } },
         async function ({ jobId, timeoutMs, intervalMs }) {
             const meta = getDefaultMeta("ethora.b2b.broadcast.wait")
             try {
@@ -2419,18 +2418,22 @@ function b2bAliases(server: McpServer) {
     server.registerTool(
         "ethora.b2b.app.bootstrap-ai",
         {
-            description: "Alias for ethora-b2b-app-bootstrap-ai",
+            description: "Dot-namespaced alias for `ethora-b2b-app-bootstrap-ai` — one-call B2B orchestrator: create an app, index RAG sources, then configure and enable its AI bot.\n\nAuth: B2B mode (`ethora.b2b.auth.use` / `ethora-auth-use-b2b` + a configured `b2bToken`).\nSide effects: runs multiple real operations in sequence (app create, source ingest, bot configure/enable); source ingestion and bot activation are best-effort, so the app is still created even if a later step fails. Not idempotent — each call creates a new app.\nFailure modes: aborts with the partial step log if app creation fails; previous auth mode restored best-effort on error.\nReturns: a per-step result log including the new `appId`. Provided for agents that prefer dotted names; behavior matches `ethora-b2b-app-bootstrap-ai`.",
             inputSchema: {
-                displayName: z.string().min(1),
-                setAsCurrent: z.boolean().optional(),
-                crawlUrl: z.string().optional(),
-                followLink: z.boolean().optional(),
-                docs: z.array(z.object({ name: z.string().min(1), mimeType: z.string().min(1), base64: z.string().min(1) })).optional(),
-                enableBot: z.boolean().optional(),
-                botTrigger: z.string().optional(),
-                llmProvider: z.string().optional(),
-                llmModel: z.string().optional(),
-                savedAgentId: z.string().optional(),
+                displayName: z.string().min(1).describe("Display name for the new app."),
+                setAsCurrent: z.boolean().optional().describe("If true (default), set the new app as the session's current app and switch to app-token auth."),
+                crawlUrl: z.string().optional().describe("Optional website URL to crawl and index into the new app's RAG sources."),
+                followLink: z.boolean().optional().describe("For `crawlUrl`: also follow in-domain links (default true). Can ingest many pages."),
+                docs: z.array(z.object({
+                    name: z.string().min(1).describe("Document file name including extension."),
+                    mimeType: z.string().min(1).describe("MIME type, e.g. `application/pdf`."),
+                    base64: z.string().min(1).describe("Document content, base64-encoded."),
+                })).optional().describe("Optional documents to ingest into the new app's RAG sources."),
+                enableBot: z.boolean().optional().describe("If true, set the new app's bot to `status: on` (best-effort AI service activation)."),
+                botTrigger: z.string().optional().describe("Bot trigger: `/bot` or `any_message`."),
+                llmProvider: z.string().optional().describe("LLM provider for the bot, e.g. `openai` or `openai-compatible`. Must be enabled in your Ethora backend."),
+                llmModel: z.string().optional().describe("LLM model id for the bot, e.g. `gpt-4o-mini`. Must be available for the chosen provider."),
+                savedAgentId: z.string().optional().describe("Optional id of an existing saved agent to bind as the new app's active bot."),
             },
         },
         async function (args) {
@@ -2451,22 +2454,22 @@ function b2bAppBootstrapAiTool(server: McpServer) {
     server.registerTool(
         "ethora-b2b-app-bootstrap-ai",
         {
-            description: "One-call B2B flow: create app → set context → index sources → configure/enable bot, including runtime LLM selection.",
+            description: "One-call B2B orchestrator: create an app, set it as the current context, index RAG sources, then configure and enable its AI bot.\n\nAuth: B2B mode (`ethora-auth-use-b2b` + a configured `b2bToken`). Internally switches into app-token mode for the source-ingest steps and (if `setAsCurrent`) leaves the session pointed at the new app.\nSide effects: runs multiple real operations in sequence — `appCreate` (B2B), set current app, `/v2/sources/*` ingest (app-token), bot configure/enable. Source ingestion and bot activation are **best-effort**: the app is still created even if a later step fails. The crawl/embedding work continues asynchronously after this returns.\nIdempotent: no — each call creates a brand-new app.\nFailure modes: aborts and returns the partial step log if app creation fails; on a later-step failure the previous auth mode is restored best-effort. Bot activation needs an AI service configured on your Ethora backend.\nReturns: a per-step result log including the new `appId`. For the rooms+tokens variant use `ethora-b2b-app-provision`; for full manual control wire `ethora-b2b-app-create` + `ethora-sources-*-v2` + `ethora-bot-update-v2` yourself.",
             inputSchema: {
-                displayName: z.string().min(1).describe("New app display name"),
-                setAsCurrent: z.boolean().optional().describe("If true (default), sets current app context + app-token auth"),
-                crawlUrl: z.string().optional().describe("Optional website URL to crawl/index"),
-                followLink: z.boolean().optional().describe("For crawlUrl: follow links (default true)"),
+                displayName: z.string().min(1).describe("Display name for the new app."),
+                setAsCurrent: z.boolean().optional().describe("If true (default), set the new app as the session's current app and switch to app-token auth so follow-up tools can omit appId."),
+                crawlUrl: z.string().optional().describe("Optional website URL to crawl and index into the new app's RAG sources."),
+                followLink: z.boolean().optional().describe("For `crawlUrl`: also follow in-domain links (default true). Can ingest many pages."),
                 docs: z.array(z.object({
-                    name: z.string().min(1),
-                    mimeType: z.string().min(1),
-                    base64: z.string().min(1),
-                })).optional().describe("Optional docs to ingest (base64)"),
-                savedAgentId: z.string().optional().describe("Optional saved agent to bind as the active bot for the new app."),
-                enableBot: z.boolean().optional().describe("If true, enables botStatus=on (best-effort AI service activation)"),
-                botTrigger: z.string().optional().describe("Optional bot trigger (e.g. '/bot' or 'any_message')"),
-                llmProvider: z.string().optional().describe("Optional generation provider for the default AI bot (example: 'openai' or 'openai-compatible')."),
-                llmModel: z.string().optional().describe("Optional generation model for the default AI bot (example: 'gpt-4o-mini')."),
+                    name: z.string().min(1).describe("Document file name including extension."),
+                    mimeType: z.string().min(1).describe("MIME type, e.g. `application/pdf`."),
+                    base64: z.string().min(1).describe("Document content, base64-encoded."),
+                })).optional().describe("Optional documents to ingest into the new app's RAG sources."),
+                savedAgentId: z.string().optional().describe("Optional id of an existing saved agent to bind as the new app's active bot, instead of configuring prompt/LLM by hand."),
+                enableBot: z.boolean().optional().describe("If true, set the new app's bot to `status: on` (best-effort AI service activation)."),
+                botTrigger: z.string().optional().describe("Bot trigger: `/bot` (only /bot-prefixed messages) or `any_message` (every message)."),
+                llmProvider: z.string().optional().describe("LLM provider for the bot, e.g. `openai` or `openai-compatible`. Must be enabled in your Ethora backend."),
+                llmModel: z.string().optional().describe("LLM model id for the bot, e.g. `gpt-4o-mini`. Must be available for the chosen provider."),
             },
         },
         async function ({ displayName, setAsCurrent, crawlUrl, followLink, docs, enableBot, botTrigger, llmProvider, llmModel, savedAgentId }) {
@@ -2488,11 +2491,11 @@ function generateChatComponentAppTsxTool(server: McpServer) {
     server.registerTool(
         "ethora-generate-chat-component-app-tsx",
         {
-            description: "Generate a ready-to-paste React App.tsx snippet for @ethora/chat-component (no file writes).",
+            description: "Generate a ready-to-paste React `App.tsx` snippet that mounts `@ethora/chat-component`.\n\nAuth: none required — this is a pure code generator, makes no API calls.\nSide effects: none — returns the snippet as text; **does not write any file**.\nIdempotent: yes — same inputs produce the same snippet.\nFailure modes: effectively none.\nReturns: `{ filename: \"App.tsx\", snippet }`. Any values you don't pass are emitted as clearly-marked placeholders. Security note: the snippet includes `appToken` inline only as a quickstart convenience — do not ship hardcoded tokens to production; have your backend issue short-lived credentials instead.",
             inputSchema: {
-                apiUrl: z.string().optional().describe("Ethora API base URL (example: https://api.ethoradev.com/v1)"),
-                appToken: z.string().optional().describe("Ethora appToken (JWT ...) - DO NOT hardcode in production apps"),
-                roomJid: z.string().optional().describe("Optional room JID to open directly"),
+                apiUrl: z.string().optional().describe("Ethora API base URL to embed in the snippet, e.g. `https://api.chat.ethora.com/v1`. Omit to emit a placeholder."),
+                appToken: z.string().optional().describe("appToken to embed in the snippet for quickstart testing. Omit to emit a placeholder. Do NOT hardcode real tokens in production source."),
+                roomJid: z.string().optional().describe("Room JID to open on load. Omit to emit a commented-out placeholder."),
             },
         },
         async function ({ apiUrl, appToken, roomJid }) {
@@ -2529,9 +2532,9 @@ function generateEnvExamplesTool(server: McpServer) {
     server.registerTool(
         "ethora-generate-env-examples",
         {
-            description: "Generate .env.example templates for frontend, backend SDK integration, and MCP usage (no file writes).",
+            description: "Generate `.env.example` templates for the three common Ethora integration targets: the frontend chat component, the backend SDK, and this MCP server.\n\nAuth: none required — pure text generator, makes no API calls.\nSide effects: none — returns templates as text; **does not write any file**.\nIdempotent: yes.\nFailure modes: effectively none.\nReturns: a single `{ target, template }` when `target` is given, or `{ templates }` with all three when omitted. Templates contain placeholder values and inline security notes only — never real credentials.",
             inputSchema: {
-                target: z.enum(["frontend-chat-component", "backend-sdk", "mcp"]).optional(),
+                target: z.enum(["frontend-chat-component", "backend-sdk", "mcp"]).optional().describe("Which template to return: `frontend-chat-component` (Vite env), `backend-sdk` (@ethora/sdk-backend env), or `mcp` (this server's env). Omit to return all three."),
             },
         },
         async function ({ target }) {
@@ -2585,11 +2588,11 @@ function generateB2BBootstrapRunbookTool(server: McpServer) {
     server.registerTool(
         "ethora-generate-b2b-bootstrap-runbook",
         {
-            description: "Generate a minimal runbook (script-like steps) that calls MCP tools in the right order for B2B bootstrap.",
+            description: "Generate a human-readable runbook listing this server's tool calls in the right order for a B2B bootstrap, with example payloads.\n\nAuth: none required — pure text generator, makes no API calls and runs nothing.\nSide effects: none — returns the runbook as text; **does not write any file or execute any step**.\nIdempotent: yes.\nFailure modes: effectively none.\nReturns: the runbook text with your supplied values substituted into the example payloads. This is documentation only — to actually run the sequence use `ethora-run-recipe`, or the one-call orchestrators `ethora-b2b-app-bootstrap-ai` / `ethora-b2b-app-provision`.",
             inputSchema: {
-                apiUrl: z.string().optional(),
-                displayName: z.string().optional(),
-                crawlUrl: z.string().optional(),
+                apiUrl: z.string().optional().describe("Ethora API base URL to show in the runbook's configure step. Omit to emit a placeholder."),
+                displayName: z.string().optional().describe("App display name to show in the runbook's create-app step. Omit to emit a placeholder."),
+                crawlUrl: z.string().optional().describe("Website URL to show in the runbook's source-ingest step. Omit to emit a placeholder."),
             },
         },
         async function ({ apiUrl, displayName, crawlUrl }) {
@@ -2639,11 +2642,11 @@ function sourcesSiteCrawlV2AppTool(server: McpServer) {
     server.registerTool(
         "ethora-sources-site-crawl-v2",
         {
-            description: "Crawl a site URL using app-token auth or B2B auth with explicit appId.",
+            description: "Crawl a website URL and ingest its content into an app's RAG sources (app-token / B2B variant of `ethora-sources-site-crawl`).\n\nAuth: app-token mode (after `ethora-app-select` + `ethora-auth-use-app`) OR B2B mode with an explicit `appId`.\nSide effects: starts a crawl + embedding job; pages become queryable RAG context once indexing finishes (not synchronous — this returns once the job is accepted). With `followLink: true` the crawler also follows in-domain links and can ingest many pages.\nIdempotent: no — re-crawling adds/updates source records.\nFailure modes: 401/403 on missing/wrong auth; 400 if `url` is malformed; 404 if `appId` is invalid.\nRelated: `ethora-sources-site-crawl-v2-wait` (block until done), `ethora-sources-site-list-v2` (see results), `ethora-sources-site-reindex-v2` (refresh), `ethora-sources-site-delete-url-v2` (remove).",
             inputSchema: {
-                appId: z.string().optional().describe("Required in B2B mode unless already selected via ethora-app-select."),
-                url: z.string().min(1),
-                followLink: z.boolean().optional(),
+                appId: z.string().optional().describe("24-char hex appId to ingest into. Required in B2B mode unless already set via `ethora-app-select`; ignored in app-token mode."),
+                url: z.string().min(1).describe("Absolute URL to crawl, e.g. `https://example.com/docs`."),
+                followLink: z.boolean().optional().describe("If true, also crawl in-domain links reachable from `url`. Can ingest many pages — use with care."),
             },
         },
         async function ({ appId, url, followLink }) {
@@ -2664,10 +2667,10 @@ function sourcesSiteReindexV2AppTool(server: McpServer) {
     server.registerTool(
         "ethora-sources-site-reindex-v2",
         {
-            description: "Reindex a crawled URL by urlId using app-token auth or B2B auth with explicit appId.",
+            description: "Re-crawl and re-embed a previously crawled URL by its `urlId`, refreshing its RAG content (app-token / B2B variant of `ethora-sources-site-reindex`).\n\nAuth: app-token mode (after `ethora-app-select` + `ethora-auth-use-app`) OR B2B mode with an explicit `appId`.\nSide effects: starts a refresh job; the existing source record is updated in place once indexing finishes (not synchronous).\nIdempotent: effectively yes — re-running just refreshes again.\nFailure modes: 401/403 on missing/wrong auth; 404 if `appId` or `urlId` is unknown.\nGet `urlId` values from `ethora-sources-site-list-v2`. Use `ethora-sources-site-reindex-v2-wait` to block until done.",
             inputSchema: {
-                appId: z.string().optional().describe("Required in B2B mode unless already selected via ethora-app-select."),
-                urlId: z.string().min(1),
+                appId: z.string().optional().describe("24-char hex appId the URL belongs to. Required in B2B mode unless already set via `ethora-app-select`; ignored in app-token mode."),
+                urlId: z.string().min(1).describe("Id of a previously crawled URL record. Get it from `ethora-sources-site-list-v2`."),
             },
         },
         async function ({ appId, urlId }) {
@@ -2688,12 +2691,12 @@ function sourcesSiteCrawlV2WaitTool(server: McpServer) {
     server.registerTool(
         "ethora-sources-site-crawl-v2-wait",
         {
-            description: "Wait for site crawl to finish using app-token auth or B2B auth with explicit appId.",
+            description: "Crawl a website URL and block until the server finishes the request — a single-call, long-timeout variant of `ethora-sources-site-crawl-v2`.\n\nAuth: app-token mode (after `ethora-app-select` + `ethora-auth-use-app`) OR B2B mode with an explicit `appId`.\nSide effects: same as `ethora-sources-site-crawl-v2` (crawl + embed into RAG sources), but this MCP call blocks for up to `timeoutMs` waiting for the server's response instead of returning as soon as the job is accepted.\nIdempotent: no — re-crawling adds/updates source records.\nFailure modes: 401/403 on missing/wrong auth; 400 if `url` is malformed; 504/timeout if the crawl takes longer than `timeoutMs` (the job may still complete server-side — check with `ethora-sources-site-list-v2`).\nReturns: `{ done: true, durationMs, result }`. Use the non-wait `ethora-sources-site-crawl-v2` if you'd rather not block.",
             inputSchema: {
-                appId: z.string().optional().describe("Required in B2B mode unless already selected via ethora-app-select."),
-                url: z.string().min(1),
-                followLink: z.boolean().optional(),
-                timeoutMs: z.number().int().min(1000).max(600000).optional().describe("HTTP timeout for the crawl request (default 120000)"),
+                appId: z.string().optional().describe("24-char hex appId to ingest into. Required in B2B mode unless already set via `ethora-app-select`; ignored in app-token mode."),
+                url: z.string().min(1).describe("Absolute URL to crawl, e.g. `https://example.com/docs`."),
+                followLink: z.boolean().optional().describe("If true, also crawl in-domain links reachable from `url`. Can ingest many pages — use with care."),
+                timeoutMs: z.number().int().min(1000).max(600000).optional().describe("How long to wait for the crawl to finish, in milliseconds. Default 120000. Caps at 600000 (10 min)."),
             },
         },
         async function ({ appId, url, followLink, timeoutMs }) {
@@ -2716,11 +2719,11 @@ function sourcesSiteReindexV2WaitTool(server: McpServer) {
     server.registerTool(
         "ethora-sources-site-reindex-v2-wait",
         {
-            description: "Wait for site reindex to finish using app-token auth or B2B auth with explicit appId.",
+            description: "Re-crawl and re-embed a previously crawled URL and block until the server finishes — a single-call, long-timeout variant of `ethora-sources-site-reindex-v2`.\n\nAuth: app-token mode (after `ethora-app-select` + `ethora-auth-use-app`) OR B2B mode with an explicit `appId`.\nSide effects: same as `ethora-sources-site-reindex-v2` (refresh the source record's RAG content), but this MCP call blocks for up to `timeoutMs`.\nIdempotent: effectively yes.\nFailure modes: 401/403 on missing/wrong auth; 404 if `appId` or `urlId` is unknown; 504/timeout if it takes longer than `timeoutMs` (the job may still complete server-side).\nReturns: `{ done: true, durationMs, result }`. Get `urlId` values from `ethora-sources-site-list-v2`.",
             inputSchema: {
-                appId: z.string().optional().describe("Required in B2B mode unless already selected via ethora-app-select."),
-                urlId: z.string().min(1),
-                timeoutMs: z.number().int().min(1000).max(600000).optional().describe("HTTP timeout for the reindex request (default 120000)"),
+                appId: z.string().optional().describe("24-char hex appId the URL belongs to. Required in B2B mode unless already set via `ethora-app-select`; ignored in app-token mode."),
+                urlId: z.string().min(1).describe("Id of a previously crawled URL record. Get it from `ethora-sources-site-list-v2`."),
+                timeoutMs: z.number().int().min(1000).max(600000).optional().describe("How long to wait for the reindex to finish, in milliseconds. Default 120000. Caps at 600000 (10 min)."),
             },
         },
         async function ({ appId, urlId, timeoutMs }) {
@@ -2743,9 +2746,9 @@ function sourcesSiteListV2Tool(server: McpServer) {
     server.registerTool(
         "ethora-sources-site-list-v2",
         {
-            description: "List crawled site sources and their tags using app-token auth or B2B auth with explicit appId.",
+            description: "List an app's crawled website sources, including each source's id, URL, and current RAG tags.\n\nAuth: app-token mode (after `ethora-app-select` + `ethora-auth-use-app`) OR B2B mode with an explicit `appId`.\nSide effects: none — read-only.\nIdempotent: yes.\nFailure modes: 401/403 on missing/wrong auth; 404 if `appId` is invalid; returns an empty list if nothing has been crawled.\nReturns: site source records. Their ids feed `ethora-sources-site-tags-update-v2`, `ethora-sources-site-delete-url-v2-batch`, and `ethora-sources-site-reindex-v2` (`urlId`).",
             inputSchema: {
-                appId: z.string().optional().describe("Required in B2B mode unless already selected via ethora-app-select."),
+                appId: z.string().optional().describe("24-char hex appId to list sources for. Required in B2B mode unless already set via `ethora-app-select`; ignored in app-token mode."),
             },
         },
         async function ({ appId }) {
@@ -2767,11 +2770,11 @@ function sourcesSiteTagsUpdateV2Tool(server: McpServer) {
     server.registerTool(
         "ethora-sources-site-tags-update-v2",
         {
-            description: "Set tags for a crawled site source using app-token auth or B2B auth with explicit appId.",
+            description: "Set the RAG retrieval tags on a crawled website source. Tags let the bot's `ragTags` setting narrow which sources it retrieves from.\n\nAuth: app-token mode (after `ethora-app-select` + `ethora-auth-use-app`) OR B2B mode with an explicit `appId`.\nSide effects: **replaces** the source's tag set with the provided `tags` array (it is not additive — pass the full desired set, or an empty array to clear all tags).\nIdempotent: yes — re-sending the same tags is a no-op.\nFailure modes: 401/403 on missing/wrong auth; 404 if `appId` or `sourceId` is unknown.\nGet `sourceId` values from `ethora-sources-site-list-v2`. The doc equivalent is `ethora-sources-docs-tags-update-v2`.",
             inputSchema: {
-                appId: z.string().optional().describe("Required in B2B mode unless already selected via ethora-app-select."),
-                sourceId: z.string().min(1),
-                tags: z.array(z.string().min(1)).max(50),
+                appId: z.string().optional().describe("24-char hex appId the source belongs to. Required in B2B mode unless already set via `ethora-app-select`; ignored in app-token mode."),
+                sourceId: z.string().min(1).describe("Id of the crawled site source to tag. Get it from `ethora-sources-site-list-v2`."),
+                tags: z.array(z.string().min(1)).max(50).describe("The complete desired tag set for this source (replaces any existing tags). Up to 50 tags; pass `[]` to clear all."),
             },
         },
         async function ({ appId, sourceId, tags }) {
@@ -2793,17 +2796,17 @@ function usersBatchCreateV2Tool(server: McpServer) {
     server.registerTool(
         "ethora-users-batch-create-v2",
         {
-            description: "Create an async v2 users batch job (B2B auth). Returns { jobId, statusUrl } with HTTP 202.",
+            description: "Provision many Ethora users in one asynchronous batch job — the bulk equivalent of `ethora-user-register`.\n\nAuth: B2B mode (`ethora-auth-use-b2b` + a configured `b2bToken`).\nSide effects: enqueues a background job (server responds HTTP 202) — users are **not** created synchronously. Each user is created under the B2B tenant's app. With `bypassEmailConfirmation: true` users are usable immediately; otherwise each receives a verification email.\nIdempotent: no — re-running re-attempts creation; the job itself reports per-user conflicts (already-registered emails) rather than failing the whole batch.\nFailure modes: 401/403 if not in B2B mode; 422 if the `usersList` fails validation. Per-call limit: 1–100 users.\nReturns: `{ jobId, statusUrl }`. Track it with `ethora-users-batch-job-v2` (one-shot) or `ethora-wait-users-batch-job-v2` (poll to completion).",
             inputSchema: {
-                bypassEmailConfirmation: z.boolean().optional(),
+                bypassEmailConfirmation: z.boolean().optional().describe("If true, created users skip email verification and are immediately usable. If false/omitted, each user receives a verification link."),
                 usersList: z.array(z.object({
-                    email: z.string().email(),
-                    firstName: z.string().min(1),
-                    lastName: z.string().min(1),
-                    password: z.string().min(1).optional(),
-                    uuid: z.string().min(1).optional(),
-                })).min(1).max(100),
-                timeoutMs: z.number().int().min(1000).max(600000).optional().describe("HTTP timeout for job creation request (default 30000)"),
+                    email: z.string().email().describe("User's email address. Must be RFC-5322 valid."),
+                    firstName: z.string().min(1).describe("User's first name, shown in their profile."),
+                    lastName: z.string().min(1).describe("User's last name, shown in their profile."),
+                    password: z.string().min(1).optional().describe("Optional initial password. If omitted, the server generates one / relies on the verification flow."),
+                    uuid: z.string().min(1).optional().describe("Optional caller-supplied id to correlate this user with your own system in the job results."),
+                })).min(1).max(100).describe("The users to create, 1–100 per batch."),
+                timeoutMs: z.number().int().min(1000).max(600000).optional().describe("HTTP timeout for the job-creation request (not the job itself), in milliseconds. Default 30000."),
             },
         },
         async function ({ bypassEmailConfirmation, usersList, timeoutMs }) {
@@ -2823,10 +2826,10 @@ function usersBatchCreateJobV2Tool(server: McpServer) {
     server.registerTool(
         "ethora-users-batch-job-v2",
         {
-            description: "Get status/results for a v2 users batch job (B2B auth).",
+            description: "Fetch the current status and per-user results of a users batch job by `jobId` (one-shot, no polling).\n\nAuth: B2B mode (`ethora-auth-use-b2b` + a configured `b2bToken`) — must match the auth used to create the job.\nSide effects: none — read-only.\nIdempotent: yes.\nFailure modes: 401/403 if not in B2B mode; 404 if the `jobId` is unknown.\nReturns: the job object including its `state` (`pending` / `running` / `completed` / `failed`) and per-user outcomes (created / conflict / error). For a blocking wait-until-done, use `ethora-wait-users-batch-job-v2`.",
             inputSchema: {
-                jobId: z.string().min(1),
-                timeoutMs: z.number().int().min(500).max(60000).optional().describe("HTTP timeout (default 10000)"),
+                jobId: z.string().min(1).describe("Job id returned by `ethora-users-batch-create-v2`."),
+                timeoutMs: z.number().int().min(500).max(60000).optional().describe("HTTP timeout for this status request, in milliseconds. Default 10000."),
             },
         },
         async function ({ jobId, timeoutMs }) {
@@ -2846,11 +2849,11 @@ function waitUsersBatchCreateJobV2Tool(server: McpServer) {
     server.registerTool(
         "ethora-wait-users-batch-job-v2",
         {
-            description: "Poll v2 users batch job until completed/failed (B2B auth).",
+            description: "Block until a users batch job reaches a terminal state (`completed` or `failed`), or until a timeout — a convenience wrapper around repeated `ethora-users-batch-job-v2` calls.\n\nAuth: B2B mode (`ethora-auth-use-b2b` + a configured `b2bToken`) — must match the auth used to create the job.\nSide effects: none server-side — read-only polling. Blocks this MCP call for up to `timeoutMs`.\nIdempotent: yes.\nFailure modes: 401/403 if not in B2B mode; 404 if the `jobId` is unknown.\nReturns: `{ done: true, state, job }` when finished, or `{ done: false, reason: \"timeout\", job }` if `timeoutMs` elapsed first (the job may still finish later — re-check with `ethora-users-batch-job-v2`).",
             inputSchema: {
-                jobId: z.string().min(1),
-                timeoutMs: z.number().int().min(1000).max(300000).optional().describe("Max wait time (default 60000)"),
-                intervalMs: z.number().int().min(250).max(10000).optional().describe("Poll interval (default 1000)"),
+                jobId: z.string().min(1).describe("Job id returned by `ethora-users-batch-create-v2`."),
+                timeoutMs: z.number().int().min(1000).max(300000).optional().describe("Maximum time to wait, in milliseconds. Default 60000. Caps at 300000 (5 min)."),
+                intervalMs: z.number().int().min(250).max(10000).optional().describe("Delay between status checks, in milliseconds. Default 1000."),
             },
         },
         async function ({ jobId, timeoutMs, intervalMs }) {
@@ -2882,10 +2885,10 @@ function appTokensListV2Tool(server: McpServer) {
     server.registerTool(
         "ethora-app-tokens-list-v2",
         {
-            description: "List app tokens (metadata only) for an appId (B2B auth).",
+            description: "List the app tokens issued for an app — **metadata only**, the secret token values are never returned.\n\nAuth: B2B mode (`ethora-auth-use-b2b` + a configured `b2bToken`).\nSide effects: none — read-only.\nIdempotent: yes.\nFailure modes: 401/403 if not in B2B mode; 400 if no `appId` is given and none is selected; 404 if `appId` is invalid.\nReturns: token records with `tokenId`, label, created/rotated timestamps, and status. The actual token strings are only ever shown once, at create/rotate time (`ethora-app-tokens-create-v2`, `ethora-app-tokens-rotate-v2`).",
             inputSchema: {
-                appId: z.string().optional().describe("Defaults to current app if selected"),
-                timeoutMs: z.number().int().min(500).max(60000).optional(),
+                appId: z.string().optional().describe("24-char hex appId to list tokens for. Optional — defaults to the app set via `ethora-app-select`."),
+                timeoutMs: z.number().int().min(500).max(60000).optional().describe("HTTP timeout for this request, in milliseconds. Default 10000."),
             },
         },
         async function ({ appId, timeoutMs }) {
@@ -2907,11 +2910,11 @@ function appTokensCreateV2Tool(server: McpServer) {
     server.registerTool(
         "ethora-app-tokens-create-v2",
         {
-            description: "Create a new app token (returned once). Requires B2B auth.",
+            description: "Mint a new app token for an app.\n\nAuth: B2B mode (`ethora-auth-use-b2b` + a configured `b2bToken`).\nSide effects: creates a new app token server-side. **The secret token value is returned exactly once in this response and cannot be retrieved again** — capture it immediately (e.g. store it, or pass it to `ethora-app-select`).\nIdempotent: no — each call mints a distinct token.\nFailure modes: 401/403 if not in B2B mode; 400 if no `appId` is given and none is selected; 404 if `appId` is invalid.\nReturns: the new token including its one-time secret value and its `tokenId`. Manage it later with `ethora-app-tokens-list-v2`, `ethora-app-tokens-rotate-v2`, `ethora-app-tokens-revoke-v2`.",
             inputSchema: {
-                appId: z.string().optional().describe("Defaults to current app if selected"),
-                label: z.string().optional(),
-                timeoutMs: z.number().int().min(500).max(60000).optional(),
+                appId: z.string().optional().describe("24-char hex appId to mint the token for. Optional — defaults to the app set via `ethora-app-select`."),
+                label: z.string().optional().describe("Human-readable label to identify this token later (e.g. `staging`, `ci`). Shown in `ethora-app-tokens-list-v2`."),
+                timeoutMs: z.number().int().min(500).max(60000).optional().describe("HTTP timeout for this request, in milliseconds. Default 10000."),
             },
         },
         async function ({ appId, label, timeoutMs }) {
@@ -2933,12 +2936,12 @@ function appTokensRotateV2Tool(server: McpServer) {
     server.registerTool(
         "ethora-app-tokens-rotate-v2",
         {
-            description: "Rotate an app token: revoke old tokenId and return a new token once (B2B auth).",
+            description: "Rotate an app token: revoke an existing token and issue a replacement in one step.\n\nAuth: B2B mode (`ethora-auth-use-b2b` + a configured `b2bToken`).\nSide effects: the old `tokenId` is revoked **immediately** — anything still using it stops working at once — and a new token is created. **The new secret value is returned exactly once** — capture it immediately.\nIdempotent: no — each call revokes and re-issues.\nFailure modes: 401/403 if not in B2B mode; 404 if `appId` or `tokenId` is unknown; 400 if no `appId` is given and none is selected.\nReturns: the new token including its one-time secret value and `tokenId`. Use `ethora-app-tokens-revoke-v2` if you only want to revoke without a replacement.",
             inputSchema: {
-                appId: z.string().optional().describe("Defaults to current app if selected"),
-                tokenId: z.string().min(1),
-                label: z.string().optional(),
-                timeoutMs: z.number().int().min(500).max(60000).optional(),
+                appId: z.string().optional().describe("24-char hex appId the token belongs to. Optional — defaults to the app set via `ethora-app-select`."),
+                tokenId: z.string().min(1).describe("Id of the token to revoke and replace. Get it from `ethora-app-tokens-list-v2`."),
+                label: z.string().optional().describe("Label for the replacement token. Omit to inherit the old token's label."),
+                timeoutMs: z.number().int().min(500).max(60000).optional().describe("HTTP timeout for this request, in milliseconds. Default 10000."),
             },
         },
         async function ({ appId, tokenId, label, timeoutMs }) {
@@ -2960,11 +2963,11 @@ function appTokensRevokeV2Tool(server: McpServer) {
     server.registerTool(
         "ethora-app-tokens-revoke-v2",
         {
-            description: "Revoke an app token by tokenId (idempotent). Requires B2B auth.",
+            description: "Permanently revoke an app token by `tokenId`.\n\nAuth: B2B mode (`ethora-auth-use-b2b` + a configured `b2bToken`).\nSide effects: the token stops working **immediately** — any client, SDK, or MCP session still using it will start getting auth failures. No replacement is issued (use `ethora-app-tokens-rotate-v2` for revoke-and-replace).\nIdempotent: yes — revoking an already-revoked token succeeds as a no-op.\nFailure modes: 401/403 if not in B2B mode; 404 if `appId` is unknown; 400 if no `appId` is given and none is selected.\nGet `tokenId` values from `ethora-app-tokens-list-v2`.",
             inputSchema: {
-                appId: z.string().optional().describe("Defaults to current app if selected"),
-                tokenId: z.string().min(1),
-                timeoutMs: z.number().int().min(500).max(60000).optional(),
+                appId: z.string().optional().describe("24-char hex appId the token belongs to. Optional — defaults to the app set via `ethora-app-select`."),
+                tokenId: z.string().min(1).describe("Id of the token to revoke. Get it from `ethora-app-tokens-list-v2`."),
+                timeoutMs: z.number().int().min(500).max(60000).optional().describe("HTTP timeout for this request, in milliseconds. Default 10000."),
             },
         },
         async function ({ appId, tokenId, timeoutMs }) {
@@ -2986,24 +2989,21 @@ function b2bAppProvisionTool(server: McpServer) {
     server.registerTool(
         "ethora-b2b-app-provision",
         {
-            description: "One-call B2B flow: create app → create one or more app tokens → provision default rooms → configure/enable bot, including runtime LLM selection.",
+            description: "One-call B2B orchestrator: create an app, mint one or more app tokens, provision default chat rooms, then configure and enable its AI bot.\n\nAuth: B2B mode (`ethora-auth-use-b2b` + a configured `b2bToken`). Internally uses the first minted app token for the bot/room steps.\nSide effects: runs several real operations in sequence — `appCreate` (B2B), `app-tokens-create` (×N), room creation (×N), bot configure/enable. Returns a per-step log; later-step failures don't undo earlier steps (the app and any tokens already exist).\nIdempotent: no — each call creates a new app, new tokens, and new rooms.\nFailure modes: aborts with the partial step log if app creation fails; the previous auth mode is restored best-effort on error.\nReturns: a per-step result log including `appId` and the created tokens (tokens are returned **once** — capture them). Sibling orchestrator `ethora-b2b-app-bootstrap-ai` does sources+bot but not tokens/rooms.",
             inputSchema: {
-                displayName: z.string().min(1).describe("New app display name"),
-                // tokens
-                tokenLabels: z.array(z.string().min(1)).min(1).max(5).optional().describe("Optional labels for new tokens. Default: ['default']"),
-                // rooms
+                displayName: z.string().min(1).describe("Display name for the new app."),
+                tokenLabels: z.array(z.string().min(1)).min(1).max(5).optional().describe("Labels for the app tokens to mint, one token per label. Default: ['default']. 1–5 tokens."),
                 rooms: z.array(z.object({
-                    title: z.string().min(1),
-                    pinned: z.boolean().optional(),
-                })).max(20).optional().describe("Optional default rooms to create (B2B)."),
-                // bot
-                enableBot: z.boolean().optional().describe("If true, enables bot (app-token auth using first created token)."),
-                savedAgentId: z.string().optional().describe("Optional saved agent to bind as the active bot for the new app."),
-                botTrigger: z.enum(["any_message", "/bot"]).optional(),
-                botPrompt: z.string().optional(),
-                botGreetingMessage: z.string().optional(),
-                llmProvider: z.string().optional().describe("Optional generation provider for the default AI bot."),
-                llmModel: z.string().optional().describe("Optional generation model for the default AI bot."),
+                    title: z.string().min(1).describe("Display name of the room."),
+                    pinned: z.boolean().optional().describe("If true, add the room to the app's default rooms (new users auto-join)."),
+                })).max(20).optional().describe("Default chat rooms to create in the new app. Up to 20."),
+                enableBot: z.boolean().optional().describe("If true, enable the new app's bot using the first minted app token."),
+                savedAgentId: z.string().optional().describe("Optional id of an existing saved agent to bind as the new app's active bot, instead of setting prompt fields by hand."),
+                botTrigger: z.enum(["any_message", "/bot"]).optional().describe("Bot trigger: `any_message` (every message) or `/bot` (only /bot-prefixed messages)."),
+                botPrompt: z.string().optional().describe("System prompt for the new app's bot."),
+                botGreetingMessage: z.string().optional().describe("Greeting message the bot posts when a conversation starts."),
+                llmProvider: z.string().optional().describe("LLM provider for the bot, e.g. `openai` or `openai-compatible`. Must be enabled in your Ethora backend."),
+                llmModel: z.string().optional().describe("LLM model id for the bot, e.g. `gpt-4o-mini`. Must be available for the chosen provider."),
             },
         },
         async function ({ displayName, tokenLabels, rooms, enableBot, savedAgentId, botTrigger, botPrompt, botGreetingMessage, llmProvider, llmModel }) {
@@ -3086,10 +3086,10 @@ function sourcesSiteDeleteUrlV2AppTool(server: McpServer) {
     server.registerTool(
         "ethora-sources-site-delete-url-v2",
         {
-            description: "Delete one crawled site URL using app-token auth or B2B auth with explicit appId.",
+            description: "Remove a single crawled URL from an app's RAG sources, matched by its exact url string (app-token / B2B variant of `ethora-sources-site-delete-url`).\n\nAuth: app-token mode (after `ethora-app-select` + `ethora-auth-use-app`) OR B2B mode with an explicit `appId`.\nSide effects: deletes the source record and its embeddings; the bot can no longer answer from that page. Not reversible (re-add via `ethora-sources-site-crawl-v2`).\nIdempotent: yes — deleting an already-removed URL is a no-op / 404.\nFailure modes: 401/403 on missing/wrong auth; 404 if the exact `url` isn't a crawled source.\nMatches on the exact URL string — get the stored value from `ethora-sources-site-list-v2`. To delete several by id use `ethora-sources-site-delete-url-v2-batch`.",
             inputSchema: {
-                appId: z.string().optional().describe("Required in B2B mode unless already selected via ethora-app-select."),
-                url: z.string().min(1),
+                appId: z.string().optional().describe("24-char hex appId the URL belongs to. Required in B2B mode unless already set via `ethora-app-select`; ignored in app-token mode."),
+                url: z.string().min(1).describe("Exact crawled URL string to remove (must match what was stored — get it from `ethora-sources-site-list-v2`)."),
             },
         },
         async function ({ appId, url }) {
@@ -3110,10 +3110,10 @@ function sourcesSiteDeleteUrlV2BatchAppTool(server: McpServer) {
     server.registerTool(
         "ethora-sources-site-delete-url-v2-batch",
         {
-            description: "Batch delete crawled source records by id using app-token auth or B2B auth with explicit appId.",
+            description: "Bulk-remove crawled website sources from an app in one call, matched by their source record ids.\n\nAuth: app-token mode (after `ethora-app-select` + `ethora-auth-use-app`) OR B2B mode with an explicit `appId`.\nSide effects: deletes each matching source record and its embeddings. Not reversible.\nIdempotent: yes — ids not present are skipped.\nFailure modes: 401/403 on missing/wrong auth; 404 if `appId` is invalid. Per-call limit: 1–100 ids.\nNote: this variant matches on **source ids** (not URL strings) — get them from `ethora-sources-site-list-v2`. For single-URL deletion by url string use `ethora-sources-site-delete-url-v2`.",
             inputSchema: {
-                appId: z.string().optional().describe("Required in B2B mode unless already selected via ethora-app-select."),
-                ids: z.array(z.string().min(1)).min(1).max(100).describe("Array of SiteSource ids returned by ethora-sources-site-list-v2."),
+                appId: z.string().optional().describe("24-char hex appId the sources belong to. Required in B2B mode unless already set via `ethora-app-select`; ignored in app-token mode."),
+                ids: z.array(z.string().min(1)).min(1).max(100).describe("Site source record ids to delete, 1–100 per call. Get them from `ethora-sources-site-list-v2`."),
             },
         },
         async function ({ appId, ids }) {
@@ -3134,14 +3134,14 @@ function sourcesDocsUploadV2AppTool(server: McpServer) {
     server.registerTool(
         "ethora-sources-docs-upload-v2",
         {
-            description: "Upload docs for ingestion using app-token auth or B2B auth with explicit appId. Input is base64.",
+            description: "Upload documents (PDF, text, etc.) into an app's RAG sources (app-token / B2B variant of `ethora-sources-docs-upload`).\n\nAuth: app-token mode (after `ethora-app-select` + `ethora-auth-use-app`) OR B2B mode with an explicit `appId`.\nSide effects: stores each document and starts a parse + embedding job; content becomes queryable RAG context once indexing finishes (not synchronous).\nIdempotent: no — re-uploading the same document creates another source record.\nInput design: files are base64 so the MCP server never reads your local filesystem. Client-side guardrail rejects any single file over 50MB; the server enforces its own limits too.\nFailure modes: 401/403 on missing/wrong auth; 404 if `appId` is invalid; 413 if too large; 422 on an unsupported document type. Per-call limit: 1–5 files.\nRelated: `ethora-sources-docs-list-v2` (see results), `ethora-sources-docs-delete-v2` (remove), `ethora-sources-docs-tags-update-v2` (tag).",
             inputSchema: {
-                appId: z.string().optional().describe("Required in B2B mode unless already selected via ethora-app-select."),
+                appId: z.string().optional().describe("24-char hex appId to ingest into. Required in B2B mode unless already set via `ethora-app-select`; ignored in app-token mode."),
                 files: z.array(z.object({
-                    name: z.string().min(1),
-                    mimeType: z.string().min(1),
-                    base64: z.string().min(1),
-                })).min(1).max(5),
+                    name: z.string().min(1).describe("Document file name including extension, e.g. `handbook.pdf`."),
+                    mimeType: z.string().min(1).describe("MIME type, e.g. `application/pdf`, `text/plain`, `text/markdown`."),
+                    base64: z.string().min(1).describe("Document content, base64-encoded. A `data:...;base64,` prefix is accepted. Max 50MB decoded per file."),
+                })).min(1).max(5).describe("1 to 5 documents to ingest in this call."),
             },
         },
         async function ({ appId, files }) {
@@ -3171,10 +3171,10 @@ function sourcesDocsDeleteV2AppTool(server: McpServer) {
     server.registerTool(
         "ethora-sources-docs-delete-v2",
         {
-            description: "Delete an ingested doc by docId using app-token auth or B2B auth with explicit appId.",
+            description: "Remove a previously ingested document from an app's RAG sources by `docId` (app-token / B2B variant of `ethora-sources-docs-delete`).\n\nAuth: app-token mode (after `ethora-app-select` + `ethora-auth-use-app`) OR B2B mode with an explicit `appId`.\nSide effects: deletes the document record and its embeddings; the bot can no longer answer from it. Not reversible (re-add via `ethora-sources-docs-upload-v2`).\nIdempotent: yes after success — a second call returns 404.\nFailure modes: 401/403 on missing/wrong auth; 404 if `appId` or `docId` is unknown.\nGet `docId` values from `ethora-sources-docs-list-v2`.",
             inputSchema: {
-                appId: z.string().optional().describe("Required in B2B mode unless already selected via ethora-app-select."),
-                docId: z.string().min(1),
+                appId: z.string().optional().describe("24-char hex appId the document belongs to. Required in B2B mode unless already set via `ethora-app-select`; ignored in app-token mode."),
+                docId: z.string().min(1).describe("Id of the ingested document to delete. Get it from `ethora-sources-docs-list-v2`."),
             },
         },
         async function ({ appId, docId }) {
@@ -3195,9 +3195,9 @@ function sourcesDocsListV2Tool(server: McpServer) {
     server.registerTool(
         "ethora-sources-docs-list-v2",
         {
-            description: "List ingested documents and their tags using app-token auth or B2B auth with explicit appId.",
+            description: "List an app's ingested documents, including each document's id, name, and current RAG tags.\n\nAuth: app-token mode (after `ethora-app-select` + `ethora-auth-use-app`) OR B2B mode with an explicit `appId`.\nSide effects: none — read-only.\nIdempotent: yes.\nFailure modes: 401/403 on missing/wrong auth; 404 if `appId` is invalid; returns an empty list if nothing has been uploaded.\nReturns: document records. Their ids feed `ethora-sources-docs-tags-update-v2` and `ethora-sources-docs-delete-v2`. The website-sources equivalent is `ethora-sources-site-list-v2`.",
             inputSchema: {
-                appId: z.string().optional().describe("Required in B2B mode unless already selected via ethora-app-select."),
+                appId: z.string().optional().describe("24-char hex appId to list documents for. Required in B2B mode unless already set via `ethora-app-select`; ignored in app-token mode."),
             },
         },
         async function ({ appId }) {
@@ -3219,11 +3219,11 @@ function sourcesDocsTagsUpdateV2Tool(server: McpServer) {
     server.registerTool(
         "ethora-sources-docs-tags-update-v2",
         {
-            description: "Set tags for an ingested document using app-token auth or B2B auth with explicit appId.",
+            description: "Set the RAG retrieval tags on an ingested document. Tags let the bot's `ragTags` setting narrow which sources it retrieves from.\n\nAuth: app-token mode (after `ethora-app-select` + `ethora-auth-use-app`) OR B2B mode with an explicit `appId`.\nSide effects: **replaces** the document's tag set with the provided `tags` array (it is not additive — pass the full desired set, or an empty array to clear all tags).\nIdempotent: yes — re-sending the same tags is a no-op.\nFailure modes: 401/403 on missing/wrong auth; 404 if `appId` or `docId` is unknown.\nGet `docId` values from `ethora-sources-docs-list-v2`. The website-source equivalent is `ethora-sources-site-tags-update-v2`.",
             inputSchema: {
-                appId: z.string().optional().describe("Required in B2B mode unless already selected via ethora-app-select."),
-                docId: z.string().min(1),
-                tags: z.array(z.string().min(1)).max(50),
+                appId: z.string().optional().describe("24-char hex appId the document belongs to. Required in B2B mode unless already set via `ethora-app-select`; ignored in app-token mode."),
+                docId: z.string().min(1).describe("Id of the ingested document to tag. Get it from `ethora-sources-docs-list-v2`."),
+                tags: z.array(z.string().min(1)).max(50).describe("The complete desired tag set for this document (replaces any existing tags). Up to 50 tags; pass `[]` to clear all."),
             },
         },
         async function ({ appId, docId, tags }) {
