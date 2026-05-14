@@ -2,6 +2,10 @@
 
 All notable changes to this package are documented here. For cross-SDK release notes, see [ethora/RELEASE-NOTES.md](https://github.com/dappros/ethora/blob/main/RELEASE-NOTES.md).
 
+## Unreleased
+
+- Add `.plugin/plugin.json` — an [Open Plugin Specification v1.0.0](https://github.com/vercel-labs/open-plugin-spec) manifest declaring the server inline under `mcpServers`. Lets Open-Plugin-aware directories (e.g. cursor.directory's auto-detect) discover the server from the GitHub repo. Repo-only — not shipped in the npm tarball (`files` is `["dist"]`), so no effect on the published package. NB: its `version` field is a fourth version string to keep in sync on release (alongside `package.json`, `server.json`, and `index.ts` serverInfo).
+
 ## 26.5.2
 
 - Reframe the `package.json` and `server.json` descriptions to lead with chat/messaging + AI agents / chatbots and drop the ERC-20 wallet mention, matching Ethora's product positioning. The wallet tools themselves are unchanged. Ships with the next published version.

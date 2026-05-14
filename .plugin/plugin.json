@@ -1,0 +1,35 @@
+{
+  "name": "ethora-mcp-cli",
+  "version": "26.5.2",
+  "description": "MCP server for the open-source Ethora chat & messaging platform — manage apps and chat rooms, broadcast messages, and deploy AI agents / chatbots with RAG sources, across user-auth and B2B/app-token flows.",
+  "author": {
+    "name": "Dappros Ltd",
+    "url": "https://ethora.com"
+  },
+  "homepage": "https://ethora.com/ai-sdk/mcp-server/",
+  "repository": "https://github.com/dappros/ethora-mcp-cli",
+  "license": "MIT",
+  "keywords": [
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "chat",
+    "messaging",
+    "ai-agents",
+    "chatbot",
+    "rag",
+    "ethora",
+    "cursor",
+    "claude",
+    "cline",
+    "windsurf"
+  ],
+  "mcpServers": {
+    "mcpServers": {
+      "ethora": {
+        "command": "npx",
+        "args": ["-y", "@ethora/mcp-server"]
+      }
+    }
+  }
+}
