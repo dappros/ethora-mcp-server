@@ -158,6 +158,29 @@ Pre-req tokens (one of):
     \`ethora-chats-message-v2\` { roomJid: "<roomJid>", text: "Freud, what would you say to Jung about dreams?" }
 11) Watch the agents converse. The smart response gate prevents loops; only the addressed agent replies first.
 
+### Controlling turn-taking (multi-agent rooms)
+For free-form chats the default \`responseMode: 'smart'\` works well. For structured
+scenarios with strict turn order (e.g. role-played wargames, debates, interviews
+where you want clean handoffs) use \`responseMode: 'mentioned'\` on every agent:
+
+  \`ethora-agents-create-v2\` {
+    name: "Hannibal",
+    prompt: "You are Hannibal Barca... END EVERY MESSAGE by addressing @GameMaster.",
+    responseMode: "mentioned",
+    cooldownSec: 0
+  }
+
+Two rules that make this reliable:
+- Use **single-word display names** (Hannibal, Varro, GameMaster) — the mention
+  matcher uses exact display-name match with word boundary.
+- In the system prompt, instruct each agent to **end every message with an
+  @-mention of who speaks next**. That's how turn-handoff flows through the
+  response gate without any orchestrator code. A "Game Master" / "moderator"
+  agent in the middle of the loop is a useful pattern.
+
+For richer worked examples (historical wargame with three agents + battle log)
+see https://github.com/dappros/ethora-bots/tree/main/wargame-demo.
+
 ### One-shot bootstrap (B2B, including Agent)
 \`ethora-b2b-app-bootstrap-ai\` {
   displayName: "Demo App",
