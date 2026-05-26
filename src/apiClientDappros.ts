@@ -411,6 +411,9 @@ export function agentsCreateV2(payload: {
   prompt?: string
   greetingMessage?: string
   trigger?: "any_message" | "/bot"
+  responseMode?: "always" | "mentioned" | "smart" | "probability"
+  responseProbability?: number
+  cooldownSec?: number
   botDisplayName?: string
   botAvatarUrl?: string
   isRAG?: boolean
@@ -432,6 +435,9 @@ export function agentsUpdateV2(agentId: string, payload: {
   prompt?: string
   greetingMessage?: string
   trigger?: "any_message" | "/bot"
+  responseMode?: "always" | "mentioned" | "smart" | "probability"
+  responseProbability?: number
+  cooldownSec?: number
   botDisplayName?: string
   botAvatarUrl?: string
   isRAG?: boolean
