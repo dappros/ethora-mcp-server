@@ -324,7 +324,7 @@ export function registerPromptsAndResources(server: McpServer) {
             text: md`
 ## Goal: ${firstAgentName || "Freud"} and ${secondAgentName || "Jung"} chat with you in one room
 
-You are an AI assistant operating the Ethora MCP CLI on behalf of a developer. Bootstrap an
+You are an AI assistant operating the Ethora MCP server on behalf of a developer. Bootstrap an
 App named "${appName || "AI Demo App"}" and stand up two AI Agents that will talk to the
 developer in one chat. Strict order:
 

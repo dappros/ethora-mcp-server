@@ -2115,7 +2115,7 @@ function agentInviteToChatTool(server: McpServer) {
                 agentIdOrAddress: z.string().min(1).describe("Either Mongo _id (24 hex chars) or EOA-style address."),
                 appId: z.string().optional().describe("Required in B2B mode unless already selected via ethora-app-select."),
                 chatId: z.string().optional().describe("Mongo Chat _id (preferred when invoking from admin)."),
-                chatJid: z.string().optional().describe("Fully-qualified room JID (preferred when invoking from MCP CLI / chat-command flow)."),
+                chatJid: z.string().optional().describe("Fully-qualified room JID (preferred when invoking from MCP server / chat-command flow)."),
             },
         },
         async function ({ agentIdOrAddress, appId, chatId, chatJid }) {

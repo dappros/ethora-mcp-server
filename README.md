@@ -1,4 +1,4 @@
-# Ethora MCP CLI (Model Context Protocol)
+# Ethora MCP Server (Model Context Protocol)
 
 [![npm](https://img.shields.io/npm/v/@ethora/mcp-server.svg)](https://www.npmjs.com/package/@ethora/mcp-server)
 [![Node](https://img.shields.io/badge/node-%E2%89%A518.x-blue.svg)](#)
@@ -243,7 +243,7 @@ All tools return JSON in a consistent envelope:
 ```json
 {
   "mcpServers": {
-    "ethora-mcp-cli": {
+    "ethora-mcp-server": {
       "command": "npx",
       "args": ["-y", "@ethora/mcp-server"]
     }
@@ -262,7 +262,7 @@ All tools return JSON in a consistent envelope:
 ```json
  "mcp": {
     "servers": {
-      "ethora-mcp-cli": {
+      "ethora-mcp-server": {
         "command": "npx",
         "args": [
           "-y", "@ethora/mcp-server"
@@ -285,7 +285,7 @@ All tools return JSON in a consistent envelope:
 ```json
 {
   "mcpServers": {
-    "ethora-mcp-cli": {
+    "ethora-mcp-server": {
       "command": "npx",
       "args": ["-y", "@ethora/mcp-server"]
     }
@@ -303,7 +303,7 @@ All tools return JSON in a consistent envelope:
    ```json
    {
      "mcpServers": {
-      "ethora-mcp-cli": {
+      "ethora-mcp-server": {
          "command": "npx",
          "args": ["-y", "@ethora/mcp-server"]
        }
@@ -476,8 +476,8 @@ This repo runs **report-only** scans on pushes/PRs:
 Clone and run locally:
 
 ```bash
-git clone https://github.com/dappros/ethora-mcp-cli.git
-cd ethora-mcp-cli
+git clone https://github.com/dappros/ethora-mcp-server.git
+cd ethora-mcp-server
 npm install
 npm run build
 npm start
