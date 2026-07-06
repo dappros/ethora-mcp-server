@@ -15,6 +15,18 @@ import {
     botInstancesListV2,
     botInstanceGetV2,
     botInstanceStatusV2,
+    // 2607 API parity additions
+    agentsDeleteV2,
+    agentsExportV2,
+    agentsImportV2,
+    agentBotInstanceDiagV2,
+    agentBotInstanceTestMessageV2,
+    agentBotInstanceLeaveChatV2,
+    appMessagesSearchV2,
+    appMessagesContextV2,
+    appUsersUnreadCountsV2,
+    appExportV2,
+    appImportV2,
     appCreate,
     appCreateV2,
     appCreateChat,
@@ -1816,7 +1828,7 @@ function b2bBotEnableTool(server: McpServer) {
     server.registerTool(
         "ethora-b2b-bot-enable",
         {
-            description: "Enable AI bot for an app (B2B auth). This triggers backend best-effort activation against configured AI service.",
+            description: "Enable the LEGACY per-app aiBot (B2B auth). NOTE: apps created via the API/B2B no longer auto-provision a legacy aiBot, so this returns 422 BOT_NOT_INITIALIZED on a clean app. The forward path for B2B AI is the Agents API — use `ethora-b2b-app-bootstrap-ai` or `ethora-agents-create-v2` + `ethora-agent-invite-to-chat`. This tool remains valid for apps that already have a legacy aiBot (e.g. admin-panel apps created with a default chat).",
             inputSchema: {
                 appId: z.string().optional().describe("Defaults to current app if selected"),
                 botTrigger: z.string().optional().describe("Optional bot trigger (example: '/bot' or 'any_message')"),
@@ -2226,11 +2238,298 @@ function botInstanceStatusTool(server: McpServer) {
     )
 }
 
+// ----------------------------------------------------------------------------
+// 2607 API parity — Agents full lifecycle + app-scoped chat reads + bundles.
+// ----------------------------------------------------------------------------
+
+function agentsDeleteV2Tool(server: McpServer) {
+    server.registerTool(
+        "ethora-agents-delete-v2",
+        {
+            description: "Delete an Agent (DELETE /v2/agents/:idOrAddress). Destructive — removes the saved Agent and its BotInstances. Gated behind ETHORA_ENABLE_DANGEROUS_TOOLS.",
+            inputSchema: {
+                agentIdOrAddress: z.string().min(1).describe("Mongo _id (24 hex chars) or EOA-style address."),
+            },
+        },
+        async function ({ agentIdOrAddress }) {
+            const meta = getDefaultMeta("ethora-agents-delete-v2")
+            try {
+                ensureAppAuthForTool()
+                const res = await agentsDeleteV2(agentIdOrAddress)
+                return asToolResult(ok(res.data, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
+function agentsExportV2Tool(server: McpServer) {
+    server.registerTool(
+        "ethora-agents-export-v2",
+        {
+            description: "Export an Agent as a portable bundle (GET /v2/agents/:idOrAddress/export). format=json returns the bundle object directly; feed it back to `ethora-agents-import-v2` to recreate the Agent in another App/tenant.",
+            inputSchema: {
+                agentIdOrAddress: z.string().min(1),
+                format: z.enum(["json", "zip"]).optional().describe("Defaults to json. Prefer json for MCP round-trips."),
+            },
+        },
+        async function ({ agentIdOrAddress, format }) {
+            const meta = getDefaultMeta("ethora-agents-export-v2")
+            try {
+                ensureAppAuthForTool()
+                const res = await agentsExportV2(agentIdOrAddress, format || "json")
+                return asToolResult(ok(res.data, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
+function agentsImportV2Tool(server: McpServer) {
+    server.registerTool(
+        "ethora-agents-import-v2",
+        {
+            description: "Import an Agent from a bundle produced by `ethora-agents-export-v2` (POST /v2/agents/import, application/json body IS the bundle). Optionally scope the new Agent to an owning App via ownerAppId.",
+            inputSchema: {
+                bundle: z.any().describe("The exported bundle object (the json export output)."),
+                ownerAppId: z.string().optional().describe("Owning App for the imported Agent (defaults server-side)."),
+            },
+        },
+        async function ({ bundle, ownerAppId }) {
+            const meta = getDefaultMeta("ethora-agents-import-v2")
+            try {
+                ensureAppAuthForTool()
+                const res = await agentsImportV2(bundle, ownerAppId)
+                return asToolResult(ok(res.data, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
+function agentBotInstanceDiagTool(server: McpServer) {
+    server.registerTool(
+        "ethora-bot-instance-diag",
+        {
+            description: "Diagnose a specific BotInstance for an Agent (GET /v2/agents/:idOrAddress/bot-instances/:botInstanceId/diag). Returns live XMPP/ai-service status and recent activity for troubleshooting.",
+            inputSchema: {
+                agentIdOrAddress: z.string().min(1),
+                botInstanceId: z.string().min(1),
+            },
+        },
+        async function ({ agentIdOrAddress, botInstanceId }) {
+            const meta = getDefaultMeta("ethora-bot-instance-diag")
+            try {
+                ensureAppAuthForTool()
+                const res = await agentBotInstanceDiagV2(agentIdOrAddress, botInstanceId)
+                return asToolResult(ok(res.data, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
+function agentBotInstanceTestMessageTool(server: McpServer) {
+    server.registerTool(
+        "ethora-bot-instance-test-message",
+        {
+            description: "Send a test message from a BotInstance (POST /v2/agents/:idOrAddress/bot-instances/:botInstanceId/test-message). Omit roomJid to fan out to every room the BotInstance is in. Requires the ai-service to be running.",
+            inputSchema: {
+                agentIdOrAddress: z.string().min(1),
+                botInstanceId: z.string().min(1),
+                text: z.string().max(2000).optional().describe("Message body. Optional/empty is allowed."),
+                roomJid: z.string().optional().describe("Target a specific room JID; omit to broadcast to all the bot's rooms."),
+            },
+        },
+        async function ({ agentIdOrAddress, botInstanceId, text, roomJid }) {
+            const meta = getDefaultMeta("ethora-bot-instance-test-message")
+            try {
+                ensureAppAuthForTool()
+                const res = await agentBotInstanceTestMessageV2(agentIdOrAddress, botInstanceId, { text, roomJid })
+                return asToolResult(ok(res.data, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
+function agentBotInstanceLeaveChatTool(server: McpServer) {
+    server.registerTool(
+        "ethora-bot-instance-leave-chat",
+        {
+            description: "Remove a BotInstance from a chat room (POST /v2/agents/:idOrAddress/bot-instances/:botInstanceId/leave-chat). The inverse of `ethora-agent-invite-to-chat`.",
+            inputSchema: {
+                agentIdOrAddress: z.string().min(1),
+                botInstanceId: z.string().min(1),
+                chatJid: z.string().min(1).describe("Fully-qualified room JID to leave."),
+            },
+        },
+        async function ({ agentIdOrAddress, botInstanceId, chatJid }) {
+            const meta = getDefaultMeta("ethora-bot-instance-leave-chat")
+            try {
+                ensureAppAuthForTool()
+                const res = await agentBotInstanceLeaveChatV2(agentIdOrAddress, botInstanceId, { chatJid })
+                return asToolResult(ok(res.data, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
+function messagesSearchV2Tool(server: McpServer) {
+    server.registerTool(
+        "ethora-messages-search-v2",
+        {
+            description: "Search an App's chat messages (GET /v2/apps/:appId/messages/search). B2B / tenant-actor auth. Filter by room (chatId), author (fromUserId), and time window.",
+            inputSchema: {
+                q: z.string().min(1).max(500).describe("Search query."),
+                appId: z.string().optional().describe("Required in B2B mode unless already selected via ethora-app-select."),
+                mode: z.enum(["substring", "fulltext"]).optional(),
+                chatId: z.string().optional(),
+                fromUserId: z.string().optional(),
+                since: z.string().optional().describe("ISO date lower bound."),
+                until: z.string().optional().describe("ISO date upper bound."),
+                sort: z.enum(["relevance", "date"]).optional(),
+                limit: z.number().int().min(1).max(100).optional(),
+                offset: z.number().int().min(0).optional(),
+            },
+        },
+        async function ({ q, appId, mode, chatId, fromUserId, since, until, sort, limit, offset }) {
+            const meta = getDefaultMeta("ethora-messages-search-v2")
+            try {
+                const ctx = resolveAppScopedV2Context(appId)
+                if (!ctx.appId) throw new Error("appId is required (pass appId or call `ethora-app-select` first).")
+                const res = await appMessagesSearchV2(ctx.appId, { q, mode, chatId, fromUserId, since, until, sort, limit, offset })
+                return asToolResult(ok(res.data, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
+function messagesContextV2Tool(server: McpServer) {
+    server.registerTool(
+        "ethora-messages-context-v2",
+        {
+            description: "Fetch the messages surrounding a target message (GET /v2/apps/:appId/chats/:chatId/messages/context). Provide either aroundStanzaId or aroundMessageId; radius controls how many messages before/after.",
+            inputSchema: {
+                chatId: z.string().min(1),
+                appId: z.string().optional().describe("Required in B2B mode unless already selected via ethora-app-select."),
+                aroundStanzaId: z.string().optional(),
+                aroundMessageId: z.string().optional(),
+                radius: z.number().int().min(0).max(50).optional(),
+            },
+        },
+        async function ({ chatId, appId, aroundStanzaId, aroundMessageId, radius }) {
+            const meta = getDefaultMeta("ethora-messages-context-v2")
+            try {
+                if (!aroundStanzaId && !aroundMessageId) {
+                    throw new Error("Provide either aroundStanzaId or aroundMessageId.")
+                }
+                const ctx = resolveAppScopedV2Context(appId)
+                if (!ctx.appId) throw new Error("appId is required (pass appId or call `ethora-app-select` first).")
+                const res = await appMessagesContextV2(ctx.appId, chatId, { aroundStanzaId, aroundMessageId, radius })
+                return asToolResult(ok(res.data, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
+function unreadCountsV2Tool(server: McpServer) {
+    server.registerTool(
+        "ethora-unread-counts-v2",
+        {
+            description: "Batch per-room unread message counts for a set of users (POST /v2/apps/:appId/users/unread-counts). mode=count returns numbers (capped); mode=flag returns booleans. Requires Mongo message archiving enabled on the deployment.",
+            inputSchema: {
+                userIds: z.array(z.string().min(1)).min(1).max(200).describe("uuid / Mongo _id / xmppUsername, 1..200."),
+                appId: z.string().optional().describe("Required in B2B mode unless already selected via ethora-app-select."),
+                mode: z.enum(["count", "flag"]).optional(),
+                cap: z.number().int().min(1).max(1000).optional(),
+                concurrency: z.number().int().min(1).max(32).optional(),
+            },
+        },
+        async function ({ userIds, appId, mode, cap, concurrency }) {
+            const meta = getDefaultMeta("ethora-unread-counts-v2")
+            try {
+                const ctx = resolveAppScopedV2Context(appId)
+                if (!ctx.appId) throw new Error("appId is required (pass appId or call `ethora-app-select` first).")
+                const res = await appUsersUnreadCountsV2(ctx.appId, { userIds, mode, cap, concurrency })
+                return asToolResult(ok(res.data, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
+function appExportV2Tool(server: McpServer) {
+    server.registerTool(
+        "ethora-app-export-v2",
+        {
+            description: "Export an App as a portable bundle (GET /v2/apps/:appId/export). format=json returns the bundle object directly. Use `include` to select sections (e.g. 'chats,users,sources,botInstances'). Feed the result to `ethora-app-import-v2`.",
+            inputSchema: {
+                appId: z.string().optional().describe("Required in B2B mode unless already selected via ethora-app-select."),
+                format: z.enum(["json", "zip"]).optional(),
+                include: z.string().optional().describe("Comma-separated sections to include, e.g. 'chats,users,sources,botInstances'."),
+            },
+        },
+        async function ({ appId, format, include }) {
+            const meta = getDefaultMeta("ethora-app-export-v2")
+            try {
+                const ctx = resolveAppScopedV2Context(appId)
+                if (!ctx.appId) throw new Error("appId is required (pass appId or call `ethora-app-select` first).")
+                const res = await appExportV2(ctx.appId, { format: format || "json", include })
+                return asToolResult(ok(res.data, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
+function appImportV2Tool(server: McpServer) {
+    server.registerTool(
+        "ethora-app-import-v2",
+        {
+            description: "Import an App from a bundle produced by `ethora-app-export-v2` (POST /v2/apps/import, application/json body IS the bundle). B2B / tenant-actor auth. domainNameOverride renames the imported App's domain.",
+            inputSchema: {
+                bundle: z.any().describe("The exported bundle object (the json export output)."),
+                domainNameOverride: z.string().optional().describe("Rename the imported App's domainName."),
+            },
+        },
+        async function ({ bundle, domainNameOverride }) {
+            const meta = getDefaultMeta("ethora-app-import-v2")
+            try {
+                // App import is tenant-actor auth and takes no appId in the path,
+                // so accept either app-token or B2B auth without demanding a
+                // current appId.
+                const state = getClientState() as any
+                if (state.authMode !== "app" && state.authMode !== "b2b") {
+                    throw new Error("This tool requires app-token or B2B auth. Use `ethora-auth-use-app` or `ethora-auth-use-b2b` first.")
+                }
+                const res = await appImportV2(bundle, domainNameOverride)
+                return asToolResult(ok(res.data, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
 function botEnableV2Tool(server: McpServer) {
     server.registerTool(
         "ethora-bot-enable-v2",
         {
-            description: "Enable bot using app-token auth or B2B auth with explicit appId.",
+            description: "Enable the LEGACY per-app aiBot using app-token or B2B auth. NOTE: clean API/B2B-created apps have no legacy aiBot, so this returns 422 BOT_NOT_INITIALIZED there — use the Agents API (`ethora-agents-create-v2` + `ethora-agent-invite-to-chat`, or `ethora-b2b-app-bootstrap-ai`) for B2B AI. Valid for apps that already have a legacy aiBot.",
             inputSchema: {
                 appId: z.string().optional().describe("Required in B2B mode unless already selected via ethora-app-select."),
                 trigger: z.enum(["any_message", "/bot"]).optional(),
@@ -2443,6 +2742,35 @@ async function runB2BAppBootstrapAi(args: {
         steps.push({ step: "appSelect", ok: true, authMode: "b2b" })
     }
 
+    // 2.5) Ensure the app has a room to host the AI agent / back the widget.
+    // API/B2B-created apps no longer seed a default "Main chat" room (that
+    // default was inverted off for API/B2B callers). Reuse an existing room when
+    // the app already has one — this keeps repeat bootstrap calls (same app,
+    // second agent) landing both agents in the SAME room — otherwise provision
+    // one. Best-effort: recorded as a skip on failure.
+    let bootstrapRoomChatId: string | null = null
+    let bootstrapRoomJid: string | null = null
+    try {
+        let firstRoom: any = null
+        try {
+            const existing = await appGetDefaultRoomsWithAppId(appId)
+            firstRoom = existing?.data?.result?.[0] || existing?.data?.[0] || null
+        } catch { /* no existing rooms readable — fall through to provision */ }
+        if (firstRoom) {
+            bootstrapRoomChatId = String(firstRoom?._id || firstRoom?.chatId || "").trim() || null
+            bootstrapRoomJid = String(firstRoom?.jid || "").trim() || null
+            steps.push({ step: "provisionRoom", ok: true, reused: true, chatId: bootstrapRoomChatId, jid: bootstrapRoomJid })
+        } else {
+            const prov = await appProvisionV2(appId, { rooms: [{ title: `${displayName} Main`, pinned: false }] }, { timeoutMs: 60_000 })
+            const room = Array.isArray(prov?.data?.details) ? prov.data.details[0]?.room : undefined
+            bootstrapRoomChatId = String(room?._id || room?.chatId || "").trim() || null
+            bootstrapRoomJid = String(room?.jid || "").trim() || null
+            steps.push({ step: "provisionRoom", ok: true, reused: false, chatId: bootstrapRoomChatId, jid: bootstrapRoomJid })
+        }
+    } catch (e: any) {
+        steps.push({ step: "provisionRoom", ok: false, error: e?.message || String(e) })
+    }
+
     // 3) Index website (app-token sources v2)
     let crawlResult: any = null
     if (crawlUrl) {
@@ -2486,9 +2814,29 @@ async function runB2BAppBootstrapAi(args: {
         if (llmProvider) payload.llmProvider = llmProvider
         if (llmModel) payload.llmModel = llmModel
         if (Object.keys(payload).length > 0) {
-            const r = await botUpdateV2(payload)
-            botEnableResult = r.data
-            steps.push({ step: "botSetup", ok: true })
+            try {
+                const r = await botUpdateV2(payload)
+                botEnableResult = r.data
+                steps.push({ step: "botSetup", ok: true })
+            } catch (e: any) {
+                // On current backends a clean B2B app has no legacy aiBot to
+                // update (PUT /v2/bot => 422 BOT_NOT_INITIALIZED). The forward
+                // path is the Agents API (created + invited below), so treat the
+                // legacy call as a skip rather than failing the whole bootstrap.
+                const status = e?.response?.status
+                const code = e?.response?.data?.code
+                if (status === 422 || code === "BOT_NOT_INITIALIZED") {
+                    steps.push({
+                        step: "botSetup",
+                        ok: false,
+                        skipped: true,
+                        reason: "legacy_bot_not_initialized",
+                        message: "Legacy aiBot is not provisioned for B2B apps; using the Agents API instead.",
+                    })
+                } else {
+                    throw e
+                }
+            }
         }
     }
 
@@ -2497,7 +2845,12 @@ async function runB2BAppBootstrapAi(args: {
     //    an App with an Agent that has its own persona + RAG, separate from the legacy aiBot.
     let agentResult: any = null
     let inviteResult: any = null
-    if (agentDisplayName || agentPrompt) {
+    // Create an Agent when one is explicitly requested, OR when the caller asked
+    // to enable a bot but did not point at a saved agent — on current backends
+    // the Agents API is the only working AI path for a clean B2B app, so
+    // "enableBot: true" is fulfilled by creating + inviting a fresh Agent.
+    const wantAgent = Boolean(agentDisplayName || agentPrompt || (enableBot && !savedAgentId))
+    if (wantAgent) {
         if (!appToken) throw new Error("Agent creation requested but no appToken available")
         setAuthMode("app")
         try {
@@ -2505,6 +2858,9 @@ async function runB2BAppBootstrapAi(args: {
                 name: agentDisplayName || `${displayName} Bot`,
                 prompt: agentPrompt || "You are a helpful assistant.",
                 visibility: agentVisibility === "unlisted" ? "private" : (agentVisibility || "private") as any,
+                trigger: (botTrigger as any) || undefined,
+                llmProvider: llmProvider || undefined,
+                llmModel: llmModel || undefined,
             } as any)
             agentResult = created.data?.agent
             steps.push({ step: "agentsCreateV2", ok: true, agentId: agentResult?.id })
@@ -2516,16 +2872,21 @@ async function runB2BAppBootstrapAi(args: {
             }
 
             if (inviteToDefaultRoom !== false && agentResult?.id) {
-                // Look up the default room created with the App.
-                const rooms = await appGetDefaultRoomsWithAppId(appId)
-                const firstRoom = rooms?.data?.result?.[0] || rooms?.data?.[0]
-                const chatId = firstRoom?._id || firstRoom?.chatId
-                if (chatId) {
-                    const r = await agentsInviteToChatV2(agentResult.id, { appId, chatId })
+                // Prefer the room we provisioned above. Fall back to the legacy
+                // default-room lookup for older backends that still seed one.
+                let chatId: string | undefined = bootstrapRoomChatId || undefined
+                let chatJid: string | undefined = bootstrapRoomJid || undefined
+                if (!chatId && !chatJid) {
+                    const rooms = await appGetDefaultRoomsWithAppId(appId)
+                    const firstRoom = rooms?.data?.result?.[0] || rooms?.data?.[0]
+                    chatId = firstRoom?._id || firstRoom?.chatId
+                }
+                if (chatId || chatJid) {
+                    const r = await agentsInviteToChatV2(agentResult.id, { appId, chatId, chatJid })
                     inviteResult = r.data
-                    steps.push({ step: "agentInviteToChat", ok: true, chatId })
+                    steps.push({ step: "agentInviteToChat", ok: true, chatId, chatJid })
                 } else {
-                    steps.push({ step: "agentInviteToChat", ok: false, message: "no default room found" })
+                    steps.push({ step: "agentInviteToChat", ok: false, message: "no room available to invite into" })
                 }
             }
         } catch (e: any) {
@@ -3502,6 +3863,8 @@ export function registerTools(server: McpServer) {
         walletERC20TransferTool(server);
         // Bulk deletes
         sourcesSiteDeleteUrlV2BatchAppTool(server);
+        // Agent delete (removes saved Agent + its BotInstances)
+        agentsDeleteV2Tool(server);
     }
     b2bAppCreateTool(server);
     b2bBotEnableTool(server);
@@ -3523,6 +3886,17 @@ export function registerTools(server: McpServer) {
     agentSoulSetTool(server);
     botInstancesListTool(server);
     botInstanceStatusTool(server);
+    // 2607 API parity: agents full lifecycle + app-scoped chat reads + bundles.
+    agentsExportV2Tool(server);
+    agentsImportV2Tool(server);
+    agentBotInstanceDiagTool(server);
+    agentBotInstanceTestMessageTool(server);
+    agentBotInstanceLeaveChatTool(server);
+    messagesSearchV2Tool(server);
+    messagesContextV2Tool(server);
+    unreadCountsV2Tool(server);
+    appExportV2Tool(server);
+    appImportV2Tool(server);
     chatsMessageCreateV2Tool(server);
     chatsHistoryGetV2Tool(server);
     botMessageCreateV2Tool(server);

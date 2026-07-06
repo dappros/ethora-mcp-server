@@ -496,6 +496,95 @@ export function botInstanceStatusV2(id: string, status: "on" | "off") {
   return httpClientDappros.post(`/v2/bot-instances/${String(id || "").trim()}/status`, { status })
 }
 
+// --- Agents: full-lifecycle completions (2607 API parity) ---
+
+export function agentsDeleteV2(idOrAddress: string) {
+  return httpClientDappros.delete(`/v2/agents/${String(idOrAddress || "").trim()}`)
+}
+
+export function agentsExportV2(idOrAddress: string, format: "json" | "zip" = "json") {
+  return httpClientDappros.get(`/v2/agents/${String(idOrAddress || "").trim()}/export`, { params: { format } })
+}
+
+export function agentsImportV2(bundle: any, ownerAppId?: string) {
+  // application/json: the request body IS the bundle (output of GET .../export?format=json).
+  const config = ownerAppId ? { params: { ownerAppId } } : undefined
+  return httpClientDappros.post(`/v2/agents/import`, bundle || {}, config)
+}
+
+export function agentBotInstanceDiagV2(idOrAddress: string, botInstanceId: string) {
+  return httpClientDappros.get(
+    `/v2/agents/${String(idOrAddress || "").trim()}/bot-instances/${String(botInstanceId || "").trim()}/diag`
+  )
+}
+
+export function agentBotInstanceTestMessageV2(
+  idOrAddress: string,
+  botInstanceId: string,
+  payload: { text?: string; roomJid?: string }
+) {
+  return httpClientDappros.post(
+    `/v2/agents/${String(idOrAddress || "").trim()}/bot-instances/${String(botInstanceId || "").trim()}/test-message`,
+    payload || {}
+  )
+}
+
+export function agentBotInstanceLeaveChatV2(idOrAddress: string, botInstanceId: string, payload: { chatJid: string }) {
+  return httpClientDappros.post(
+    `/v2/agents/${String(idOrAddress || "").trim()}/bot-instances/${String(botInstanceId || "").trim()}/leave-chat`,
+    payload || {}
+  )
+}
+
+// --- App-scoped chat reads + App bundles (2607 API parity) ---
+
+export function appMessagesSearchV2(
+  appId: string,
+  params: {
+    q: string
+    mode?: "substring" | "fulltext"
+    chatId?: string
+    fromUserId?: string
+    since?: string
+    until?: string
+    sort?: "relevance" | "date"
+    limit?: number
+    offset?: number
+  }
+) {
+  return httpClientDappros.get(`/v2/apps/${String(appId || "").trim()}/messages/search`, { params })
+}
+
+export function appMessagesContextV2(
+  appId: string,
+  chatId: string,
+  params: { aroundStanzaId?: string; aroundMessageId?: string; radius?: number }
+) {
+  return httpClientDappros.get(
+    `/v2/apps/${String(appId || "").trim()}/chats/${String(chatId || "").trim()}/messages/context`,
+    { params }
+  )
+}
+
+export function appUsersUnreadCountsV2(
+  appId: string,
+  payload: { userIds: string[]; mode?: "count" | "flag"; cap?: number; concurrency?: number }
+) {
+  return httpClientDappros.post(`/v2/apps/${String(appId || "").trim()}/users/unread-counts`, payload || {})
+}
+
+export function appExportV2(appId: string, opts?: { format?: "json" | "zip"; include?: string }) {
+  const params: Record<string, string> = { format: opts?.format || "json" }
+  if (opts?.include) params.include = opts.include
+  return httpClientDappros.get(`/v2/apps/${String(appId || "").trim()}/export`, { params })
+}
+
+export function appImportV2(bundle: any, domainNameOverride?: string) {
+  // application/json: the request body IS the bundle (output of GET .../export?format=json).
+  const config = domainNameOverride ? { params: { domainNameOverride } } : undefined
+  return httpClientDappros.post(`/v2/apps/import`, bundle || {}, config)
+}
+
 export function botWidgetGetV2() {
   return httpClientDappros.get(`/v2/bot/widget`)
 }

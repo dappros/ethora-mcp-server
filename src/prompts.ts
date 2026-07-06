@@ -141,6 +141,9 @@ Pre-req tokens (one of):
 2) \`ethora-user-login\` { email, password } -- gets a user JWT
 3) \`ethora-app-create\` { displayName: "My App" } -- get \`appId\` and \`appToken\`
 4) \`ethora-app-select\` { appId, appToken }; \`ethora-auth-use-app\`
+4b) Create a room to host the agents. API/B2B-created apps no longer seed a
+    default "Main chat", so create one explicitly and note its \`roomJid\`:
+   \`ethora-app-create-chat\` { title: "Salon", pinned: false } -> note the room JID
 5) Create the first Agent:
    \`ethora-agents-create-v2\` { name: "Freud", prompt: "You are a digital twin of Sigmund Freud..." }
 6) Index Freud's RAG corpus (per-Agent namespace):
@@ -150,8 +153,7 @@ Pre-req tokens (one of):
    \`ethora-agents-create-v2\` { name: "Jung", prompt: "You are a digital twin of Carl Jung..." }
 8) Mark one agent public (optional cross-app demo):
    \`ethora-agent-set-visibility\` { agentIdOrAddress: "<freud-id>", visibility: "public" }
-9) Invite both agents into a default room:
-   \`ethora-app-get-default-rooms\` -> pick the first room JID
+9) Invite both agents into the room created in step 4b (use its room JID):
    \`ethora-agent-invite-to-chat\` { agentIdOrAddress: "<freud-id>", chatJid: "<roomJid>" }
    \`ethora-agent-invite-to-chat\` { agentIdOrAddress: "<jung-id>", chatJid: "<roomJid>" }
 10) Seed a message:
@@ -191,8 +193,8 @@ see https://github.com/dappros/ethora-bots/tree/main/wargame-demo.
   agentVisibility: "public",
   inviteToDefaultRoom: true
 }
-This single call: creates the app, indexes the URL, creates an Agent, marks it public, and invites it
-into the App's first default room. Repeat with a second \`agentDisplayName\` against the SAME app to get
+This single call: creates the app, provisions a room, indexes the URL, creates an Agent, marks it public,
+and invites it into that room. Repeat with a second \`agentDisplayName\` against the SAME app to get
 two agents in one room ready to converse.
 
 ### /invite chat command
