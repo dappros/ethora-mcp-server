@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/dappros-ethora-mcp-server-badge.png)](https://mseep.ai/app/dappros-ethora-mcp-server)
+
 # Ethora MCP Server (Model Context Protocol)
 
 [![npm](https://img.shields.io/npm/v/@ethora/mcp-server.svg)](https://www.npmjs.com/package/@ethora/mcp-server)
