@@ -1,0 +1,14 @@
+.git
+.github
+.plugin
+node_modules
+dist
+assets
+docs
+*.md
+.DS_Store
+.env
+.env.*
+.npmrc
+*.log
+*.tgz
