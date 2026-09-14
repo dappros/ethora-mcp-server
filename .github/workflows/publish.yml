@@ -104,10 +104,13 @@ jobs:
       - name: Install mcp-publisher
         run: |
           base="https://github.com/modelcontextprotocol/registry/releases/download/v${MCP_PUBLISHER_VERSION}"
-          curl -fsSL -o mcp-publisher.tar.gz "${base}/mcp-publisher_linux_amd64.tar.gz"
+          archive="mcp-publisher_linux_amd64.tar.gz"
+          # Keep the released filename: sha256sum -c looks the file up by the
+          # name recorded in the checksum line.
+          curl -fsSL -o "${archive}" "${base}/${archive}"
           curl -fsSL -o checksums.txt "${base}/registry_${MCP_PUBLISHER_VERSION}_checksums.txt"
-          grep ' mcp-publisher_linux_amd64\.tar\.gz$' checksums.txt | sha256sum -c -
-          tar xzf mcp-publisher.tar.gz mcp-publisher
+          grep " ${archive}\$" checksums.txt | sha256sum -c -
+          tar xzf "${archive}" mcp-publisher
           ./mcp-publisher --version
 
       - name: Check whether the registry already has this version
