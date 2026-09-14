@@ -80,6 +80,15 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
+          # Fail loudly on an expired or under-scoped token. These tokens expire
+          # and the last lapse went unnoticed for a month, because a publish
+          # failure is easy to miss and `npm login` alone still 403s.
+          if ! npm whoami >/dev/null 2>&1; then
+            echo "::error::The NPM_TOKEN secret is not valid. It may have expired, or it may lack publish rights. It must be a granular access token for the @ethora org with 2FA bypass enabled."
+            exit 1
+          fi
+          echo "npm authenticated as $(npm whoami)"
+
           if npm view "${PACKAGE}@${VERSION}" version >/dev/null 2>&1; then
             echo "${PACKAGE}@${VERSION} is already on npm, nothing to do"
           else
