@@ -2,11 +2,26 @@
 
 All notable changes to this package are documented here. For cross-SDK release notes, see [ethora/RELEASE-NOTES.md](https://github.com/dappros/ethora/blob/main/RELEASE-NOTES.md).
 
-## Unreleased
+## 26.9.0
+
+### Packaging
+- Added a `Dockerfile` (two stage, `node:22-alpine`, runs as the non-root `node`
+  user) and a `.dockerignore`, so the server can run as a container and can be
+  submitted to the Docker MCP Registry.
+- Corrected the `license` field from `ISC` to `MIT`, matching `LICENSE`.
+- Version numbering: `26.09` was not valid semver and could not be published to
+  npm. Renumbered to `26.9.0`, following the existing year.month.patch scheme,
+  and synced across `package.json`, `server.json`, `.plugin/plugin.json` and the
+  `serverInfo` reported over MCP.
+
+### Fixed
+- `ethora-agents-delete-v2` named `ETHORA_ENABLE_DANGEROUS_TOOLS` in its tool
+  description, but the gate the code reads is `ETHORA_MCP_ENABLE_DANGEROUS_TOOLS`.
+  Following the description as written left the tool hidden.
 
 ### Added — Agents API + 2607 endpoint parity
 - `ethora-agents-export-v2` / `ethora-agents-import-v2` — export an Agent as a JSON bundle and re-import it (into another App/tenant).
-- `ethora-agents-delete-v2` — delete a saved Agent and its BotInstances (gated behind `ETHORA_ENABLE_DANGEROUS_TOOLS`).
+- `ethora-agents-delete-v2` — delete a saved Agent and its BotInstances (gated behind `ETHORA_MCP_ENABLE_DANGEROUS_TOOLS`).
 - `ethora-bot-instance-diag` / `ethora-bot-instance-test-message` / `ethora-bot-instance-leave-chat` — BotInstance diagnostics, test messaging, and room removal.
 - `ethora-messages-search-v2` — search an App's chat messages (GET /v2/apps/:appId/messages/search).
 - `ethora-messages-context-v2` — fetch messages around a target message.

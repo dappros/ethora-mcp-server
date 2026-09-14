@@ -207,6 +207,39 @@ npx -y @ethora/mcp-server
 
 No global install is required.
 
+### Run as a container
+
+A `Dockerfile` ships with this repo, so the server can also run as a container
+instead of via npx. Build it yourself:
+
+```bash
+docker build -t ethora-mcp-server .
+docker run -i --rm ethora-mcp-server
+```
+
+Pass configuration through as environment variables:
+
+```bash
+docker run -i --rm \
+  -e ETHORA_API_URL=https://api.chat.ethora.com/v1 \
+  -e ETHORA_APP_JWT="JWT <your app jwt>" \
+  ethora-mcp-server
+```
+
+The container speaks MCP over stdio, so any MCP client that can launch a
+command can use it:
+
+```json
+{
+  "mcpServers": {
+    "ethora": {
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "ethora-mcp-server"]
+    }
+  }
+}
+```
+
 ---
 
 ## 🔐 Configuration (env vars)

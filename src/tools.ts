@@ -2201,7 +2201,7 @@ function agentsDeleteV2Tool(server: McpServer) {
     server.registerTool(
         "ethora-agents-delete-v2",
         {
-            description: "Delete an Agent (DELETE /v2/agents/:idOrAddress). Destructive — removes the saved Agent and its BotInstances. Gated behind ETHORA_ENABLE_DANGEROUS_TOOLS.",
+            description: "Delete an Agent (DELETE /v2/agents/:idOrAddress). Destructive — removes the saved Agent and its BotInstances. Gated behind ETHORA_MCP_ENABLE_DANGEROUS_TOOLS.",
             inputSchema: {
                 agentIdOrAddress: z.string().min(1).describe("Mongo _id (24 hex chars) or EOA-style address."),
             },
