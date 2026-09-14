@@ -1,0 +1,150 @@
+name: Publish
+
+# Publishes @ethora/mcp-server to npm and then registers the new version with
+# the official MCP Registry using GitHub OIDC, so no long lived registry
+# credential has to be stored anywhere.
+#
+# Called by the monthly release workflow, and runnable by hand.
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: Git ref to publish (tag, branch or SHA). Blank means the triggering ref.
+        type: string
+        required: false
+        default: ""
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Git ref to publish (tag, branch or SHA). Blank means the default branch.
+        type: string
+        required: false
+        default: ""
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write # required: mcp-publisher exchanges the Actions OIDC token
+
+    env:
+      PACKAGE: "@ethora/mcp-server"
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      MCP_PUBLISHER_VERSION: "1.8.1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Check the version is valid semver
+        run: |
+          node -e '
+            const v = require("./package.json").version;
+            if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(v)) {
+              console.error(`::error::package.json version "${v}" is not valid semver, npm and the MCP Registry will both reject it`);
+              process.exit(1);
+            }
+            console.log(`version ${v} is valid semver`);
+          '
+          echo "VERSION=$(node -p "require('./package.json').version")" >> "$GITHUB_ENV"
+
+      - name: Check the version manifests are in sync
+        run: |
+          npm run sync-version
+          if ! git diff --quiet; then
+            echo "::error::server.json, .plugin/plugin.json or src/index.ts disagree with package.json. Run 'npm run sync-version' and commit the result."
+            git --no-pager diff --stat
+            exit 1
+          fi
+          echo "all manifests report ${VERSION}"
+
+      - name: Publish to npm
+        if: env.NPM_TOKEN != ''
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if npm view "${PACKAGE}@${VERSION}" version >/dev/null 2>&1; then
+            echo "${PACKAGE}@${VERSION} is already on npm, nothing to do"
+          else
+            npm publish --access public
+          fi
+
+      - name: Wait for npm to serve the version
+        # The MCP Registry verifies ownership by reading the published npm
+        # package, so it has to exist first.
+        run: |
+          for attempt in $(seq 1 20); do
+            if npm view "${PACKAGE}@${VERSION}" version >/dev/null 2>&1; then
+              echo "npm is serving ${PACKAGE}@${VERSION}"
+              exit 0
+            fi
+            echo "not on npm yet, retrying (${attempt}/20)"
+            sleep 15
+          done
+          echo "::error::${PACKAGE}@${VERSION} is not on npm, so the MCP Registry publish would fail. Publish it first, or add an NPM_TOKEN repository secret so this workflow can."
+          exit 1
+
+      - name: Install mcp-publisher
+        run: |
+          base="https://github.com/modelcontextprotocol/registry/releases/download/v${MCP_PUBLISHER_VERSION}"
+          curl -fsSL -o mcp-publisher.tar.gz "${base}/mcp-publisher_linux_amd64.tar.gz"
+          curl -fsSL -o checksums.txt "${base}/registry_${MCP_PUBLISHER_VERSION}_checksums.txt"
+          grep ' mcp-publisher_linux_amd64\.tar\.gz$' checksums.txt | sha256sum -c -
+          tar xzf mcp-publisher.tar.gz mcp-publisher
+          ./mcp-publisher --version
+
+      - name: Check whether the registry already has this version
+        run: |
+          if curl -fsS "https://registry.modelcontextprotocol.io/v0/servers?search=io.github.dappros/ethora-mcp-server" \
+            | grep -q "\"version\":\"${VERSION}\"\|\"version\": \"${VERSION}\""; then
+            echo "REGISTRY_HAS_VERSION=true" >> "$GITHUB_ENV"
+            echo "the registry already lists ${VERSION}"
+          else
+            echo "REGISTRY_HAS_VERSION=false" >> "$GITHUB_ENV"
+          fi
+
+      - name: Publish to the MCP Registry
+        run: |
+          # Always authenticate, so a re-run still exercises the OIDC exchange.
+          ./mcp-publisher login github-oidc
+          if [ "${REGISTRY_HAS_VERSION}" = "true" ]; then
+            echo "${VERSION} is already published, skipping"
+          else
+            ./mcp-publisher publish
+          fi
+
+      - name: Verify the registry entry
+        run: |
+          sleep 5
+          curl -fsS "https://registry.modelcontextprotocol.io/v0/servers?search=io.github.dappros/ethora-mcp-server" \
+            | node -e '
+              let raw = "";
+              process.stdin.on("data", (c) => (raw += c));
+              process.stdin.on("end", () => {
+                const want = process.env.VERSION;
+                const entries = (JSON.parse(raw).servers || []).map((e) => e.server || e);
+                const hit = entries.find((s) => s.version === want);
+                if (!hit) {
+                  console.error(`::error::${want} is not visible in the MCP Registry, found: ${entries.map((s) => s.version).join(", ") || "nothing"}`);
+                  process.exit(1);
+                }
+                console.log(`MCP Registry is serving ${hit.name} ${hit.version}`);
+              });
+            '

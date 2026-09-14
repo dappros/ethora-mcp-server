@@ -12,18 +12,32 @@ jobs:
   release:
     runs-on: ubuntu-latest
 
+    outputs:
+      skip: ${{ steps.check.outputs.skip }}
+      version: ${{ steps.check.outputs.version }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
       - name: Check for commits in the previous month
         id: check
         shell: bash
         run: |
-          TAG="$(date -u +'%y.%m')"
-          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          # Calendar versioning, but valid semver: year.month.patch.
+          # `date +%y.%m` produced things like "26.09" and "26.10", which are
+          # not semver (two components, and a leading zero), so npm refused to
+          # publish them. %-m drops the leading zero and .0 supplies a patch.
+          VERSION="$(date -u +'%y.%-m').0"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${VERSION}" >> "$GITHUB_OUTPUT"
 
           SINCE="$(date -u -d '1 month ago' +'%Y-%m-01')"
           UNTIL="$(date -u +'%Y-%m-01')"
@@ -38,8 +52,8 @@ jobs:
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
 
-          if git rev-parse "v${TAG}" >/dev/null 2>&1; then
-            echo "Tag v${TAG} already exists, skipping."
+          if git rev-parse "v${VERSION}" >/dev/null 2>&1; then
+            echo "Tag v${VERSION} already exists, skipping."
             echo "skip=true" >> "$GITHUB_OUTPUT"
           fi
 
@@ -63,16 +77,17 @@ jobs:
             echo "RELEASE_EOF"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Update package.json version
+      - name: Bump the version and sync every manifest
         if: steps.check.outputs.skip == 'false'
         shell: bash
         run: |
-          TAG="${{ steps.check.outputs.tag }}"
-          sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"${TAG}\"/" package.json
-          if [ -f package-lock.json ]; then
-            sed -i "0,/\"version\": \"[^\"]*\"/s//\"version\": \"${TAG}\"/" package-lock.json
-            sed -i "0,/\"version\": \"[^\"]*\"/s//\"version\": \"${TAG}\"/" package-lock.json
-          fi
+          VERSION="${{ steps.check.outputs.version }}"
+          npm pkg set version="${VERSION}"
+          # server.json, .plugin/plugin.json and the serverInfo in src/index.ts
+          # all carry the version too. Skipping this is how they ended up
+          # reporting 26.5.3 while package.json said otherwise.
+          npm run sync-version
+          npm install --package-lock-only
 
       - name: Create tag and release
         if: steps.check.outputs.skip == 'false'
@@ -85,7 +100,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git add package.json package-lock.json 2>/dev/null || true
+          git add package.json package-lock.json server.json .plugin/plugin.json src/index.ts 2>/dev/null || true
           git commit -m "chore: bump version to ${{ steps.check.outputs.tag }}" || true
           git push origin HEAD:main
 
@@ -97,3 +112,17 @@ jobs:
             --notes "${{ steps.notes.outputs.body }}"
 
           echo "Created release ${TAG}"
+
+  # A release created with GITHUB_TOKEN does not trigger other workflows, so
+  # the publish workflow is called directly rather than listening for the
+  # release event.
+  publish:
+    needs: release
+    if: needs.release.outputs.skip == 'false'
+    uses: ./.github/workflows/publish.yml
+    with:
+      ref: v${{ needs.release.outputs.version }}
+    permissions:
+      contents: read
+      id-token: write
+    secrets: inherit
