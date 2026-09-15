@@ -19,7 +19,7 @@ type EntryKind = "open" | "oauth"
 export type HttpServerOptions = {
   name: string
   version: string
-  buildServer: () => McpServer
+  buildServer: (profile: "open" | "authenticated" | "oauth") => McpServer
 }
 
 const OAUTH_VALIDATION_TTL_MS = 5 * 60 * 1000
@@ -254,7 +254,10 @@ export async function startHttpServer(opts: HttpServerOptions) {
           },
         })
         transport.onclose = () => { if (sessions.get(session.id) === entry) sessions.delete(session.id) }
-        const server = opts.buildServer()
+        // Instructions follow how identity arrives: OAuth token, a key in the
+        // path or a Bearer header (already authenticated), or nothing (open).
+        const profile = kind === "oauth" ? "oauth" : (pathKey || headerJwt) ? "authenticated" : "open"
+        const server = opts.buildServer(profile)
         if (kind === "oauth") hideOAuthTools(server)
         entry = { server, transport, session }
         fresh = true

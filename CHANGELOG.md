@@ -4,6 +4,9 @@ All notable changes to this package are documented here. For cross-SDK release n
 
 ## Unreleased
 
+### Changed
+- Initialize `instructions` now depend on how identity arrived: OAuth sessions (`/mcp/oauth`) and key-authenticated sessions (`/mcp/k/<key>` or a Bearer header) are told the connection is already authenticated and never to ask for a password or API key; only the open `/mcp` entry keeps the login / register guidance.
+
 ### Added
 - Personal connector URL: `/mcp/k/<api-key>` authenticates URL-only clients
   (Claude.ai / ChatGPT custom connectors) without a login step. Register, login

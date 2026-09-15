@@ -32,18 +32,19 @@ const { registerTools } = await import("./tools.js")
 const { registerPromptsAndResources } = await import("./prompts.js")
 const { registerDocsSearch } = await import("./docsSearch.js")
 const { isHostedMode } = await import("./session.js")
-const { HOSTED_INSTRUCTIONS, STDIO_INSTRUCTIONS } = await import("./instructions.js")
+const { instructionsFor } = await import("./instructions.js")
 const { applyScopeGuard } = await import("./scopeGuard.js")
 
 const SERVER_NAME = "Ethora MCP Server"
 const SERVER_VERSION = "26.9.0"
 
-export function buildServer() {
-  // In HTTP mode this runs once per session, after setHostedMode(true), so the
-  // instructions reflect the transport the client actually connected through.
+export function buildServer(profile?: "open" | "authenticated" | "oauth") {
+  // In HTTP mode this runs once per session, after setHostedMode(true); the
+  // entry point (open, personal URL / bearer, OAuth) picks the instructions so
+  // the model never tries to log in on a connection that is already authenticated.
   const server = new McpServer(
     { name: SERVER_NAME, version: SERVER_VERSION },
-    { instructions: isHostedMode() ? HOSTED_INSTRUCTIONS : STDIO_INSTRUCTIONS }
+    { instructions: instructionsFor(isHostedMode() ? (profile || "open") : "stdio") }
   )
   registerTools(server)
   registerPromptsAndResources(server)
