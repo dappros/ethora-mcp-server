@@ -1,30 +1,31 @@
 import axios from "axios"
 import { appConfig, normalizeApiUrl } from "./config.js"
+import { getSession, isHostedMode } from "./session.js"
 
+// `httpTokens` / `ethoraContext` keep their historical shape, but every read
+// and write resolves against the *current* session (AsyncLocalStorage). In
+// stdio mode that is a single default session; in hosted HTTP mode each
+// Mcp-Session-Id gets its own, so one client's login never leaks to another.
 export const httpTokens = {
-  appJwt: appConfig.appJwt,
-  appToken: "",
-  b2bToken: appConfig.b2bToken || "",
-  _token: '',
-  _refreshToken: '',
-  set refreshToken(token: string) {
-    this._refreshToken = token;
-  },
-  get refreshToken() {
-    return this._refreshToken;
-  },
-  set token(newToken: string) {
-    this._token = newToken;
-  },
-  get token() {
-    return this._token;
-  },
-};
+  get appJwt() { return getSession().tokens.appJwt },
+  set appJwt(v: string) { getSession().tokens.appJwt = v },
+  get appToken() { return getSession().tokens.appToken },
+  set appToken(v: string) { getSession().tokens.appToken = v },
+  get b2bToken() { return getSession().tokens.b2bToken },
+  set b2bToken(v: string) { getSession().tokens.b2bToken = v },
+  get token() { return getSession().tokens.token },
+  set token(v: string) { getSession().tokens.token = v },
+  get refreshToken() { return getSession().tokens.refreshToken },
+  set refreshToken(v: string) { getSession().tokens.refreshToken = v },
+}
 
 export const ethoraContext = {
-  authMode: "user" as "user" | "app" | "b2b",
-  currentAppId: "" as string,
-  currentAgentId: "" as string,
+  get authMode() { return getSession().context.authMode },
+  set authMode(v: "user" | "app" | "b2b") { getSession().context.authMode = v },
+  get currentAppId() { return getSession().context.currentAppId },
+  set currentAppId(v: string) { getSession().context.currentAppId = v },
+  get currentAgentId() { return getSession().context.currentAgentId },
+  set currentAgentId(v: string) { getSession().context.currentAgentId = v },
 }
 
 export const httpClientDappros = axios.create({
@@ -49,7 +50,20 @@ httpClientDappros.interceptors.request.use((config) => {
     config.baseURL = baseURL.replace(/\/v1\/?$/, "")
   }
 
-  if (config.url === '/users/login/refresh') {
+  // Hosted mode: pass the real caller's address through so the API's per-IP
+  // limiters see individual clients rather than the MCP host.
+  const clientIp = getSession().clientIp
+  if (clientIp) {
+    ;(config.headers as any)["X-Forwarded-For"] = clientIp
+    ;(config.headers as any)["X-Real-IP"] = clientIp
+  }
+
+  if (config.url === '/users/login/refresh' || config.url === '/v2/users/login/refresh') {
+    return config;
+  }
+
+  // Public, unauthenticated endpoints.
+  if (config.url === '/ping' || config.url.startsWith('/apps/get-config')) {
     return config;
   }
 
@@ -59,6 +73,9 @@ httpClientDappros.interceptors.request.use((config) => {
     (config.url === '/users' && config.method === 'post') ||
     config.url?.startsWith('/users/checkEmail/') ||
     config.url === '/users/sign-up-with-email' ||
+    config.url === '/users/sign-up-with-email/' ||
+    config.url === '/v2/users/sign-up-with-email' ||
+    config.url === '/v2/users/login-with-email' ||
     config.url === '/users/sign-up-resend-email' ||
     config.url === '/users/forgot' ||
     config.url === '/users/reset'
@@ -143,20 +160,23 @@ export const refreshToken = async () => {
 export function configureClient(params: { apiUrl?: string; appJwt?: string; appToken?: string; b2bToken?: string }) {
   const { apiUrl, appJwt, appToken, b2bToken } = params
   if (apiUrl) {
+    if (isHostedMode()) {
+      throw new Error("apiUrl is fixed on a hosted MCP server and cannot be changed per session. Run the stdio server locally if you need to target another Ethora API.")
+    }
     const normalized = normalizeApiUrl(apiUrl)
     appConfig.apiUrl = normalized
     httpClientDappros.defaults.baseURL = normalized
   }
   if (typeof appJwt === "string") {
     httpTokens.appJwt = appJwt
-    appConfig.appJwt = appJwt
+    if (!isHostedMode()) appConfig.appJwt = appJwt
   }
   if (typeof appToken === "string") {
     httpTokens.appToken = appToken.trim()
   }
   if (typeof b2bToken === "string") {
     httpTokens.b2bToken = b2bToken.trim()
-    appConfig.b2bToken = b2bToken.trim()
+    if (!isHostedMode()) appConfig.b2bToken = b2bToken.trim()
   }
   return getClientState()
 }
@@ -174,6 +194,8 @@ export function getClientState() {
     currentAgentId: ethoraContext.currentAgentId,
     enableDangerousTools: Boolean(appConfig.enableDangerousTools),
     enableAliases: Boolean(appConfig.enableAliases),
+    hosted: isHostedMode(),
+    sessionId: getSession().id,
   }
 }
 
@@ -210,7 +232,12 @@ export function configureB2BToken(b2bToken: string) {
   return getClientState()
 }
 
-export function userRegistration(email: string, firstName: string, lastName: string) {
+export function userRegistration(email: string, firstName: string, lastName: string, password?: string) {
+  if (password) {
+    // v2 signup accepts a password and creates a ready-to-login account
+    // (no e-mail confirmation gate), which is what agent-driven signups need.
+    return httpClientDappros.post(`/v2/users/sign-up-with-email`, { email, firstName, lastName, password })
+  }
   return httpClientDappros.post(
     `/users/sign-up-with-email/`,
     {
@@ -219,6 +246,30 @@ export function userRegistration(email: string, firstName: string, lastName: str
       lastName
     }
   )
+}
+
+// User API keys (long-lived, revocable user tokens for agents / headless clients)
+export function apiKeyCreate(payload?: { name?: string; ttlDays?: number }) {
+  return httpClientDappros.post(`/v2/users/me/api-keys`, payload || {})
+}
+
+export function apiKeyList() {
+  return httpClientDappros.get(`/v2/users/me/api-keys`)
+}
+
+export function apiKeyRevoke(id: string) {
+  return httpClientDappros.delete(`/v2/users/me/api-keys/${String(id || "").trim()}`)
+}
+
+// Fetch the public app config (incl. the App JWT used to bootstrap login /
+// register) for an app by its domainName. Used by the hosted server so a
+// deployment only needs to know its base app's domainName, not a secret.
+export async function fetchAppJwtByDomainName(domainName: string, timeoutMs = 5000) {
+  const res = await httpClientDappros.get(`/apps/get-config`, { params: { domainName }, timeout: timeoutMs })
+  const app = res.data?.result || res.data?.data || res.data
+  const token = String(app?.appToken || "").trim()
+  if (!token) throw new Error(`get-config for domainName=${domainName} returned no appToken`)
+  return token.startsWith("JWT ") ? token : `JWT ${token}`
 }
 
 export async function userLogin(email: string, password: string) {

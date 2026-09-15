@@ -88,6 +88,9 @@ import {
     sourcesSiteTagsUpdateV2,
     userLogin,
     userRegistration,
+    apiKeyCreate,
+    apiKeyList,
+    apiKeyRevoke,
     usersBatchCreateJobV2,
     usersBatchCreateV2,
     walletERC20Transfer,
@@ -141,6 +144,37 @@ function isAliasesEnabled() {
     return Boolean(state.enableAliases)
 }
 
+function unwrapData(resp: any) {
+    const body = resp?.data ?? resp
+    if (body && typeof body === "object" && "data" in body && body.data && typeof body.data === "object") return body.data
+    return body
+}
+
+function generatePassword(length = 20) {
+    // Unambiguous alphabet; strong enough for an account an agent will drive
+    // via API key from then on. Returned to the caller exactly once.
+    const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*"
+    const bytes = new Uint8Array(length)
+    globalThis.crypto.getRandomValues(bytes)
+    let out = ""
+    for (let i = 0; i < length; i++) out += alphabet[bytes[i] % alphabet.length]
+    return out
+}
+
+async function issueApiKey(name?: string, ttlDays?: number) {
+    const resp = await apiKeyCreate({ name, ttlDays })
+    const d = unwrapData(resp) || {}
+    return {
+        id: d.id ?? d._id,
+        name: d.name,
+        token: d.token,
+        expiresAt: d.expiresAt,
+        createdAt: d.createdAt,
+    }
+}
+
+const API_KEY_USAGE_HINT = "Use the API key as a Bearer header on the hosted MCP endpoint (`Authorization: Bearer <token>`), or pass it to the stdio server. It is shown once; revoke it with `ethora-api-key-revoke`."
+
 function normalizeBase64ToBuffer(input: string) {
     const raw = String(input || "")
     const b64 = raw.includes("base64,") ? raw.split("base64,").pop() || "" : raw
@@ -189,7 +223,7 @@ function configureTool(server: McpServer) {
     server.registerTool(
         "ethora-configure",
         {
-            description: "Set the Ethora API URL and credentials for this MCP session. Stores values in memory only; each call merges with omitted fields kept. Alternative to env vars (ETHORA_API_URL / ETHORA_APP_JWT / ETHORA_APP_TOKEN / ETHORA_B2B_TOKEN).\nAuth: none required — this establishes auth material. Errors: only if a value is structurally invalid. Follow with an `ethora-auth-use-*` tool to pick the active mode.",
+            description: "Set the Ethora API URL and credentials for this MCP session. Stores values in memory only; each call merges with omitted fields kept. Alternative to env vars (ETHORA_API_URL / ETHORA_APP_JWT / ETHORA_APP_TOKEN / ETHORA_B2B_TOKEN). On a hosted server `apiUrl` is fixed and cannot be changed; credentials are per session.\nAuth: none required — this establishes auth material. Errors: only if a value is structurally invalid. Follow with an `ethora-auth-use-*` tool to pick the active mode.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
             inputSchema: {
                 apiUrl: z.string().optional().describe("Full Ethora API URL including the version path, e.g. `https://api.chat.ethora.com/v1` or `http://localhost:8080/v1`. If you only have the host, set ETHORA_BASE_URL env instead and the server appends `/v1`."),
@@ -213,7 +247,7 @@ function statusTool(server: McpServer) {
     server.registerTool(
         "ethora-status",
         {
-            description: "Report the current Ethora MCP session state: configured API URL, active auth mode, which credentials are present (booleans like `hasAppJwt` — values never echoed), and the selected appId/agentId.\nAuth: none required. Errors: effectively none. Related: `ethora-doctor` for an active connectivity check.",
+            description: "Report the current Ethora MCP session state: configured API URL, active auth mode, which credentials are present (booleans like `hasAppJwt` — values never echoed), the selected appId/agentId, and `hosted`/`sessionId` on the hosted (Streamable HTTP) server.\nAuth: none required. Errors: effectively none. Related: `ethora-doctor` for an active connectivity check.",
             annotations: { readOnlyHint: true, openWorldHint: false },
         },
         async function () {
@@ -530,9 +564,18 @@ function helpTool(server: McpServer) {
                     } else if (state.authMode === "user" && !checks.hasUserToken) {
                         nextCalls.push({
                             tool: "ethora-user-login",
-                            args: { email: "user@example.com", password: "<password>" },
-                            why: "You are in user auth mode but no user token is present.",
+                            args: { email: "user@example.com", password: "<password>", createApiKey: true },
+                            why: state.hosted
+                                ? "Hosted server: no user token yet. Log in (or `ethora-user-register` for a new account) to bind this session; ask for an API key to reconnect later via `Authorization: Bearer <key>`."
+                                : "You are in user auth mode but no user token is present.",
                         })
+                        if (state.hosted) {
+                            nextCalls.push({
+                                tool: "ethora-user-register",
+                                args: { email: "you@example.com", firstName: "First", lastName: "Last" },
+                                why: "No account yet? Register, get logged in, and receive an API key in one call.",
+                            })
+                        }
                     } else {
                         nextCalls.push({ tool: "ethora-doctor", why: "Run connectivity checks and get fix suggestions." })
                     }
@@ -564,6 +607,20 @@ function helpTool(server: McpServer) {
                 }
 
                 return asToolResult(ok({
+                    hosted: state.hosted ? {
+                        enabled: true,
+                        apiUrl: state.apiUrl,
+                        authPaths: [
+                            "Connection header `Authorization: Bearer <user API key | appToken | b2b token>` (applied on every request; no tool call needed).",
+                            "`ethora-user-login` with email + password (binds this MCP session; add `createApiKey: true` to get a reusable key).",
+                            "`ethora-user-register` to create an account, log in and receive an API key in one step.",
+                        ],
+                        notes: [
+                            "apiUrl is fixed per deployment; `ethora-configure` cannot change it here.",
+                            "Sessions are private: nothing from another client's session is visible to you.",
+                            "Manage keys with `ethora-api-key-create` / `ethora-api-key-list` / `ethora-api-key-revoke`.",
+                        ],
+                    } : undefined,
                     availableAuthModes,
                     authModes,
                     currentAuthMode: state.authMode,
@@ -1095,6 +1152,13 @@ function doctorTool(server: McpServer) {
                     })
                 }
 
+                if (state.hosted) {
+                    suggestions.push({
+                        severity: "info",
+                        message: "Hosted MCP server: identity comes from the `Authorization: Bearer` header or from `ethora-user-login` / `ethora-user-register` in this session.",
+                        action: checks.hasUserToken ? "You are authenticated. Use `ethora-api-key-create` for a reusable key." : "Call `ethora-user-login` (existing account) or `ethora-user-register` (new account).",
+                    })
+                }
                 return asToolResult(ok({ state, checks, ping, suggestions }, meta))
             } catch (error) {
                 return asToolResult(fail(error, meta))
@@ -1454,14 +1518,26 @@ function userLoginWithEmailTool(server: McpServer) {
             description: "Authenticate as an existing Ethora user with email + password. Stores the user session token in this MCP session and unlocks user-auth tools (`ethora-app-list`, `ethora-files-*`, `ethora-wallet-*`).\nAuth: user-auth mode (`ethora-auth-use-user` first) and a configured `appJwt`. Errors: 401/403 bad credentials; 404 email not registered; 429 per-IP rate limit — retry with backoff.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
             inputSchema: {
-                email: z.string().email().describe("User's registered email address (RFC 5322). Must match an account created via `ethora-user-register` and verified via the link sent to that address."),
-                password: z.string().describe("Plain-text password the user set during registration. Sent over TLS to the Ethora API; never echoed back or logged.")
+                email: z.string().email().describe("User's registered email address (RFC 5322). Must match an account created via `ethora-user-register`."),
+                password: z.string().describe("Plain-text password the user set during registration. Sent over TLS to the Ethora API; never echoed back or logged."),
+                createApiKey: z.boolean().optional().describe("When true, also mint a long-lived API key for this user and return it once, so headless clients / agents can reconnect with `Authorization: Bearer <key>` instead of logging in again. Default false."),
+                apiKeyName: z.string().optional().describe("Label for the API key when `createApiKey` is true (e.g. `claude-code-laptop`)."),
+                apiKeyTtlDays: z.number().int().min(1).max(365).optional().describe("Lifetime of the API key in days when `createApiKey` is true. Server default applies when omitted."),
             }
         },
-        async function ({ email, password }) {
+        async function ({ email, password, createApiKey, apiKeyName, apiKeyTtlDays }) {
             try {
                 let result = await userLogin(email, password)
-                return asToolResult(ok(result.data, getDefaultMeta("ethora-user-login")))
+                const data: any = { ...(result.data || {}) }
+                if (createApiKey) {
+                    try {
+                        data.apiKey = await issueApiKey(apiKeyName, apiKeyTtlDays)
+                        data.apiKeyUsage = API_KEY_USAGE_HINT
+                    } catch (e) {
+                        data.apiKeyError = errorToText(e)
+                    }
+                }
+                return asToolResult(ok(data, getDefaultMeta("ethora-user-login")))
             } catch (error) {
                 return asToolResult(fail(error, getDefaultMeta("ethora-user-login")))
             }
@@ -1474,32 +1550,126 @@ function userRegisterWithEmailTool(server: McpServer) {
         'ethora-user-register',
         {
             title: 'Ethora registration',
-            description: "Register a new Ethora end-user account by email + first/last name. Creates a pending user record and triggers a verification email — the user must click the link before `ethora-user-login` succeeds.\nAuth: user-auth mode and a configured `appJwt` (tells the server which app the user belongs to). Errors: 401 no `appJwt`; 422 email already registered, invalid names, or invalid `appJwt`. Related: bulk provisioning uses `ethora-users-batch-create-v2`.",
-            annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+            description: "Create a new Ethora user account by email + first/last name, then log in and bind the session. A password is generated when omitted and returned once. By default also mints a long-lived API key so an agent can reconnect later with `Authorization: Bearer <key>` (no human step needed).\nAuth: user-auth mode and a configured `appJwt` (on a hosted server this is preset). Errors: 401 no `appJwt`; 422 email already registered or password shorter than 6 chars; 429 rate limited. Related: bulk provisioning uses `ethora-users-batch-create-v2`.",
+            annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
             inputSchema: {
-                email: z.string().email().describe("Email address for the new user. Must be RFC-5322 valid and not already registered within this app. The user will receive a verification link they must click before login works."),
+                email: z.string().email().describe("Email address for the new user. Must be RFC-5322 valid and not already registered within this app. No confirmation click is required to log in; the address is used for password reset."),
                 firstName: z.string().describe("First name shown in the user's profile and message attributions across chat rooms and the app UI."),
-                lastName: z.string().describe("Last name shown in the user's profile. Required by the server; do not omit unless your Ethora deployment explicitly accepts empty strings.")
+                lastName: z.string().describe("Last name shown in the user's profile."),
+                password: z.string().min(6).optional().describe("Password for the account (min 6 chars). Omit to have a strong random password generated and returned once in the result."),
+                createApiKey: z.boolean().optional().describe("Mint a long-lived API key right after signup and return it once. Default true. Set false if you only need this session."),
+                apiKeyName: z.string().optional().describe("Label for the API key (default `mcp-signup`)."),
+                apiKeyTtlDays: z.number().int().min(1).max(365).optional().describe("API key lifetime in days. Server default applies when omitted."),
             }
         },
-        async function ({ email, firstName, lastName }) {
+        async function ({ email, firstName, lastName, password, createApiKey, apiKeyName, apiKeyTtlDays }) {
+            const meta = getDefaultMeta("ethora-user-register")
+            const generated = !password
+            const effectivePassword = password || generatePassword()
             try {
-                await userRegistration(email, firstName, lastName)
+                await userRegistration(email, firstName, lastName, effectivePassword)
             } catch (error) {
                 if (error && typeof error === 'object' && 'response' in error) {
                     const axiosError = error as any;
                     if (axiosError.response?.status === 422) {
-                        const errorData = axiosError.response.data;
-
-                        return asToolResult(fail(new Error(String(errorData.error || "VALIDATION_ERROR")), getDefaultMeta("ethora-user-register")))
+                        const errorData = axiosError.response.data || {}
+                        return asToolResult(fail(new Error(String(errorData.error || "VALIDATION_ERROR")), meta))
                     }
-
-                } else {
-                    return asToolResult(fail(error, getDefaultMeta("ethora-user-register")))
                 }
+                return asToolResult(fail(error, meta))
             }
 
-            return asToolResult(ok({ message: "Operation successful. Please follow the link in your email to complete the registration." }, getDefaultMeta("ethora-user-register")))
+            const data: any = {
+                email,
+                registered: true,
+                ...(generated ? { password: effectivePassword, passwordNote: "Generated password; shown once. Store it if you need to log in again without an API key." } : {}),
+            }
+
+            try {
+                const login = await userLogin(email, effectivePassword)
+                const u = login.data?.user || {}
+                data.loggedIn = true
+                data.userId = u._id || u.id
+                data.appId = u.appId
+            } catch (e) {
+                data.loggedIn = false
+                data.loginError = errorToText(e)
+                data.next = "Account created but automatic login failed. Call `ethora-user-login` with the email and password."
+                return asToolResult(ok(data, meta))
+            }
+
+            if (createApiKey !== false) {
+                try {
+                    data.apiKey = await issueApiKey(apiKeyName || "mcp-signup", apiKeyTtlDays)
+                    data.apiKeyUsage = API_KEY_USAGE_HINT
+                } catch (e) {
+                    data.apiKeyError = errorToText(e)
+                }
+            }
+            data.next = "You are logged in for this MCP session. Next: `ethora-app-create` to create an app, then `ethora-app-select`."
+            return asToolResult(ok(data, meta))
+        }
+    )
+}
+
+function apiKeyTools(server: McpServer) {
+    server.registerTool(
+        "ethora-api-key-create",
+        {
+            description: "Mint a long-lived, revocable API key for the currently logged-in user. The key is a user token: send it as `Authorization: Bearer <key>` to the hosted MCP endpoint (or set it in the stdio client) to skip `ethora-user-login`. Shown once.\nAuth: user auth (logged in). Errors: 401 not logged in; 404 on backends without API key support.",
+            annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+            inputSchema: {
+                name: z.string().optional().describe("Label to recognise the key later (e.g. `ci-runner`, `claude-desktop`)."),
+                ttlDays: z.number().int().min(1).max(365).optional().describe("Lifetime in days. Server default applies when omitted."),
+            },
+        },
+        async function ({ name, ttlDays }) {
+            const meta = getDefaultMeta("ethora-api-key-create")
+            try {
+                const key = await issueApiKey(name, ttlDays)
+                return asToolResult(ok({ apiKey: key, usage: API_KEY_USAGE_HINT }, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+
+    server.registerTool(
+        "ethora-api-key-list",
+        {
+            description: "List the current user's API keys (id, name, createdAt, expiresAt). Token values are never returned.\nAuth: user auth.",
+            annotations: { readOnlyHint: true, openWorldHint: true },
+        },
+        async function () {
+            const meta = getDefaultMeta("ethora-api-key-list")
+            try {
+                const resp = await apiKeyList()
+                const d = unwrapData(resp)
+                const items = Array.isArray(d) ? d : (d?.items || d?.keys || [])
+                return asToolResult(ok({ items }, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+
+    server.registerTool(
+        "ethora-api-key-revoke",
+        {
+            description: "Revoke one of the current user's API keys by id. Clients using that key stop working immediately.\nAuth: user auth. Errors: 404 unknown id.",
+            annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
+            inputSchema: {
+                id: z.string().describe("API key id as returned by `ethora-api-key-create` / `ethora-api-key-list`."),
+            },
+        },
+        async function ({ id }) {
+            const meta = getDefaultMeta("ethora-api-key-revoke")
+            try {
+                const resp = await apiKeyRevoke(id)
+                return asToolResult(ok(unwrapData(resp) ?? { ok: true }, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
         }
     )
 }
@@ -3832,6 +4002,7 @@ export function registerTools(server: McpServer) {
     b2bAppProvisionTool(server);
     userLoginWithEmailTool(server);
     userRegisterWithEmailTool(server);
+    apiKeyTools(server);
     appListTool(server);
     appCreateTool(server);
     appUpdateTool(server);

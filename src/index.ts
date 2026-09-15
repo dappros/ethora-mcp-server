@@ -1,36 +1,74 @@
 #!/usr/bin/env node
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { registerTools } from "./tools.js";
-import { registerPromptsAndResources } from "./prompts.js";
+import { readFileSync } from "node:fs"
+import { resolve } from "node:path"
 
-export const server = new McpServer(
-  {
-    name: "Ethora MCP Server",
-    version: "26.9.0",
+// Load a local `.env` (cwd) before anything reads process.env. Real
+// environment variables always win over the file. Tiny parser on purpose: no
+// dotenv dependency for the npm CLI.
+function loadDotEnv() {
+  try {
+    const text = readFileSync(resolve(process.cwd(), ".env"), "utf8")
+    for (const rawLine of text.split(/\r?\n/)) {
+      const line = rawLine.trim()
+      if (!line || line.startsWith("#")) continue
+      const eq = line.indexOf("=")
+      if (eq <= 0) continue
+      const key = line.slice(0, eq).trim().replace(/^export\s+/, "")
+      let value = line.slice(eq + 1).trim()
+      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+        value = value.slice(1, -1)
+      }
+      if (process.env[key] === undefined) process.env[key] = value
+    }
+  } catch {
+    // no .env, fine
   }
-);
+}
+loadDotEnv()
 
-registerTools(server);
-registerPromptsAndResources(server);
+const { McpServer } = await import("@modelcontextprotocol/sdk/server/mcp.js")
+const { StdioServerTransport } = await import("@modelcontextprotocol/sdk/server/stdio.js")
+const { registerTools } = await import("./tools.js")
+const { registerPromptsAndResources } = await import("./prompts.js")
+
+const SERVER_NAME = "Ethora MCP Server"
+const SERVER_VERSION = "26.9.0"
+
+export function buildServer() {
+  const server = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION })
+  registerTools(server)
+  registerPromptsAndResources(server)
+  return server
+}
+
+// Kept for backwards compatibility with code importing `server` from index.
+export const server = buildServer()
+
+function wantsHttp() {
+  if (process.argv.includes("--http")) return true
+  if (process.argv.includes("--stdio")) return false
+  return String(process.env.ETHORA_MCP_TRANSPORT || "").trim().toLowerCase() === "http"
+}
 
 async function runServer() {
   try {
-    console.error("Attempting to start Ethora MCP Server.");
+    if (wantsHttp()) {
+      const { startHttpServer } = await import("./httpServer.js")
+      await startHttpServer({ name: SERVER_NAME, version: SERVER_VERSION, buildServer })
+      return
+    }
 
-    const transport = new StdioServerTransport();
-    await server.connect(transport);
-
-    console.error("Successfully started Ethora MCP Server.");
+    console.error("Attempting to start Ethora MCP Server.")
+    const transport = new StdioServerTransport()
+    await server.connect(transport)
+    console.error("Successfully started Ethora MCP Server.")
   } catch (error) {
-    console.error("Failed to start Ethora MCP Server.", error);
-
-    process.exit(1);
+    console.error("Failed to start Ethora MCP Server.", error)
+    process.exit(1)
   }
 }
 
 runServer().catch((error) => {
-  console.error("Failed to start Ethora MCP Server.", error);
-
-  process.exit(1);
-});
+  console.error("Failed to start Ethora MCP Server.", error)
+  process.exit(1)
+})

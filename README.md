@@ -242,6 +242,71 @@ command can use it:
 
 ---
 
+## 🌐 Hosted mode (Streamable HTTP)
+
+The same server can run as a long-lived HTTP service so MCP clients connect
+over the network instead of launching a process. Ethora Cloud runs one at
+`https://mcp.chat.ethora.com/mcp`; self-hosted installs get their own via
+`services.mcp.enabled` in `deploy.yml` (see `ethora-monoserver`).
+
+Start it with `ETHORA_MCP_TRANSPORT=http` (or `--http`). Every MCP session
+(`Mcp-Session-Id`) has private in-memory state: one client's login, selected
+app, or configured tokens are never visible to another session.
+
+### Hosted env vars
+
+- `ETHORA_MCP_TRANSPORT=http` — switch from stdio to Streamable HTTP
+- `ETHORA_MCP_HTTP_HOST` / `ETHORA_MCP_HTTP_PORT` — bind address (default `127.0.0.1:3030`; put nginx in front)
+- `ETHORA_MCP_PUBLIC_URL` — public base URL advertised in `/.well-known/mcp` (e.g. `https://mcp.chat.ethora.com`)
+- `ETHORA_MCP_TRUST_PROXY=true` — take the client IP from `X-Forwarded-For` (set when behind nginx); it is forwarded to the Ethora API so per-IP rate limits apply per caller, not per MCP host
+- `ETHORA_MCP_SESSION_TTL_MS` — idle session eviction (default 30 min)
+- `ETHORA_APP_DOMAIN_NAME` — base app `domainName`; when `ETHORA_APP_JWT` is empty the server fetches the App JWT from `GET /v1/apps/get-config?domainName=...` at startup, so no secret has to be configured for login/register
+- `ETHORA_API_URL` is fixed for the whole server; `ethora-configure` cannot change it per session
+- A `.env` file in the working directory is loaded at startup (real env wins)
+
+Endpoints: `POST|GET|DELETE /mcp` (MCP), `GET /healthz`, `GET /.well-known/mcp` (discovery JSON, also served at `/`).
+
+### Three ways to authenticate on a hosted server
+
+1. **Bearer header (headless clients, agents, CI).** Send
+   `Authorization: Bearer <token>` with every request. The token can be a user
+   API key (see below), an `appToken` (app-scoped tools) or a B2B server token.
+   The server picks the matching auth mode from the token type; nothing else
+   is required.
+2. **`ethora-user-login`** with email + password binds the session to that
+   user. Pass `createApiKey: true` to also receive a long-lived API key you can
+   use as the Bearer header next time.
+3. **`ethora-user-register`** creates an account, logs in, and (by default)
+   returns an API key, all in one call. A strong password is generated when
+   you do not pass one and returned once. This is the fully agent-driven
+   path: no browser, no e-mail confirmation.
+
+API keys are user tokens that the account owner can list and revoke at any
+time (`ethora-api-key-create` / `ethora-api-key-list` / `ethora-api-key-revoke`).
+Treat them like any other secret: anything returned by a tool is visible to
+the model and in the transcript.
+
+### Client config (Claude Code, Cursor, and other URL-capable clients)
+
+```json
+{
+  "mcpServers": {
+    "ethora": {
+      "url": "https://mcp.chat.ethora.com/mcp",
+      "headers": { "Authorization": "Bearer <your API key>" }
+    }
+  }
+}
+```
+
+Claude Code CLI: `claude mcp add --transport http ethora https://mcp.chat.ethora.com/mcp --header "Authorization: Bearer <your API key>"`.
+
+Clients that cannot send headers (e.g. a connector added as "no auth") work
+too: call `ethora-user-login` or `ethora-user-register` at the start of the
+conversation.
+
+---
+
 ## 🔐 Configuration (env vars)
 
 This MCP server supports both the local user-auth flow and the server-side B2B flow.
@@ -263,6 +328,7 @@ You can provide these either:
   If provided, the server will default to `.../v1`.
 - `ETHORA_APP_JWT`: App JWT string, usually starting with `JWT ...`
 - `ETHORA_B2B_TOKEN`: B2B server token for `x-custom-token` auth (JWT with `type=server`)
+- `ETHORA_MCP_TRANSPORT`: `stdio` (default) or `http` — see "Hosted mode" above for the `ETHORA_MCP_HTTP_*` / `ETHORA_MCP_PUBLIC_URL` / `ETHORA_MCP_TRUST_PROXY` / `ETHORA_APP_DOMAIN_NAME` vars
 - `ETHORA_MCP_ENABLE_DANGEROUS_TOOLS`: enable destructive tools (default: disabled). Set to `true` to expose:
   - app deletion tools
   - wallet transfer tools
