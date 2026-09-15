@@ -37,7 +37,10 @@ export const appConfig = {
   // Set ETHORA_MCP_ENABLE_ALIASES=true to expose them.
   // Hosted AI chat widget bundle base URL (the embed script is `${widgetUrl}/assistant.js`).
   // Rendered by the deploy from the widget domain; empty when no widget is hosted.
-  widgetUrl: String(process.env.ETHORA_MCP_WIDGET_URL ?? "").trim().replace(/\/+$/, ""),
+  // Accepts either the widget host (https://widget.example.com) or the full
+  // script URL (https://widget.example.com/assistant.js, which is what the
+  // deploy's WIDGET_URL carries); the script name is appended by the tool.
+  widgetUrl: String(process.env.ETHORA_MCP_WIDGET_URL ?? "").trim().replace(/\/+$/, "").replace(/\/assistant\.js$/i, ""),
 
   // Public API base for browser-side embeds (data-api-base). Falls back to the
   // OAuth issuer (same host) and then to ETHORA_API_URL when that is not loopback.
