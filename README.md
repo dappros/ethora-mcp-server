@@ -260,11 +260,12 @@ app, or configured tokens are never visible to another session.
 - `ETHORA_MCP_PUBLIC_URL` — public base URL advertised in `/.well-known/mcp` (e.g. `https://mcp.chat.ethora.com`)
 - `ETHORA_MCP_TRUST_PROXY=true` — take the client IP from `X-Forwarded-For` (set when behind nginx); it is forwarded to the Ethora API so per-IP rate limits apply per caller, not per MCP host
 - `ETHORA_MCP_SESSION_TTL_MS` — idle session eviction (default 4 hours)
+- `ETHORA_MCP_AUTH_ISSUER` — public URL of the OAuth authorization server (the Ethora API host); enables `/mcp/oauth` and the protected-resource metadata
 - `ETHORA_APP_DOMAIN_NAME` — base app `domainName`; when `ETHORA_APP_JWT` is empty the server fetches the App JWT from `GET /v1/apps/get-config?domainName=...` at startup, so no secret has to be configured for login/register
 - `ETHORA_API_URL` is fixed for the whole server; `ethora-configure` cannot change it per session
 - A `.env` file in the working directory is loaded at startup (real env wins)
 
-Endpoints: `POST|GET|DELETE /mcp` (MCP), `GET /healthz`, `GET /.well-known/mcp` (discovery JSON, also served at `/`).
+Endpoints: `POST|GET|DELETE /mcp` (MCP), `/mcp/k/<api-key>` (personal URL), `/mcp/oauth` (OAuth-protected), `GET /healthz`, `GET /.well-known/mcp` (discovery JSON, also served at `/`), `GET /.well-known/oauth-protected-resource[/mcp/oauth]`.
 
 ### Three ways to authenticate on a hosted server
 
@@ -303,7 +304,55 @@ Claude Code CLI: `claude mcp add --transport http ethora https://mcp.chat.ethora
 
 Clients that cannot send headers (e.g. a connector added as "no auth") work
 too: call `ethora-user-login` or `ethora-user-register` at the start of the
-conversation.
+conversation, or use a personal connector URL (next section).
+
+### Personal connector URL (`/mcp/k/<api-key>`)
+
+URL-only clients such as Claude.ai and ChatGPT custom connectors cannot send
+an `Authorization` header. The hosted server therefore also accepts the API
+key in the path:
+
+```
+https://mcp.chat.ethora.com/mcp/k/<your API key>
+```
+
+Paste that as the connector URL and every conversation is authenticated with
+no login step. `ethora-user-register`, `ethora-user-login` (with
+`createApiKey: true`) and `ethora-api-key-create` return it as
+`connectorUrl`, so an agent can hand it to the user at the end of a first
+conversation. It is a credential: treat it like a password, never share
+screenshots of it, and revoke the key (`ethora-api-key-revoke`) to invalidate
+it. The server never logs request URLs; keep the reverse proxy's access log
+free of request paths for this host as well (the monoserver nginx template
+does).
+
+### OAuth entry point (`/mcp/oauth`)
+
+For directory listings (Claude connector directory, ChatGPT apps) the vendor
+drives an OAuth 2.1 flow and expects the MCP server to act as a resource
+server. Set `ETHORA_MCP_AUTH_ISSUER` to the public URL of the Ethora API that
+serves the authorization server (`/.well-known/oauth-authorization-server`,
+`/oauth/authorize`, `/oauth/token`, `/oauth/register`) and the hosted server
+exposes:
+
+- `GET /.well-known/oauth-protected-resource` and
+  `/.well-known/oauth-protected-resource/mcp/oauth` (RFC 9728) naming that
+  authorization server and the scopes `read`, `write`, `admin`.
+- `POST|GET|DELETE /mcp/oauth`: same tools as `/mcp` but a Bearer token is
+  required. A missing or rejected token gets `401` with
+  `WWW-Authenticate: Bearer resource_metadata="..."`, which is how clients
+  discover the login flow. Tokens are validated against the API once per
+  session (cached 5 minutes). The JWT `scope` claim is enforced per tool:
+  read-only tools need `read`, destructive tools need `admin`, everything
+  else needs `write`; API keys and legacy tokens without a scope claim get
+  full access. Identity tools (`ethora-user-login`, `ethora-user-register`,
+  `ethora-configure`, `ethora-auth-use-*`, `ethora-api-key-*`) are hidden on
+  this endpoint because the OAuth token already fixes who you are.
+
+`/mcp` and `/mcp/k/<key>` stay open and unchanged, so agents and header-capable
+clients keep the fully automated path while the directory listing points at
+`/mcp/oauth`. When `ETHORA_MCP_AUTH_ISSUER` is unset both OAuth routes return
+404 and discovery omits them.
 
 ---
 

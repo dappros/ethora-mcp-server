@@ -97,6 +97,7 @@ import {
     walletGetBalance,
 } from "./apiClientEthora.js"
 import { fail, ok } from "./mcpResponse.js"
+import { connectorUrl, CONNECTOR_URL_NOTE } from "./publicUrl.js"
 
 function errorToText(error: unknown) {
     // axios-style errors
@@ -171,6 +172,16 @@ async function issueApiKey(name?: string, ttlDays?: number) {
         expiresAt: d.expiresAt,
         createdAt: d.createdAt,
     }
+}
+
+// Attach the personal connector URL (hosted mode only) next to a freshly minted key.
+function withConnectorUrl(data: any, token: string | undefined) {
+    const url = connectorUrl(String(token || ""))
+    if (url) {
+        data.connectorUrl = url
+        data.connectorUrlNote = CONNECTOR_URL_NOTE
+    }
+    return data
 }
 
 const API_KEY_USAGE_HINT = "Use the API key as a Bearer header on the hosted MCP endpoint (`Authorization: Bearer <token>`), or pass it to the stdio server. It is shown once; revoke it with `ethora-api-key-revoke`."
@@ -1533,6 +1544,7 @@ function userLoginWithEmailTool(server: McpServer) {
                     try {
                         data.apiKey = await issueApiKey(apiKeyName, apiKeyTtlDays)
                         data.apiKeyUsage = API_KEY_USAGE_HINT
+                        withConnectorUrl(data, data.apiKey?.token)
                     } catch (e) {
                         data.apiKeyError = errorToText(e)
                     }
@@ -1602,6 +1614,7 @@ function userRegisterWithEmailTool(server: McpServer) {
                 try {
                     data.apiKey = await issueApiKey(apiKeyName || "mcp-signup", apiKeyTtlDays)
                     data.apiKeyUsage = API_KEY_USAGE_HINT
+                    withConnectorUrl(data, data.apiKey?.token)
                 } catch (e) {
                     data.apiKeyError = errorToText(e)
                 }
@@ -1627,7 +1640,7 @@ function apiKeyTools(server: McpServer) {
             const meta = getDefaultMeta("ethora-api-key-create")
             try {
                 const key = await issueApiKey(name, ttlDays)
-                return asToolResult(ok({ apiKey: key, usage: API_KEY_USAGE_HINT }, meta))
+                return asToolResult(ok(withConnectorUrl({ apiKey: key, usage: API_KEY_USAGE_HINT }, key.token), meta))
             } catch (error) {
                 return asToolResult(fail(error, meta))
             }

@@ -11,6 +11,7 @@ export const HOSTED_INSTRUCTIONS = [
   "Never print API keys or passwords in your replies unless the user explicitly asks for them.",
   "Tools marked destructive delete data owned by the authenticated user (apps, agents, users, files); confirm with the user before calling them.",
   "Manage keys with `ethora-api-key-create`, `ethora-api-key-list` and `ethora-api-key-revoke`. Each MCP session is private: nothing from another client's session is visible here.",
+  "After registering or creating a key, give the user their `connectorUrl` (returned alongside the key): pasting it as a custom connector in Claude.ai or ChatGPT reconnects them authenticated in every future conversation with no login step.",
 ].join("\n")
 
 export const STDIO_INSTRUCTIONS = [
