@@ -8,288 +8,38 @@
 [![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_Server-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect?url=vscode%3Amcp%2Finstall%3F%257B%2522name%2522%253A%2522ethora%2522%252C%2522command%2522%253A%2522npx%2522%252C%2522args%2522%253A%255B%2522-y%2522%252C%2522%2540ethora%252Fmcp-server%2522%255D%257D)
 [![Install in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-Install_Server-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect?url=vscode-insiders%3Amcp%2Finstall%3F%257B%2522name%2522%253A%2522ethora%2522%252C%2522command%2522%253A%2522npx%2522%252C%2522args%2522%253A%255B%2522-y%2522%252C%2522%2540ethora%252Fmcp-server%2522%255D%257D)
 
-> One-click install for Cursor and VS Code (buttons above). For Claude Code, Claude Desktop, GitHub Copilot, Gemini CLI, Codex CLI, Windsurf, and Cline, see [Using with MCP Clients](#-using-with-mcp-clients) below.
+The MCP server for **Ethora**, an open-source chat and messaging platform with a built-in AI agent framework. It lets Claude, ChatGPT, Cursor, Claude Code, VS Code and autonomous agents create Ethora apps, chat rooms, users and AI agents, post messages, index RAG sources and produce website chat-widget embeds, all through tool calls.
 
-An MCP (Model Context Protocol) CLI/server that connects popular MCP clients to the **Ethora** platform — an open-source **chat & messaging platform with a built-in AI agent / chatbot framework**. This runs locally on a developer machine via stdio rather than as a hosted Ethora service.  
-Use it from **Cursor**, **VS Code MCP**, **Claude Desktop**, or **Windsurf/Cline** to manage apps and chat rooms, broadcast messages, deploy AI agents / chatbots with RAG sources, and automate B2B provisioning workflows. (ERC-20 wallet tools are also included — see the tool list below.)
-
-**Part of the [Ethora SDK ecosystem](https://github.com/dappros/ethora#ecosystem)** — see all SDKs, tools, and sample apps. Follow cross-SDK updates in the [Release Notes](https://github.com/dappros/ethora/blob/main/RELEASE-NOTES.md).
+**Part of the [Ethora SDK ecosystem](https://github.com/dappros/ethora#ecosystem)**. Cross-SDK updates: [Release Notes](https://github.com/dappros/ethora/blob/main/RELEASE-NOTES.md). Package changes: [CHANGELOG.md](./CHANGELOG.md).
 
 - npm: <https://www.npmjs.com/package/@ethora/mcp-server>
-- Default Ethora API: `https://api.chat.ethora.com/v1` (Swagger: <https://api.chat.ethora.com/api-docs/#/>)
+- Ethora API (Swagger): <https://api.chat.ethora.com/api-docs/#/>
 
----
+## Three ways to use it
 
-## ✨ What you get
+| | Where it runs | Best for |
+|---|---|---|
+| **Hosted (Ethora Cloud)** | `https://mcp.chat.ethora.com/mcp` (production rollout in progress; `https://mcp.chat-qa.ethora.com/mcp` is the QA instance) | Claude.ai, ChatGPT, Claude Code, Cursor and agents that talk to Ethora Cloud with no local install |
+| **Self-hosted** | Ships with the Ethora monoserver deploy; enable `services.mcp.enabled` in `deploy.yml` and it is served at `mcp.<your domain>/mcp` | Dedicated or on-premise Ethora installs; agent traffic never leaves your infrastructure |
+| **stdio CLI** | `npx -y @ethora/mcp-server` on your machine, configured with env vars | Local development, CI, and clients that launch a command |
 
-- Talk to the Ethora platform directly from your IDE or AI agent client (Cursor, VS Code MCP, Claude Desktop, Windsurf / Cline).
-- Both **user-auth** flows (login/register, files, owner/admin endpoints) and **B2B / app-token** flows (tenant provisioning, broadcast jobs, async user batches, AI bot config).
-- Built-in recipes, prompts, and generators for the most common Ethora workflows (Vite/Next chat-component setup, B2B bootstrap, AI-bot enablement, RAG sources).
-- Standard tool response envelope (`{ ok, ts, meta, data | error }`) so agent code can reason about success/failure consistently.
+The hosted and self-hosted modes are the same server started with `ETHORA_MCP_TRANSPORT=http`. Every MCP session has private in-memory state: one client's login, selected app or tokens are never visible to another session.
 
-## 🚦 Just trying it? (60-second quickstart)
+## 60-second quickstart
 
-Don't read the auth modes yet. Once the server is connected in your client, ask your agent to run, in order:
+**Claude.ai or ChatGPT (custom connector).** In the Ethora web app open Account, then the **AI Assistants** tab, create an API key and copy the **personal connector URL** it shows (`https://mcp.chat.ethora.com/mcp/k/<key>`). Paste it as a custom connector. Every conversation is authenticated with no login step. For a listed connector that uses the vendor's OAuth login instead, the URL is `https://mcp.chat.ethora.com/mcp/oauth`.
 
-1. **`ethora-doctor`** — confirms the server is up and can reach the Ethora API. No credentials needed.
-2. **`ethora-configure`** with your `appJwt` → **`ethora-auth-use-user`** → **`ethora-user-login`** with an email + password.
-3. **`ethora-app-list`** — you're in; this lists your apps.
-
-That's the local-developer path. Need server-side automation instead? Jump to [B2B mode](#2-b2b-mode). Lost at any point, call **`ethora-help`** — it reads your current state and tells you the next call.
-
-## 🔐 Two typical usage modes
-
-### 1) User Auth mode
-
-Best for:
-
-- developers trying Ethora locally
-- tenant admins / app owners using MCP manually
-- flows that start with `ethora-user-login`
-
-How it works:
-
-- configure `ETHORA_APP_JWT` once for login/register bootstrap
-- switch to `ethora-auth-use-user`
-- call `ethora-user-login`
-- use user-auth tools such as files and legacy owner/admin endpoints
-
-### 2) B2B mode
-
-Best for:
-
-- permanent backend integrations
-- partner provisioning flows
-- autonomous agents operating Ethora without a human user session
-
-How it works:
-
-- configure `ETHORA_B2B_TOKEN`
-- switch to `ethora-auth-use-b2b` for explicit tenant-actor `/v2/apps/:appId/...` routes
-- optionally switch into `ethora-auth-use-app` after `ethora-app-select` when you want app-scoped convenience routes powered by `appToken`
-
-Rule of thumb:
-
-- first-time local use usually starts with **User Auth**
-- repeatable automation usually starts with **B2B**, then often moves into **app-token** mode for one selected app
-
-### Prompts & Resources (P2: dev-facing docs)
-
-- **Resources** (loadable docs into context)
-  - `ethora://docs/auth-map` — appJwt vs appToken vs b2bToken
-  - `ethora://docs/chat-component/quickstart` — Vite/Next quickstart + replacing demo tokens
-  - `ethora://docs/sdk-backend/quickstart` — backend integration quickstart
-  - `ethora://docs/recipes` — common tool sequences (broadcast/sources/files/bot)
-- **Prompts**
-  - `ethora-auth-map`
-  - `ethora-vite-quickstart`
-  - `ethora-nextjs-quickstart`
-  - `ethora-backend-sdk-quickstart`
-  - `ethora-recipes`
-
-### Generators (no shell, no file writes)
-
-- `ethora-generate-chat-component-app-tsx` — ready-to-paste `App.tsx` snippet for `@ethora/chat-component`
-- `ethora-generate-env-examples` — `.env.example` templates for:
-  - frontend chat component
-  - backend SDK integration
-  - MCP usage (`ETHORA_API_URL`, `ETHORA_APP_JWT`, `ETHORA_B2B_TOKEN`)
-- `ethora-generate-b2b-bootstrap-runbook` — minimal “call these MCP tools in order” runbook for B2B bootstrap
-
-Tip: to list runnable recipes without calling `ethora-help`, call `ethora-run-recipe` with `goal: "auto"` and omit `recipeId`.
-
-- **Session / Config**
-  - `ethora-configure` — set API URL plus App JWT / B2B token / appToken for this MCP session
-  - `ethora-status` — show configured API URL, active auth mode, and which credentials are present
-  - `ethora-help` — task-oriented help (recommended next calls + “one-click recipes” based on current state)
-  - `ethora-run-recipe` — execute a built-in recipe by id (sequential steps; no shell, no file writes)
-  - `ethora-doctor` — validate config + ping the configured Ethora API for both user and B2B usage
-  - `ethora-app-select` — select current appId and optionally set appToken
-  - `ethora-auth-use-app` — switch to app-token auth mode for app-scoped operations
-  - `ethora-auth-use-user` — switch to user-session auth mode
-  - `ethora-auth-use-b2b` — switch to tenant-actor B2B `x-custom-token` auth mode
-
-- **Chats (v2)**
-  - `ethora-chats-broadcast-v2` — enqueue broadcast job using app-token auth or B2B + explicit `appId`
-  - `ethora-chats-broadcast-job-v2` — get broadcast job status/results using app-token auth or B2B + explicit `appId`
-  - `ethora-wait-broadcast-job-v2` — poll broadcast job until completed/failed using app-token auth or B2B + explicit `appId`
-  - `ethora-chats-message-v2` — send a test/automation message through the app chat surface (requires app-token auth)
-  - `ethora-chats-history-v2` — read persisted automation/test history for private or group sessions (requires app-token auth)
-
-- **Users (v2 async batch)**
-  - `ethora-users-batch-create-v2` — create async users batch job (requires B2B auth)
-  - `ethora-users-batch-job-v2` — get users batch job status/results (requires B2B auth)
-  - `ethora-wait-users-batch-job-v2` — poll users batch job until completed/failed (requires B2B auth)
-
-- **Files (v2)**
-- **Bot / Agent (v2)**
-  - `ethora-bot-get-v2` — get bot status/settings using app-token auth or B2B + explicit `appId`
-  - `ethora-bot-update-v2` — update bot settings using app-token auth or B2B + explicit `appId`
-  - `ethora-bot-enable-v2` — enable bot using app-token auth or B2B + explicit `appId`
-  - `ethora-bot-disable-v2` — disable bot using app-token auth or B2B + explicit `appId`
-  - `ethora-bot-widget-v2` — get widget/embed config and public widget URL metadata (app-token auth)
-  - `ethora-agents-list-v2` — list reusable saved agents for the current app owner (app-token auth)
-  - `ethora-agents-get-v2` — get one reusable saved agent (app-token auth)
-  - `ethora-agents-create-v2` — create a reusable saved agent (app-token auth)
-  - `ethora-agents-update-v2` — update a reusable saved agent (app-token auth)
-  - `ethora-agents-clone-v2` — clone a reusable saved agent (app-token auth)
-  - `ethora-agents-activate-v2` — bind a saved agent as the active bot for the selected app (app-token auth)
-  - `ethora-bot-message-v2` — compatibility alias for `ethora-chats-message-v2`
-  - `ethora-bot-history-v2` — compatibility alias for `ethora-chats-history-v2`
-
-  - `ethora-files-upload-v2` — upload files (requires user auth)
-  - `ethora-files-get-v2` — list/get files (requires user auth)
-  - `ethora-files-delete-v2` — delete file by id (requires user auth)
-
-- **Sources**
-  - `ethora-sources-docs-upload` — upload docs for ingestion (requires user auth)
-  - `ethora-sources-docs-delete` — delete ingested doc by id (requires user auth)
-  - `ethora-sources-site-crawl-v2` — crawl a URL using app-token auth or B2B + explicit `appId`
-  - `ethora-sources-site-reindex-v2` — reindex URL by urlId using app-token auth or B2B + explicit `appId`
-  - `ethora-sources-site-crawl-v2-wait` — single-call long-timeout helper for crawl (app-token auth)
-  - `ethora-sources-site-reindex-v2-wait` — single-call long-timeout helper for reindex (app-token auth)
-  - `ethora-sources-site-list-v2` — list crawled site sources and current tags using app-token auth or B2B + explicit `appId`
-  - `ethora-sources-site-tags-update-v2` — set/update tags for a crawled site source using app-token auth or B2B + explicit `appId`
-  - `ethora-sources-site-delete-url-v2` — delete one crawled URL by URL using app-token auth or B2B + explicit `appId`
-  - `ethora-sources-site-delete-url-v2-batch` — batch delete crawled source records by id using app-token auth or B2B + explicit `appId`
-  - `ethora-sources-docs-upload-v2` — upload docs for ingestion using app-token auth or B2B + explicit `appId`
-  - `ethora-sources-docs-list-v2` — list indexed documents and current tags using app-token auth or B2B + explicit `appId`
-  - `ethora-sources-docs-tags-update-v2` — set/update tags for an indexed document using app-token auth or B2B + explicit `appId`
-  - `ethora-sources-docs-delete-v2` — delete doc by id using app-token auth or B2B + explicit `appId`
-
-- **Auth & Accounts**
-  - `ethora-user-login` — login user (email + password)
-  - `ethora-user-register` — register user (email + first/last name)
-
-- **Applications**
-  - `ethora-app-create` — create app
-  - `ethora-app-update` — update app
-  - `ethora-app-delete` — delete app
-  - `ethora-app-list` — list apps
-  - `ethora-b2b-app-create` — create app using B2B auth (x-custom-token)
-  - `ethora-b2b-app-bootstrap-ai` — create app → index sources → configure/enable bot, including runtime LLM selection (B2B automation)
-  - `ethora-app-tokens-list-v2` — list app token metadata (B2B auth)
-  - `ethora-app-tokens-create-v2` — create new app token (returned once) (B2B auth)
-  - `ethora-app-tokens-rotate-v2` — rotate token (revoke old, return new once) (B2B auth)
-  - `ethora-app-tokens-revoke-v2` — revoke token by tokenId (idempotent) (B2B auth)
-  - `ethora-b2b-app-provision` — create app + create tokens + provision rooms + configure bot, including runtime LLM selection (B2B orchestrator)
-
-- **Chat & Rooms**
-  - `ethora-app-get-default-rooms` — list default rooms
-  - `ethora-app-get-default-rooms-with-app-id` — rooms for a given app
-  - `ethora-app-create-chat` — create chat for app
-  - `ethora-app-delete-chat` — delete chat
-
-- **Wallet**
-  - `ethora-wallet-get-balance` — get balance
-  - `ethora-wallet-erc20-transfer` — send ERC-20 tokens
-
-> Tool names above reflect the functional areas exposed by the server. Your exact tool names may vary slightly by version; run the client’s “list tools” to confirm.
-
-
-<img width="1670" height="995" alt="settings" src="https://github.com/user-attachments/assets/5a3e98da-5362-4ed2-9080-473510ad2837" />
-<img width="1691" height="1011" alt="login" src="https://github.com/user-attachments/assets/c70fc2d7-4686-4619-aaad-0ca966ac2912" />
-
-
-## 📦 Install / Run
-
-### Pre-requisites
-Before you begin, ensure you have the following:
-- Node.js installed on your system (recommended version 18.x or higher).
-
-### Install
-
-The server is distributed as an npm package and is typically launched by MCP clients via **npx**:
+**Claude Code.**
 
 ```bash
-npx -y @ethora/mcp-server
+# with a personal connector URL (no headers needed)
+claude mcp add --transport http ethora https://mcp.chat.ethora.com/mcp/k/<your API key>
+
+# or the open endpoint plus a Bearer header
+claude mcp add --transport http ethora https://mcp.chat.ethora.com/mcp --header "Authorization: Bearer <your API key>"
 ```
 
-No global install is required.
-
-### Run as a container
-
-A `Dockerfile` ships with this repo, so the server can also run as a container
-instead of via npx. Build it yourself:
-
-```bash
-docker build -t ethora-mcp-server .
-docker run -i --rm ethora-mcp-server
-```
-
-Pass configuration through as environment variables:
-
-```bash
-docker run -i --rm \
-  -e ETHORA_API_URL=https://api.chat.ethora.com/v1 \
-  -e ETHORA_APP_JWT="JWT <your app jwt>" \
-  ethora-mcp-server
-```
-
-The container speaks MCP over stdio, so any MCP client that can launch a
-command can use it:
-
-```json
-{
-  "mcpServers": {
-    "ethora": {
-      "command": "docker",
-      "args": ["run", "-i", "--rm", "ethora-mcp-server"]
-    }
-  }
-}
-```
-
----
-
-## 🌐 Hosted mode (Streamable HTTP)
-
-The same server can run as a long-lived HTTP service so MCP clients connect
-over the network instead of launching a process. Ethora Cloud runs one at
-`https://mcp.chat.ethora.com/mcp`; self-hosted installs get their own via
-`services.mcp.enabled` in `deploy.yml` (see `ethora-monoserver`).
-
-Start it with `ETHORA_MCP_TRANSPORT=http` (or `--http`). Every MCP session
-(`Mcp-Session-Id`) has private in-memory state: one client's login, selected
-app, or configured tokens are never visible to another session.
-
-### Hosted env vars
-
-- `ETHORA_MCP_TRANSPORT=http` — switch from stdio to Streamable HTTP
-- `ETHORA_MCP_HTTP_HOST` / `ETHORA_MCP_HTTP_PORT` — bind address (default `127.0.0.1:3030`; put nginx in front)
-- `ETHORA_MCP_PUBLIC_URL` — public base URL advertised in `/.well-known/mcp` (e.g. `https://mcp.chat.ethora.com`)
-- `ETHORA_MCP_TRUST_PROXY=true` — take the client IP from `X-Forwarded-For` (set when behind nginx); it is forwarded to the Ethora API so per-IP rate limits apply per caller, not per MCP host
-- `ETHORA_MCP_SESSION_TTL_MS` — idle session eviction (default 4 hours)
-- `ETHORA_MCP_AUTH_ISSUER` — public URL of the OAuth authorization server (the Ethora API host); enables `/mcp/oauth` and the protected-resource metadata
-- `ETHORA_MCP_WIDGET_URL` — base URL of the hosted AI chat widget (the embed script is `<url>/assistant.js`); used by `ethora-widget-embed-snippet`
-- `ETHORA_MCP_PUBLIC_API_URL` — public API base browsers can reach, emitted as `data-api-base` in widget snippets (falls back to `ETHORA_MCP_AUTH_ISSUER`, then a non-loopback `ETHORA_API_URL`)
-- `ETHORA_APP_DOMAIN_NAME` — base app `domainName`; when `ETHORA_APP_JWT` is empty the server fetches the App JWT from `GET /v1/apps/get-config?domainName=...` at startup, so no secret has to be configured for login/register
-- `ETHORA_API_URL` is fixed for the whole server; `ethora-configure` cannot change it per session
-- A `.env` file in the working directory is loaded at startup (real env wins)
-
-Endpoints: `POST|GET|DELETE /mcp` (MCP), `/mcp/k/<api-key>` (personal URL), `/mcp/oauth` (OAuth-protected), `GET /healthz`, `GET /.well-known/mcp` (discovery JSON, also served at `/`), `GET /.well-known/oauth-protected-resource[/mcp/oauth]`.
-
-### Three ways to authenticate on a hosted server
-
-1. **Bearer header (headless clients, agents, CI).** Send
-   `Authorization: Bearer <token>` with every request. The token can be a user
-   API key (see below), an `appToken` (app-scoped tools) or a B2B server token.
-   The server picks the matching auth mode from the token type; nothing else
-   is required.
-2. **`ethora-user-login`** with email + password binds the session to that
-   user. Pass `createApiKey: true` to also receive a long-lived API key you can
-   use as the Bearer header next time.
-3. **`ethora-user-register`** creates an account, logs in, and (by default)
-   returns an API key, all in one call. A strong password is generated when
-   you do not pass one and returned once. This is the fully agent-driven
-   path: no browser, no e-mail confirmation.
-
-API keys are user tokens that the account owner can list and revoke at any
-time (`ethora-api-key-create` / `ethora-api-key-list` / `ethora-api-key-revoke`).
-Treat them like any other secret: anything returned by a tool is visible to
-the model and in the transcript.
-
-### Client config (Claude Code, Cursor, and other URL-capable clients)
+**Cursor, VS Code, and any client that takes a URL and headers.**
 
 ```json
 {
@@ -302,196 +52,182 @@ the model and in the transcript.
 }
 ```
 
-Claude Code CLI: `claude mcp add --transport http ethora https://mcp.chat.ethora.com/mcp --header "Authorization: Bearer <your API key>"`.
+**Autonomous agents with no account yet.** Connect to `https://mcp.chat.ethora.com/mcp` with no credentials and call `ethora-user-register` with an email, first and last name. It creates the account, logs the session in, and returns a generated password plus an API key and `connectorUrl` exactly once. Store the key and reconnect later with the Bearer header or the personal URL; nothing else is needed, no browser and no email confirmation.
 
-Clients that cannot send headers (e.g. a connector added as "no auth") work
-too: call `ethora-user-login` or `ethora-user-register` at the start of the
-conversation, or use a personal connector URL (next section).
+**stdio CLI.**
 
-### Personal connector URL (`/mcp/k/<api-key>`)
-
-URL-only clients such as Claude.ai and ChatGPT custom connectors cannot send
-an `Authorization` header. The hosted server therefore also accepts the API
-key in the path:
-
-```
-https://mcp.chat.ethora.com/mcp/k/<your API key>
+```bash
+ETHORA_API_URL=https://api.chat.ethora.com/v1 ETHORA_APP_JWT="JWT <your app jwt>" npx -y @ethora/mcp-server
 ```
 
-Paste that as the connector URL and every conversation is authenticated with
-no login step. `ethora-user-register`, `ethora-user-login` (with
-`createApiKey: true`) and `ethora-api-key-create` return it as
-`connectorUrl`, so an agent can hand it to the user at the end of a first
-conversation. It is a credential: treat it like a password, never share
-screenshots of it, and revoke the key (`ethora-api-key-revoke`) to invalidate
-it. The server never logs request URLs; keep the reverse proxy's access log
-free of request paths for this host as well (the monoserver nginx template
-does).
+Then ask your agent to call `ethora-status`, `ethora-user-login` (or `ethora-user-register`) and `ethora-app-list`. Lost at any point, call `ethora-help`: it reads the current state and returns the recommended next calls.
 
-### OAuth entry point (`/mcp/oauth`)
+## Entry points and authentication
 
-For directory listings (Claude connector directory, ChatGPT apps) the vendor
-drives an OAuth 2.1 flow and expects the MCP server to act as a resource
-server. Set `ETHORA_MCP_AUTH_ISSUER` to the public URL of the Ethora API that
-serves the authorization server (`/.well-known/oauth-authorization-server`,
-`/oauth/authorize`, `/oauth/token`, `/oauth/register`) and the hosted server
-exposes:
+| Entry point | Who supplies identity | Typical client |
+|---|---|---|
+| `/mcp` | Nobody at connect time. Call `ethora-user-login` or `ethora-user-register` inside the session, or send `Authorization: Bearer <token>` on every request (user API key, app token or B2B token; the server picks the auth mode from the token type) | Agents, Claude Code, Cursor, connectors added as "no auth" |
+| `/mcp/k/<api-key>` | The key in the path, applied like a Bearer header | Claude.ai and ChatGPT custom connectors, which take a URL but no headers |
+| `/mcp/oauth` | An OAuth 2.1 access token obtained through the Ethora authorization server (dynamic client registration, PKCE, scopes `read`, `write`, `admin`) | Connector directories; vendors run the login flow themselves |
+| stdio | Env vars `ETHORA_APP_JWT` (login/register bootstrap) and optional `ETHORA_B2B_TOKEN`, or `ethora-configure` at runtime | Local CLI |
 
-- `GET /.well-known/oauth-protected-resource` and
-  `/.well-known/oauth-protected-resource/mcp/oauth` (RFC 9728) naming that
-  authorization server and the scopes `read`, `write`, `admin`.
-- `POST|GET|DELETE /mcp/oauth`: same tools as `/mcp` but a Bearer token is
-  required. A missing or rejected token gets `401` with
-  `WWW-Authenticate: Bearer resource_metadata="..."`, which is how clients
-  discover the login flow. Tokens are validated against the API once per
-  session (cached 5 minutes). The JWT `scope` claim is enforced per tool:
-  read-only tools need `read`, destructive tools need `admin`, everything
-  else needs `write`; API keys and legacy tokens without a scope claim get
-  full access. Identity tools (`ethora-user-login`, `ethora-user-register`,
-  `ethora-configure`, `ethora-auth-use-*`, `ethora-api-key-*`) are hidden on
-  this endpoint because the OAuth token already fixes who you are.
+Stay in **user auth mode** on the hosted server (`ethora-status` shows `authMode: user`). App-token and B2B modes exist for server integrations; the agents and rooms routes reject app tokens.
 
-`/mcp` and `/mcp/k/<key>` stay open and unchanged, so agents and header-capable
-clients keep the fully automated path while the directory listing points at
-`/mcp/oauth`. When `ETHORA_MCP_AUTH_ISSUER` is unset both OAuth routes return
-404 and discovery omits them.
+### API keys
 
----
+- `ethora-api-key-create { name?, ttlDays? }` mints a key (default 90 days, max 365), shown once together with `connectorUrl`. `ethora-user-register` mints one by default and `ethora-user-login { createApiKey: true }` on request.
+- `ethora-api-key-list` shows id, name, created and expiry, never the value. `ethora-api-key-revoke { id }` invalidates it immediately: the next request with that key fails with `REFRESH_RECORD_NOT_FOUND`.
+- The same keys are managed in the Ethora web app under Account, AI Assistants, where the personal URL, a Claude Code one-liner and a Cursor config are shown with copy buttons.
+- A key acts as the user. Treat the personal URL like a password: do not share screenshots of it, revoke it if it leaks. The server never logs request URLs, and the monoserver nginx template logs method and status only on the MCP host.
 
-## 🔐 Configuration (env vars)
+### OAuth 2.1 (`/mcp/oauth`)
 
-This MCP server supports both the local user-auth flow and the server-side B2B flow.
+Set `ETHORA_MCP_AUTH_ISSUER` to the public URL of the Ethora API that hosts the authorization server (the monoserver deploy sets it). The MCP server then:
 
-Core values:
+- serves RFC 9728 protected-resource metadata at `/.well-known/oauth-protected-resource` and `/.well-known/oauth-protected-resource/mcp/oauth`, naming the authorization server and the three scopes;
+- answers unauthenticated requests on `/mcp/oauth` with `401` and `WWW-Authenticate: Bearer resource_metadata="..."`, which is how clients discover the flow;
+- validates each token against the API once per session (cached five minutes) and enforces the token's `scope` per tool: read-only tools need `read`, destructive tools need `admin`, everything else needs `write`. `search`, `fetch`, `ethora-help`, `ethora-status` and `ethora-doctor` need no scope. Tokens without a scope claim (API keys) get full access;
+- hides the identity tools (`ethora-user-login`, `ethora-user-register`, `ethora-configure`, `ethora-auth-use-app`, `ethora-auth-use-user`, `ethora-api-key-create`, `ethora-api-key-list`, `ethora-api-key-revoke`) because the token already fixes who you are.
 
-- **Ethora API URL** (where to send requests)
-- **Ethora App JWT** (used only for login/register bootstrap in user-auth mode)
-- **Ethora B2B Token** (used for tenant-actor server-to-server flows)
+The authorization server itself is part of the Ethora backend: `<issuer>/.well-known/oauth-authorization-server`, `/oauth/register`, `/oauth/authorize` (a consent page with sign-in, account creation and Google sign-in), `/oauth/token` and `/oauth/revoke`. Users see and disconnect OAuth grants under Account, AI Assistants, Connected AI apps. When `ETHORA_MCP_AUTH_ISSUER` is unset, both OAuth routes return 404 and discovery omits them.
 
-You can provide these either:
-- via **env vars**, or
-- at runtime via the **`ethora-configure`** tool (in-memory; resets when MCP process restarts)
+## What agents can do
 
-### Supported env vars
+The end-to-end journey a new user typically asks for, with the tools in order:
 
-- `ETHORA_API_URL`: full API URL (example: `https://api.chat.ethora.com/v1`, `http://localhost:8080/v1`)
-- `ETHORA_BASE_URL`: base host URL (example: `https://api.chat.ethora.com`, `http://localhost:8080`)  
-  If provided, the server will default to `.../v1`.
-- `ETHORA_APP_JWT`: App JWT string, usually starting with `JWT ...`
-- `ETHORA_B2B_TOKEN`: B2B server token for `x-custom-token` auth (JWT with `type=server`)
-- `ETHORA_MCP_TRANSPORT`: `stdio` (default) or `http` — see "Hosted mode" above for the `ETHORA_MCP_HTTP_*` / `ETHORA_MCP_PUBLIC_URL` / `ETHORA_MCP_TRUST_PROXY` / `ETHORA_APP_DOMAIN_NAME` vars
-- `ETHORA_MCP_ENABLE_DANGEROUS_TOOLS`: enable destructive tools (default: disabled). Set to `true` to expose:
-  - app deletion tools
-  - wallet transfer tools
-  - bulk delete tools
+1. `ethora-user-register` (or `ethora-user-login`) to get an authenticated session and an API key.
+2. `ethora-app-create { displayName }` then `ethora-app-select { appId }` to make the new app current.
+3. `ethora-app-create-chat { title }` to create a group room. The result contains the room JID `${appId}_${chatId}`; every room tool accepts the JID or the bare `chatId`.
+4. `ethora-agents-create-v2 { name, prompt, ... }` to create an AI agent persona in that app.
+5. `ethora-agent-invite-to-chat { agentIdOrAddress, chatJid }` to put the agent in the room. A bot instance is spawned live, no restart needed.
+6. `ethora-chats-message-v2 { text, roomJid, waitForReplySec: 45 }` to post a message and wait for the agent's answer, returned as `replies`. `ethora-chats-history-v2` reads the room afterwards.
+7. `ethora-agents-activate-v2 { agentId, chatJid }` to make that agent the app's default responder, then `ethora-widget-embed-snippet` for the `<script>` tag that puts the AI chat widget on a website.
 
-> Security: **never** commit App JWTs, B2B tokens, or appTokens to git. Configure them via env vars, the MCP client secret store, or your own backend.
+`ethora-help { goal }` returns this and the other recipes (`user-login`, `broadcast`, `sources-ingest`, `files-upload`, `bot-manage`, `chat-test`, `widget`, `b2b-bootstrap-ai`) with the calls filled in for the current state, and `ethora-run-recipe` executes them.
 
----
+### Documentation inside the server
 
-## 🧱 Standard response envelope (tools)
+- **`instructions`** in the initialize result tell the assistant how identity works on the entry point it connected through: the open endpoint explains login and register, personal-URL and Bearer sessions are told they are already authenticated and must never ask for a password or key, OAuth sessions the same plus how to react to `INSUFFICIENT_SCOPE`.
+- **`search { query }`** and **`fetch { id }`** (the ChatGPT connector convention) search an in-memory corpus: the auth map, quickstarts, recipes, a hosted getting-started guide, an API keys guide and one reference entry per tool with its inputs. They work unauthenticated.
+- **Resources** `ethora://docs/auth-map`, `ethora://docs/chat-component/quickstart`, `ethora://docs/sdk-backend/quickstart`, `ethora://docs/recipes` and **prompts** `ethora-auth-map`, `ethora-vite-quickstart`, `ethora-nextjs-quickstart`, `ethora-backend-sdk-quickstart`, `ethora-recipes`, `ethora-agents-quickstart`.
 
-All tools return JSON in a consistent envelope:
+### Tool groups
 
-- Success: `{ ok: true, ts, meta, data }`
-- Error: `{ ok: false, ts, meta, error }`, where `error` includes:
-  - `code`: stable string (prefer API `code`, otherwise inferred)
-  - `httpStatus`: HTTP status when the failure came from an API call
-  - `requestId`: request/correlation id if returned by API
-  - `hint`: 1-line “what to do next”
+91 tools on the hosted server (app deletion, wallet transfer and bulk-delete tools are only registered when `ETHORA_MCP_ENABLE_DANGEROUS_TOOLS=true`, which the monoserver deploy sets; the stdio default is off). Every tool carries MCP annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`) so clients can auto-approve reads and confirm the 13 destructive ones.
 
----
+| Group | Tools |
+|---|---|
+| Session and help | `ethora-status`, `ethora-doctor`, `ethora-help`, `ethora-run-recipe`, `ethora-configure`, `ethora-auth-use-user`, `ethora-auth-use-app`, `ethora-auth-use-b2b` |
+| Accounts and keys | `ethora-user-register`, `ethora-user-login`, `ethora-api-key-create`, `ethora-api-key-list`, `ethora-api-key-revoke` |
+| Apps | `ethora-app-create`, `ethora-app-list`, `ethora-app-select`, `ethora-app-update`, `ethora-app-delete`, `ethora-app-export-v2`, `ethora-app-import-v2`, `ethora-app-tokens-create-v2`, `ethora-app-tokens-list-v2`, `ethora-app-tokens-rotate-v2`, `ethora-app-tokens-revoke-v2` |
+| Rooms and messages | `ethora-app-create-chat`, `ethora-app-delete-chat`, `ethora-app-get-default-rooms`, `ethora-app-get-default-rooms-with-app-id`, `ethora-chats-message-v2`, `ethora-chats-history-v2`, `ethora-chats-broadcast-v2`, `ethora-chats-broadcast-job-v2`, `ethora-wait-broadcast-job-v2`, `ethora-messages-search-v2`, `ethora-messages-context-v2`, `ethora-unread-counts-v2` |
+| AI agents | `ethora-agents-create-v2`, `ethora-agents-list-v2`, `ethora-agents-get-v2`, `ethora-agents-update-v2`, `ethora-agents-clone-v2`, `ethora-agents-delete-v2`, `ethora-agents-export-v2`, `ethora-agents-import-v2`, `ethora-agents-activate-v2`, `ethora-agent-invite-to-chat`, `ethora-agent-set-visibility`, `ethora-agent-soul-set`, `ethora-agent-soul-append`, `ethora-bot-instances-list`, `ethora-bot-instance-status`, `ethora-bot-instance-diag`, `ethora-bot-instance-test-message`, `ethora-bot-instance-leave-chat` |
+| Website widget | `ethora-widget-embed-snippet`, `ethora-generate-chat-component-app-tsx` |
+| Legacy per-app bot (apps created in the dashboard before the agents framework) | `ethora-bot-get-v2`, `ethora-bot-update-v2`, `ethora-bot-enable-v2`, `ethora-bot-disable-v2`, `ethora-bot-widget-v2`, `ethora-b2b-bot-enable` |
+| RAG sources | `ethora-sources-site-crawl-v2`, `ethora-sources-site-crawl-v2-wait`, `ethora-sources-site-reindex-v2`, `ethora-sources-site-reindex-v2-wait`, `ethora-sources-site-list-v2`, `ethora-sources-site-tags-update-v2`, `ethora-sources-site-delete-url-v2`, `ethora-sources-site-delete-url-v2-batch`, `ethora-sources-docs-upload-v2`, `ethora-sources-docs-list-v2`, `ethora-sources-docs-tags-update-v2`, `ethora-sources-docs-delete-v2`, `ethora-sources-docs-upload`, `ethora-sources-docs-delete` |
+| Users and files | `ethora-users-batch-create-v2`, `ethora-users-batch-job-v2`, `ethora-wait-users-batch-job-v2`, `ethora-files-upload-v2`, `ethora-files-get-v2`, `ethora-files-delete-v2` |
+| B2B provisioning (server integrations with a B2B token) | `ethora-b2b-app-create`, `ethora-b2b-app-provision`, `ethora-b2b-app-bootstrap-ai`, `ethora-generate-b2b-bootstrap-runbook`, `ethora-generate-env-examples` |
+| Wallet | `ethora-wallet-get-balance`, `ethora-wallet-erc20-transfer` |
+| Docs | `search`, `fetch` |
 
-## 🚀 Using with MCP Clients
+Alias tools (`ethora.b2b.*`, `ethora-bot-message-v2`, `ethora-bot-history-v2`) are off by default (`ETHORA_MCP_ENABLE_ALIASES=true` to expose them); the canonical tools cover the same ground.
 
-Every client runs the same thing — `npx -y @ethora/mcp-server` over stdio. One-click buttons exist for **Cursor** and **VS Code** (top of this README). For the rest it's a short config block or a one-line command.
+## Website widget
+
+`ethora-widget-embed-snippet` returns the tag for the embeddable AI chat widget:
+
+```html
+<script id="chat-content-assistant" src="https://widget.<your domain>/assistant.js"
+  data-app-id="<appId>" data-api-base="https://api.<your domain>" data-bot-name="Helper" defer></script>
+```
+
+The widget answers with the app's active bot (`defaultBotInstanceId`). On an app created through the API run `ethora-agents-create-v2`, `ethora-app-create-chat`, `ethora-agent-invite-to-chat` and `ethora-agents-activate-v2 { agentId, chatJid }` first; the tool lists these prerequisites and `ethora-help { goal: "widget" }` walks through them. Activation runs in user auth by setting the app's default bot instance (what the admin AI Widget dropdown does). Until a bot is active, the widget's session endpoint answers `AI_BOT_NOT_CONFIGURED`. `ethora-generate-chat-component-app-tsx` produces a React `App.tsx` for `@ethora/chat-component` instead.
+
+## Configuration
+
+### Env vars (stdio and hosted)
+
+| Variable | Meaning |
+|---|---|
+| `ETHORA_API_URL` | Full API URL, e.g. `https://api.chat.ethora.com/v1` (default). On a hosted server it is fixed for all sessions |
+| `ETHORA_BASE_URL` | Host-only alternative to `ETHORA_API_URL`; `/v1` is appended |
+| `ETHORA_APP_JWT` | App JWT used only by login and register (`ETHORA_APP_TOKEN` is a legacy alias) |
+| `ETHORA_APP_DOMAIN_NAME` | Base app `domainName`; when `ETHORA_APP_JWT` is empty the server fetches the app JWT from `GET /v1/apps/get-config?domainName=...` at startup |
+| `ETHORA_B2B_TOKEN` | B2B server token for `x-custom-token` tenant-actor routes |
+| `ETHORA_MCP_ENABLE_DANGEROUS_TOOLS` | `true` registers app deletion, wallet transfer and bulk-delete tools (default off) |
+| `ETHORA_MCP_ENABLE_ALIASES` | `true` exposes the dot-namespaced alias tools (default off) |
+
+### Hosted mode only
+
+| Variable | Meaning |
+|---|---|
+| `ETHORA_MCP_TRANSPORT` | `stdio` (default) or `http`; `--http` on the command line does the same |
+| `ETHORA_MCP_HTTP_HOST`, `ETHORA_MCP_HTTP_PORT` | Bind address, default `127.0.0.1:3030`; put nginx in front |
+| `ETHORA_MCP_PUBLIC_URL` | Public base URL advertised in discovery and used for `connectorUrl`, e.g. `https://mcp.chat.ethora.com/mcp` |
+| `ETHORA_MCP_TRUST_PROXY` | `true` takes the client IP from `X-Forwarded-For`; it is forwarded to the API so per-IP limits apply per caller |
+| `ETHORA_MCP_SESSION_TTL_MS` | Idle session eviction, default 4 hours |
+| `ETHORA_MCP_AUTH_ISSUER` | Public URL of the OAuth authorization server (the Ethora API host); enables `/mcp/oauth` |
+| `ETHORA_MCP_WIDGET_URL` | Base URL of the hosted AI chat widget (`<url>/assistant.js`) for `ethora-widget-embed-snippet` |
+| `ETHORA_MCP_PUBLIC_API_URL` | Public API base browsers can reach, emitted as `data-api-base`; falls back to `ETHORA_MCP_AUTH_ISSUER`, then a non-loopback `ETHORA_API_URL` |
+
+A `.env` file in the working directory is loaded at startup; real environment variables win. Credentials can also be set per session with `ethora-configure` (in memory only; on a hosted server `apiUrl` cannot be changed).
+
+### Endpoints (hosted)
+
+| Path | Purpose |
+|---|---|
+| `POST\|GET\|DELETE /mcp` | Streamable HTTP MCP endpoint, open |
+| `POST\|GET\|DELETE /mcp/k/<api-key>` | Same, authenticated by the key in the path |
+| `POST\|GET\|DELETE /mcp/oauth` | Same, Bearer token required, scopes enforced |
+| `GET /healthz` | `{ ok, sessions, version, appJwtReady, oauth }` |
+| `GET /.well-known/mcp` and `GET /` | Discovery JSON: endpoint, transport, auth options, OAuth metadata |
+| `GET /.well-known/oauth-protected-resource[/mcp/oauth]` | RFC 9728 protected-resource metadata |
+
+### Response envelope
+
+Every tool returns JSON text in one shape: success `{ ok: true, ts, meta, data }`, failure `{ ok: false, ts, meta, error }` where `error` carries `code` (the API's own code when it has one), `message`, `httpStatus`, `requestId` and a one-line `hint`.
+
+## Using with stdio clients
+
+Every stdio client runs `npx -y @ethora/mcp-server`; pass credentials as env vars (preferred) or call `ethora-configure` for a quick local test (its arguments end up in the transcript). One-click buttons exist for Cursor and VS Code at the top of this README. For hosted mode use the URL form shown in the quickstart instead.
 
 ### Cursor
 
-Use the **[Add to Cursor](https://cursor.com/en/install-mcp?name=ethora&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBldGhvcmEvbWNwLXNlcnZlciJdfQ%3D%3D)** button above, or manually: **Settings → MCP → Add new global MCP server**:
-
 ```json
-{
-  "mcpServers": {
-    "ethora": {
-      "command": "npx",
-      "args": ["-y", "@ethora/mcp-server"]
-    }
-  }
-}
+{ "mcpServers": { "ethora": { "command": "npx", "args": ["-y", "@ethora/mcp-server"] } } }
 ```
 
-### VS Code (and GitHub Copilot)
+### VS Code (and GitHub Copilot agent mode)
 
-Use the **Install in VS Code** button above, or add a `.vscode/mcp.json` file (project-level) — note the key is `servers`:
+`.vscode/mcp.json` (note the key is `servers`):
 
 ```json
-{
-  "servers": {
-    "ethora": {
-      "command": "npx",
-      "args": ["-y", "@ethora/mcp-server"]
-    }
-  }
-}
+{ "servers": { "ethora": { "command": "npx", "args": ["-y", "@ethora/mcp-server"] } } }
 ```
-
-GitHub Copilot's **agent mode** in VS Code reads this same `.vscode/mcp.json` — no separate setup. (For a user-level install instead, put the `servers` block under `"mcp"` in your User Settings JSON.)
 
 ### Claude Code
 
-One command:
-
 ```bash
-claude mcp add ethora -- npx -y @ethora/mcp-server
+claude mcp add ethora -e ETHORA_API_URL=https://api.chat.ethora.com/v1 -e ETHORA_APP_JWT="JWT <your app jwt>" -- npx -y @ethora/mcp-server
 ```
 
-Add `--scope user` to make it available in every project. Verify with `claude mcp list`.
-
-To pre-configure credentials, pass them as env vars with `-e` (recommended over the `ethora-configure` tool — see note below):
-
-```bash
-claude mcp add ethora \
-  -e ETHORA_API_URL=https://api.chat.ethora.com/v1 \
-  -e ETHORA_B2B_TOKEN=<your-b2b-token> \
-  -- npx -y @ethora/mcp-server
-```
-
-> **Secrets note:** prefer env vars (above) or your MCP client's secret store for credentials. The `ethora-configure` tool also works, but it passes secrets as tool arguments, which means they end up in the conversation transcript. Use it for quick local testing, not for tokens you care about.
+Add `--scope user` to make it available in every project; verify with `claude mcp list`.
 
 ### Claude Desktop
 
-**Settings → Developer → Edit Config**, open `claude_desktop_config.json`:
+Settings, Developer, Edit Config (`claude_desktop_config.json`):
 
 ```json
-{
-  "mcpServers": {
-    "ethora": {
-      "command": "npx",
-      "args": ["-y", "@ethora/mcp-server"]
-    }
-  }
-}
+{ "mcpServers": { "ethora": { "command": "npx", "args": ["-y", "@ethora/mcp-server"] } } }
 ```
 
-### Gemini CLI
+### Gemini CLI, Windsurf, Cline
 
-Add to `~/.gemini/settings.json` (global) or `.gemini/settings.json` (per project):
-
-```json
-{
-  "mcpServers": {
-    "ethora": {
-      "command": "npx",
-      "args": ["-y", "@ethora/mcp-server"]
-    }
-  }
-}
-```
+Same `mcpServers` block as above in `~/.gemini/settings.json`, `~/.codeium/windsurf/mcp_config.json` or `cline_mcp_settings.json`.
 
 ### Codex CLI
 
-Add to `~/.codex/config.toml` — note the table name is `mcp_servers` (underscore; `mcp-servers` is silently ignored):
+`~/.codex/config.toml` (the table is `mcp_servers` with an underscore):
 
 ```toml
 [mcp_servers.ethora]
@@ -499,243 +235,62 @@ command = "npx"
 args = ["-y", "@ethora/mcp-server"]
 ```
 
-### Windsurf
+### Container
 
-**Settings → Cascade → MCP Servers → View raw config** (`~/.codeium/windsurf/mcp_config.json`):
-
-```json
-{
-  "mcpServers": {
-    "ethora": {
-      "command": "npx",
-      "args": ["-y", "@ethora/mcp-server"]
-    }
-  }
-}
+```bash
+docker build -t ethora-mcp-server .
+docker run -i --rm -e ETHORA_API_URL=https://api.chat.ethora.com/v1 -e ETHORA_APP_JWT="JWT <your app jwt>" ethora-mcp-server
 ```
 
-### Cline
+Add `-e ETHORA_MCP_TRANSPORT=http -e ETHORA_MCP_HTTP_HOST=0.0.0.0 -p 3030:3030` to run the hosted mode in a container.
 
-Open the MCP servers panel and edit `cline_mcp_settings.json`:
+## B2B provisioning (server integrations)
 
-```json
-{
-  "mcpServers": {
-    "ethora": {
-      "command": "npx",
-      "args": ["-y", "@ethora/mcp-server"]
-    }
-  }
-}
-```
+With `ETHORA_B2B_TOKEN` configured, `ethora-auth-use-b2b` switches the session to tenant-actor auth and `ethora-b2b-app-bootstrap-ai` creates an app, indexes sources (`crawlUrl`, `docs[]` as base64) and configures its bot in one call, with optional `llmProvider` and `llmModel`. `ethora-b2b-app-provision` adds app tokens and default rooms. `ethora-users-batch-create-v2` plus `ethora-wait-users-batch-job-v2` provision users asynchronously and `ethora-chats-broadcast-v2` plus `ethora-wait-broadcast-job-v2` send a message to many rooms. `ethora-generate-b2b-bootstrap-runbook` prints the call order for your own automation.
 
----
+## Troubleshooting
 
-## 🧪 Quick test
+| Symptom | Meaning and fix |
+|---|---|
+| `TOKEN_MISSING` (401) | The session has no user token. Call `ethora-user-login` or `ethora-user-register`, or connect with a Bearer header or personal URL |
+| `REFRESH_RECORD_NOT_FOUND` (401) | The API key or token was revoked. Create a new key |
+| `INSUFFICIENT_SCOPE` (403) on `/mcp/oauth` | The OAuth grant lacks the scope the tool needs (`read`, `write` or `admin`). Reconnect and approve the wider scope |
+| `This tool requires app-token auth` or `AUTH_USER_REQUIRED` | Wrong auth mode. On the hosted server stay in user mode (`ethora-auth-use-user`); app-token mode is only for `/v2/bot` and widget routes |
+| `AI_BOT_NOT_CONFIGURED` from the widget | No active bot on the app. Run the agent, invite and `ethora-agents-activate-v2` steps, then reload the page |
+| `BOT_NOT_INITIALIZED` (422) from `ethora-bot-*` | The app has no legacy per-app bot; use the agents tools instead |
+| `AGENT_NOT_FOUND` or `APP_NOT_FOUND` (404) | Wrong id or the app was not selected; `ethora-app-select` first, or pass `appId` |
+| `Not Acceptable` (406) from `/mcp` | The client must accept both `application/json` and `text/event-stream` |
+| Client cannot connect (stdio) | Run `npx -y @ethora/mcp-server` in a terminal and check Node 18 or newer |
+| Hosted server not answering | `GET /healthz`; `appJwtReady: false` means the base app JWT bootstrap failed (check `ETHORA_APP_DOMAIN_NAME` and `ETHORA_API_URL`) |
 
-After the server shows as **connected** in your client:
+## Security notes
 
-- Run `list tools` (client command) to verify Ethora tools are available.
-- Check config/connectivity: call `ethora-doctor` (or `ethora-status`)
-- For a first local/manual test:
-  - call `ethora-configure` with `apiUrl` / `appJwt`
-  - call `ethora-auth-use-user`
-  - call `ethora-user-login`
-  - then try `ethora-app-list` or `ethora-wallet-get-balance`
-- For a server-side/B2B test:
-  - call `ethora-configure` with `apiUrl` / `b2bToken`
-  - call `ethora-auth-use-b2b`
-  - then try `ethora-b2b-app-create` or `ethora-app-tokens-list-v2`
+- API keys and personal URLs act as the user until revoked. Keep them in your client's secret store, never in shared config or screenshots, and revoke on suspicion.
+- The server never logs request URLs or tokens. Keep your reverse proxy's access log free of request paths for the MCP host (the monoserver nginx template does).
+- Anything returned by a tool is visible to the model and stored in the conversation transcript; the server tells assistants not to print keys or passwords, and to confirm destructive tools with the user.
+- This repo runs report-only secret and SAST scans (gitleaks, semgrep) on pushes and PRs.
 
----
-
-## 🧭 P1: B2B “create app → index sources → deploy bot” in one call
-
-Pre-reqs:
-- Configure `ETHORA_API_URL` (or call `ethora-configure`)
-- Configure `ETHORA_B2B_TOKEN` (or call `ethora-configure` with `b2bToken`)
-- Ensure your Ethora backend is configured with AI service URL/secret (for bot activation)
-
-Suggested flow:
-- Call `ethora-auth-use-b2b`
-- Call `ethora-b2b-app-bootstrap-ai` with:
-  - `displayName`
-  - optional `savedAgentId`
-  - optional `crawlUrl`
-  - optional `docs[]` (base64)
-  - `enableBot: true`
-  - optional `llmProvider`
-  - optional `llmModel`
-
-It will:
-- create the app (B2B)
-- set current app context (best-effort)
-- index sources via `/v2/sources/*` (app-token auth)
-- configure and/or enable bot (best-effort)
-
-### Example payloads
-
-Minimal (create app only):
-
-```json
-{
-  "displayName": "Acme AI Demo",
-  "setAsCurrent": true
-}
-```
-
-Create app + crawl a website + enable bot:
-
-```json
-{
-  "displayName": "Acme AI Demo",
-  "savedAgentId": "6790abc1234567890def1111",
-  "crawlUrl": "https://example.com",
-  "followLink": true,
-  "enableBot": true,
-  "botTrigger": "/bot",
-  "llmProvider": "openai",
-  "llmModel": "gpt-4o-mini"
-}
-```
-
-Create app + upload docs + enable bot:
-
-```json
-{
-  "displayName": "Acme AI Demo",
-  "docs": [
-    {
-      "name": "faq.pdf",
-      "mimeType": "application/pdf",
-      "base64": "BASE64_PDF_CONTENT_HERE"
-    }
-  ],
-  "enableBot": true,
-  "llmProvider": "openai",
-  "llmModel": "gpt-4o-mini"
-}
-```
-
-Provision app + token + default rooms + bot settings:
-
-```json
-{
-  "displayName": "Acme Support",
-  "savedAgentId": "6790abc1234567890def1111",
-  "tokenLabels": ["default", "staging"],
-  "rooms": [
-    { "title": "General" },
-    { "title": "Support", "pinned": true }
-  ],
-  "enableBot": true,
-  "botTrigger": "/bot",
-  "botPrompt": "You are the Acme support assistant.",
-  "botGreetingMessage": "Hello. How can I help?",
-  "llmProvider": "openai",
-  "llmModel": "gpt-4o-mini"
-}
-```
-
-Provider/model note:
-- Common values are `openai` and `openai-compatible`.
-- The effective provider/model must also be enabled by your Ethora backend + AI service environment.
-
----
-
-## 🤖 App automation loop
-
-Once you already have an app selected with `appToken` auth:
-
-- call `ethora-auth-use-app`
-- call `ethora-bot-get-v2` to inspect current bot status and prompt settings
-- call `ethora-sources-site-list-v2` and `ethora-sources-docs-list-v2` to inspect indexed sources
-- call `ethora-sources-site-tags-update-v2` or `ethora-sources-docs-tags-update-v2` to organize retrieval by tags
-- call `ethora-chats-message-v2` / `ethora-chats-history-v2` if your backend exposes the chat automation surface on the same API host
-
-Example: apply retrieval tags to a crawled source
-
-```json
-{
-  "sourceId": "6790abc1234567890def1234",
-  "tags": ["support", "faq", "billing"]
-}
-```
-
-Example: apply retrieval tags to an indexed document
-
-```json
-{
-  "docId": "6790abc1234567890def1235",
-  "tags": ["support", "faq"]
-}
-```
-
----
-
-## 🧩 Widget embed
-
-`ethora-widget-embed-snippet` returns the `<script id="chat-content-assistant" src="<widget>/assistant.js" data-app-id="..." data-api-base="...">` tag for the embeddable AI chat widget, plus the prerequisites. The widget answers with the app's active bot (`App.defaultBotInstanceId`), so on an API-created app run `ethora-agents-create-v2` -> `ethora-app-create-chat` -> `ethora-agent-invite-to-chat` -> `ethora-agents-activate-v2 { agentId, chatJid }` first (`ethora-help { goal: "widget" }` lists the steps). Activation runs in user auth: the server looks up the agent's bot instance in the app and sets `App.defaultBotInstanceId` through the app update route (the admin AI Widget dropdown does the same); the app-token-only `/v2/agents/:id/activate` route is only a fallback using the appToken captured from `ethora-app-create`. `ethora-bot-widget-v2` only serves apps that still have a legacy per-app bot.
-
-## 🛡️ Security notes
-
-- **Never** hardcode API keys in shared config. Prefer client-side secret stores.
-- Use **least privilege** keys and consider **allowlists/rate limits** on your Ethora backend.
-- Rotate credentials regularly in production use.
-
-### CI security scans (report-only)
-
-This repo runs **report-only** scans on pushes/PRs:
-- **gitleaks** for secret scanning
-- **semgrep** for basic SAST
-
----
-
-## 🧰 Development
-
-Clone and run locally:
+## Development
 
 ```bash
 git clone https://github.com/dappros/ethora-mcp-server.git
 cd ethora-mcp-server
 npm install
-npm run build
-npm start
+npm run build          # tsc
+npm start              # stdio
+ETHORA_MCP_TRANSPORT=http npm start   # hosted mode on 127.0.0.1:3030
+npm run inspector      # MCP Inspector against the stdio build
 ```
 
-Suggested scripts (if not present):
-```json
-{
-  "scripts": {
-    "build": "tsc -p .",
-    "start": "node dist/index.js",
-    "dev": "tsx src/index.ts"
-  }
-}
-```
+`npm run check` type-checks without emitting. Source layout: `src/tools.ts` (tools), `src/prompts.ts` (prompts and resources), `src/docsSearch.ts` (`search` / `fetch`), `src/httpServer.ts` (hosted transport, entry points, OAuth resource handling), `src/session.ts` (per-session state), `src/scopeGuard.ts` (scope enforcement), `src/routeAuth.ts` (backend route auth table), `src/instructions.ts`.
 
----
+## Related repos
 
-## ❓ Troubleshooting
+- [ethora-chat-component](https://github.com/dappros/ethora-chat-component): the React chat component used in widgets and stand-alone apps
+- [ethora-monoserver](https://github.com/dappros/ethora-monoserver): deploy automation that ships this server as an optional service
+- [ethora-wp-plugin](https://github.com/dappros/ethora-wp-plugin): WordPress integration
+- [rag_demos](https://github.com/dappros/rag_demos): RAG AI assistant examples
 
-- **Client can’t connect**: Ensure `npx @ethora/mcp-server` runs locally without errors. Check Node ≥ 18.
-- **Auth errors**: Verify `ETHORA_BASE_URL` and any required secrets are set in the client’s environment.
-- **Tools missing**: Restart the MCP client and inspect server logs for registration errors.
-- **Network**: Confirm outbound access from the IDE to your Ethora host.
-
----
-
-## 🔗 Related Repos
-
-- **Ethora Chat Component** — our React chat component used in widgets and stand-alone apps
-  https://github.com/dappros/ethora-chat-component
-- **Ethora WP Plugin** — WordPress integration  
-  https://github.com/dappros/ethora-wp-plugin
-- **RAG Demos** — RAG AI assistant examples  
-  https://github.com/dappros/rag_demos
-
----
-
-## 📜 License
+## License
 
 See [LICENSE](./LICENSE).
