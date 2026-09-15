@@ -7,6 +7,9 @@ export type AuthMode = "user" | "app" | "b2b"
 export type SessionTokens = {
   appJwt: string
   appToken: string
+  // appId the stored appToken belongs to (set by app-select / app-create) so a
+  // single-call app-token request never uses a token from a different app.
+  appTokenAppId: string
   b2bToken: string
   token: string
   refreshToken: string
@@ -49,6 +52,7 @@ export function createSessionContext(id?: string): SessionContext {
       // may override them via `ethora-configure` without affecting others.
       appJwt: appConfig.appJwt,
       appToken: "",
+      appTokenAppId: "",
       b2bToken: appConfig.b2bToken || "",
       token: "",
       refreshToken: "",

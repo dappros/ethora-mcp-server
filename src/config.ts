@@ -35,6 +35,22 @@ export const appConfig = {
   // Back-compat alias tools (dot-namespaced ethora.b2b.* + ethora-bot-message/history-v2)
   // are off-by-default to keep the tool surface lean; the canonical tools cover the same ground.
   // Set ETHORA_MCP_ENABLE_ALIASES=true to expose them.
+  // Hosted AI chat widget bundle base URL (the embed script is `${widgetUrl}/assistant.js`).
+  // Rendered by the deploy from the widget domain; empty when no widget is hosted.
+  widgetUrl: String(process.env.ETHORA_MCP_WIDGET_URL ?? "").trim().replace(/\/+$/, ""),
+
+  // Public API base for browser-side embeds (data-api-base). Falls back to the
+  // OAuth issuer (same host) and then to ETHORA_API_URL when that is not loopback.
+  publicApiUrl: (() => {
+    const explicit = String(process.env.ETHORA_MCP_PUBLIC_API_URL ?? "").trim()
+    if (explicit) return explicit.replace(/\/+$/, "")
+    const issuer = String(process.env.ETHORA_MCP_AUTH_ISSUER ?? "").trim()
+    if (issuer) return issuer.replace(/\/+$/, "")
+    const api = String(process.env.ETHORA_API_URL ?? process.env.ETHORA_BASE_URL ?? "").trim().replace(/\/+$/, "").replace(/\/v[12]$/, "")
+    if (api && !/^https?:\/\/(127\.0\.0\.1|localhost|0\.0\.0\.0|\[::1\])(:|\/|$)/i.test(api)) return api
+    return ""
+  })(),
+
   enableAliases:
     String(process.env.ETHORA_MCP_ENABLE_ALIASES ?? "")
       .trim()

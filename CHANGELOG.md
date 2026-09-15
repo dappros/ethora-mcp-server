@@ -4,6 +4,14 @@ All notable changes to this package are documented here. For cross-SDK release n
 
 ## Unreleased
 
+### Added
+- `ethora-widget-embed-snippet`: generates the AI chat widget `<script>` tag (data-app-id, data-api-base, cosmetic attributes) with prerequisites; new env `ETHORA_MCP_WIDGET_URL` and `ETHORA_MCP_PUBLIC_API_URL`; `ethora-help { goal: "widget" }` and a recipe describe agent -> invite -> activate -> embed.
+
+### Changed
+- `ethora-agents-activate-v2` works in user auth: it finds the agent's bot instance in the app (created by `ethora-agent-invite-to-chat`) and sets `App.defaultBotInstanceId` + `botStatus: on` through the app update route (what the admin AI Widget dropdown does); the app-token `/v2/agents/:id/activate` route is only a fallback using the appToken captured from `ethora-app-create` / `ethora-app-select`. Accepts `chatJid` and `appId`. `ethora-bot-widget-v2` is documented as legacy-only.
+- `ethora-app-create-chat`: `pinned` is optional (default false); it was a required boolean, which tripped agents.
+- `ethora-app-select` switches to app-token auth only when an `appToken` is passed in that call, never because one was remembered from `ethora-app-create`.
+
 ### Fixed
 - Agents and room tools now work in user auth mode (the hosted default). `ethora-agents-*`, `ethora-agent-invite-to-chat`, `ethora-bot-instance*`, broadcast and sources tools previously insisted on app-token auth while the backend routes reject app tokens (`/v2/agents*` are user-only, `/v2/apps/:appId/...` accept a user or B2B token). Gating now follows the backend: user or B2B on tenant routes, user on agent routes, app-token only where the backend really wants it (`/v2/bot`, widget, activate). `ethora-agents-list-v2` / `-create-v2` take an optional `appId` and use `/v2/apps/:appId/agents` so a new agent lands in the selected app.
 - `ethora-chats-message-v2` / `ethora-chats-history-v2` called routes that no longer exist (`/v2/chats/messages`, `/v2/chats/history`). They now post through `/v2/apps/:appId/chats/broadcast` (one room) and read `/v2/apps/:appId/chats/:chatId/messages`, accept `roomJid` (`${appId}_${chatId}`) or `chatId` (Mongo `_id` or JID suffix), and the message tool gained `waitForReplySec` returning `replies` so an agent can check that an AI agent answered. `ethora-bot-message-v2` / `-history-v2` are deprecated aliases of the same.

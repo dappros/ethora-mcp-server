@@ -97,7 +97,10 @@ import {
     usersBatchCreateV2,
     walletERC20Transfer,
     walletGetBalance,
+    rememberAppToken,
+    appTokenFor,
 } from "./apiClientEthora.js"
+import { appConfig } from "./config.js"
 import { fail, ok } from "./mcpResponse.js"
 import { ensureTenantActorAuth, splitRoomJid } from "./routeAuth.js"
 import { connectorUrl, CONNECTOR_URL_NOTE } from "./publicUrl.js"
@@ -314,7 +317,7 @@ function helpTool(server: McpServer) {
             description: "Task-oriented orientation for this MCP server: explains the three Ethora auth modes (user / app-token / B2B) and recommends next tool calls + recipes based on current session state.\nAuth: none required — inspects state, no API calls. Errors: effectively none. Related: pass a recommended recipe id to `ethora-run-recipe`.",
             annotations: { readOnlyHint: true, openWorldHint: false },
             inputSchema: {
-                goal: z.enum(["auto", "b2b-bootstrap-ai", "broadcast", "sources-ingest", "files-upload", "bot-manage", "chat-test", "user-login"]).optional()
+                goal: z.enum(["auto", "b2b-bootstrap-ai", "broadcast", "sources-ingest", "files-upload", "bot-manage", "chat-test", "widget", "user-login"]).optional()
                     .describe("Goal hint to tailor the recommendations and recipe list. Omit or use `auto` to get recommendations inferred from the current session state."),
             },
         },
@@ -571,18 +574,42 @@ function helpTool(server: McpServer) {
                                 ],
                             },
                             {
-                                id: "widget-config-v2",
-                                title: "Fetch widget config (app-token)",
-                                description: "Read the widget/embed config for the selected app. This route needs the app's appToken (from ethora-app-create or the admin UI).",
-                                steps: [
-                                    { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: "JWT <APP_TOKEN>" } },
-                                    { tool: "ethora-auth-use-app" },
-                                    { tool: "ethora-bot-widget-v2", args: {} },
-                                    { tool: "ethora-auth-use-user" },
+                                id: "widget-embed",
+                                title: "Embed the AI chat widget on a website",
+                                description: "Agent -> room -> invite -> activate (binds the app's default bot instance) -> embed <script>. User auth; the activate step reuses the appToken captured from ethora-app-create.",
+                                                                steps: [
+                                    { tool: "ethora-app-select", args: { appId: "<APP_ID>" } },
+                                    { tool: "ethora-agents-create-v2", args: { name: "Helper", prompt: "You are a polite support assistant for this website." } },
+                                    { tool: "ethora-app-create-chat", args: { appId: "<APP_ID>", title: "Website widget" } },
+                                    { tool: "ethora-agent-invite-to-chat", args: { agentIdOrAddress: "<AGENT_ID>", chatJid: "<ROOM_JID>" } },
+                                    { tool: "ethora-agents-activate-v2", args: { agentId: "<AGENT_ID>", chatJid: "<ROOM_JID>" } },
+                                    { tool: "ethora-widget-embed-snippet", args: { appId: "<APP_ID>", botName: "Helper" } },
                                 ],
                             }
                         )
                     }
+                }
+                if (effectiveGoal === "widget") {
+                    nextCalls.push(
+                        { tool: "ethora-agents-create-v2", args: { name: "Helper", prompt: "You are a polite support assistant for this website." }, why: "The widget answers with an agent; create one (user auth)." },
+                        { tool: "ethora-app-create-chat", args: { appId: String(state.currentAppId || "<APP_ID>"), title: "Website widget" }, why: "A room the agent is invited into becomes the widget chat." },
+                        { tool: "ethora-agent-invite-to-chat", args: { agentIdOrAddress: "<AGENT_ID>", chatJid: "<ROOM_JID>" }, why: "Spawns the agent's bot instance for this app." },
+                        { tool: "ethora-agents-activate-v2", args: { agentId: "<AGENT_ID>", chatJid: "<ROOM_JID>" }, why: "Sets the app's default bot instance; without it POST /v2/widget/sessions returns 422 and the widget stays silent. Uses the appToken captured from ethora-app-create." },
+                        { tool: "ethora-widget-embed-snippet", args: { appId: String(state.currentAppId || "<APP_ID>"), botName: "Helper" }, why: "Returns the <script> tag to paste into the website plus prerequisites." },
+                    )
+                    recipes.push({
+                        id: "widget-embed",
+                        title: "Embed the AI chat widget on a website (user auth)",
+                        description: "Create an agent, bind it as the app's active widget bot, then generate the embed script.",
+                        steps: [
+                            { tool: "ethora-app-select", args: { appId: "<APP_ID>" } },
+                            { tool: "ethora-agents-create-v2", args: { name: "Helper", prompt: "You are a polite support assistant for this website." } },
+                            { tool: "ethora-app-create-chat", args: { appId: "<APP_ID>", title: "Website widget" } },
+                            { tool: "ethora-agent-invite-to-chat", args: { agentIdOrAddress: "<AGENT_ID>", chatJid: "<ROOM_JID>" } },
+                            { tool: "ethora-agents-activate-v2", args: { agentId: "<AGENT_ID>", chatJid: "<ROOM_JID>" } },
+                            { tool: "ethora-widget-embed-snippet", args: { appId: "<APP_ID>", botName: "Helper" } },
+                        ],
+                    })
                 }
                 // Auto mode: minimal “get unstuck” guidance
                 if (effectiveGoal === "auto") {
@@ -843,10 +870,8 @@ async function executeRecipeStep(tool: string, args: any, ctx: { lastJobId?: str
             return res.data
         }
         case "ethora-agents-activate-v2": {
-            ensureAppAuthForTool()
-            const { agentId } = args || {}
-            const res = await agentsActivateV2(String(agentId || ""))
-            return res.data
+            const { agentId, chatJid, appId } = args || {}
+            return await activateAgentForApp(String(agentId || ""), chatJid ? String(chatJid) : undefined, appId ? String(appId) : undefined)
         }
         case "ethora-bot-enable-v2": {
             ensureTenantActorAuth()
@@ -889,7 +914,7 @@ function runRecipeTool(server: McpServer) {
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
             inputSchema: {
                 recipeId: z.string().min(1).optional().describe("Id of the recipe to run. Omit to instead list the runnable recipes for the selected `goal` (get ids from `ethora-help`)."),
-                goal: z.enum(["auto", "b2b-bootstrap-ai", "broadcast", "sources-ingest", "files-upload", "bot-manage", "chat-test", "user-login"]).optional()
+                goal: z.enum(["auto", "b2b-bootstrap-ai", "broadcast", "sources-ingest", "files-upload", "bot-manage", "chat-test", "widget", "user-login"]).optional()
                     .describe("Goal scope used to look up recipes when `recipeId` is omitted. Defaults to `auto`."),
                 vars: z.record(z.any()).optional().describe("Key/value substitutions injected into recipe steps (e.g. appId, appToken, b2bToken, appJwt, email, password, apiUrl). A recipe declares which vars it requires; missing required vars fail the run before any step executes."),
                 dryRun: z.boolean().optional().describe("If true, resolve and return the step list with `vars` substituted but execute nothing. Use this to preview a recipe before running it for real."),
@@ -1030,14 +1055,17 @@ function runRecipeTool(server: McpServer) {
                                 ],
                             },
                             {
-                                id: "widget-config-v2",
-                                title: "Fetch widget config",
-                                description: "Read the widget/embed config and public widget metadata for the selected app.",
-                                requiredVars: ["appId", "appToken"],
+                                id: "widget-embed",
+                                title: "Embed the AI chat widget on a website",
+                                description: "Agent -> room -> invite -> activate (binds the app's default bot instance) -> embed <script>. User auth; the activate step reuses the appToken captured from ethora-app-create.",
+                                requiredVars: ["appId"],
                                 steps: [
-                                    { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: "<APP_TOKEN>" } },
-                                    { tool: "ethora-auth-use-app" },
-                                    { tool: "ethora-bot-widget-v2", args: {} },
+                                    { tool: "ethora-app-select", args: { appId: "<APP_ID>" } },
+                                    { tool: "ethora-agents-create-v2", args: { name: "Helper", prompt: "You are a polite support assistant for this website." } },
+                                    { tool: "ethora-app-create-chat", args: { appId: "<APP_ID>", title: "Website widget" } },
+                                    { tool: "ethora-agent-invite-to-chat", args: { agentIdOrAddress: "<AGENT_ID>", chatJid: "<ROOM_JID>" } },
+                                    { tool: "ethora-agents-activate-v2", args: { agentId: "<AGENT_ID>", chatJid: "<ROOM_JID>" } },
+                                    { tool: "ethora-widget-embed-snippet", args: { appId: "<APP_ID>", botName: "Helper" } },
                                 ],
                             }
                         )
@@ -1761,6 +1789,13 @@ function appCreateTool(server: McpServer) {
         async function ({ displayName }) {
             try {
                 let result = await appCreateV2(displayName)
+                // Keep the new app's appToken for app-token-only routes (widget
+                // activation) so a user session never has to switch auth mode.
+                const created: any = result.data || {}
+                const createdApp = created.app || created.result || created
+                const createdId = createdApp?._id || createdApp?.appId || created.appId
+                const createdToken = created.appToken || createdApp?.appToken
+                if (createdId && createdToken) rememberAppToken(String(createdId), String(createdToken))
                 return asToolResult(ok(result.data, getDefaultMeta("ethora-app-create")))
             } catch (error) {
                 return asToolResult(fail(error, getDefaultMeta("ethora-app-create")))
@@ -1891,7 +1926,7 @@ function craeteAppChatTool(server: McpServer) {
             inputSchema: {
                 appId: z.string().optional().describe("24-char hex ObjectId of the app to create the chat room in. Optional — defaults to the app most recently passed to `ethora-app-select`."),
                 title: z.string().describe("Display name for the new chat room. Visible to all members; not required to be unique within the app."),
-                pinned: z.boolean().describe("If `true`, the room is added to the app's default rooms list — every new user of the app auto-joins it. If `false`, the room exists but users must be added explicitly."),
+                pinned: z.boolean().optional().default(false).describe("If `true`, the room is added to the app's default rooms list — every new user of the app auto-joins it. If `false`, the room exists but users must be added explicitly."),
             }
         },
         async function ({ appId, title, pinned }) {
@@ -2262,19 +2297,19 @@ function agentsActivateV2Tool(server: McpServer) {
     server.registerTool(
         "ethora-agents-activate-v2",
         {
-            description: "Bind a saved agent as the active AI bot for the current app — copies the agent's config onto the app's bot, replacing whatever was there before (`POST /v2/agents/:agentId/activate`). Does not by itself set `status: \"on\"` — pair with `ethora-bot-enable-v2` if needed.\nAuth: app-token mode (after `ethora-app-select` + `ethora-auth-use-app`). Errors: 401/403 wrong auth; 404 `agentId` not an agent of the current app. Related: verify with `ethora-bot-get-v2`.",
+            description: "Make an agent the app's ACTIVE widget bot: sets `App.defaultBotInstanceId` (and `botStatus: on`), which is what `POST /v2/widget/sessions` uses to decide who answers website visitors. Required before an embedded widget can answer on an API-created app. Preconditions: the agent was invited into a room of this app with `ethora-agent-invite-to-chat` (that creates its bot instance). Works in user auth (app update route); falls back to the app-token `/v2/agents/:id/activate` route when an appToken is stored.\nAuth: user session (owner of the app). Errors: 404 no bot instance for this agent in the app (invite first); 403 not the app owner. Related: `ethora-widget-embed-snippet` next, `ethora-bot-instances-list` to inspect.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
             inputSchema: {
-                agentId: z.string().min(1).describe("Id of the saved agent to activate as the app's bot. Get it from `ethora-agents-list-v2`."),
+                agentId: z.string().min(1).describe("Id (or address) of the agent to activate. Get it from `ethora-agents-list-v2` / `ethora-agents-create-v2`."),
+                chatJid: z.string().optional().describe("Room JID `${appId}_${chatId}` (with or without `@conference...`) that becomes the widget chat. Required for API-created apps; omit only for dashboard-created apps that already have an AI Widget chat bound."),
+                appId: z.string().optional().describe("App to activate the agent for. Defaults to the app from `ethora-app-select`."),
             },
         },
-        async function ({ agentId }) {
+        async function ({ agentId, chatJid, appId }) {
             const meta = getDefaultMeta("ethora-agents-activate-v2")
             try {
-                ensureAppAuthForTool()
-                const res = await agentsActivateV2(agentId)
-                selectAgent({ agentId })
-                return asToolResult(ok(res.data, meta))
+                const result = await activateAgentForApp(agentId, chatJid, appId)
+                return asToolResult(ok({ ...result, next: "The agent now answers the app's widget. Call `ethora-widget-embed-snippet` for the <script> tag to paste into a website." }, meta))
             } catch (error) {
                 return asToolResult(fail(error, meta))
             }
@@ -2788,7 +2823,7 @@ function botWidgetGetV2Tool(server: McpServer) {
     server.registerTool(
         "ethora-bot-widget-v2",
         {
-            description: "Read the public chat-widget / embed configuration for the current app's bot (`GET /v2/bot/widget`) — the widget config and public widget URL metadata needed to embed the bot on a website.\nAuth: app-token mode (after `ethora-app-select` + `ethora-auth-use-app`). Errors: 401/403 not in app-token mode or invalid appToken. Related: enable/disable via `widgetPublicEnabled` in `ethora-bot-update-v2`.",
+            description: "LEGACY: read the per-app bot widget config (`GET /v2/bot/widget`); only apps that already have a legacy aiBot have one, API-created apps get 422. For the embeddable AI chat widget use `ethora-widget-embed-snippet` instead — the widget config and public widget URL metadata needed to embed the bot on a website.\nAuth: app-token mode (after `ethora-app-select` + `ethora-auth-use-app`). Errors: 401/403 not in app-token mode or invalid appToken. Related: enable/disable via `widgetPublicEnabled` in `ethora-bot-update-v2`.",
             annotations: { readOnlyHint: true, openWorldHint: true },
         },
         async function () {
@@ -4108,6 +4143,113 @@ function sourcesDocsTagsUpdateV2Tool(server: McpServer) {
     )
 }
 
+// Bind an agent as the app's active widget bot. Preferred path (user or B2B
+// session): find the agent's BotInstance for this app (created by
+// `ethora-agent-invite-to-chat`) and set App.defaultBotInstanceId + botStatus
+// through the app update route, which is what the admin "Active agent for AI
+// Widget" dropdown does. Fallback: the app-token-only /v2/agents/:id/activate
+// route with the stored appToken (that route refuses agents it does not own
+// with AGENT_PRIVATE, so it only helps for public/unlisted agents).
+async function activateAgentForApp(agentId: string, chatJid: string | undefined, appIdArg: string | undefined) {
+    const state = getClientState() as any
+    const appId = String(appIdArg || state.currentAppId || "").trim()
+    if (!appId) throw new Error("No app selected. Pass `appId` or call `ethora-app-select` first.")
+    const id = String(agentId || "").trim()
+    let userPathError: any = null
+    if (state.authMode !== "app") {
+        try {
+            const list = await botInstancesListV2({ appId, agentId: id })
+            const d: any = list.data || {}
+            const items: any[] = Array.isArray(d) ? d : (d.items || d.botInstances || d.results || d.data?.items || [])
+            const match = items.find((bi: any) => String(bi.agentId || bi.agent?._id || bi.agent?.id || "") === id && (!bi.appId || String(bi.appId) === appId)) || items.find((bi: any) => String(bi.agentId || "") === id) || (items.length === 1 ? items[0] : null)
+            if (!match) {
+                throw new Error(`No bot instance of agent ${id} exists in app ${appId} yet. Call \`ethora-agent-invite-to-chat { agentIdOrAddress: "${id}", chatJid: "${chatJid || "<ROOM_JID>"}" }\` first, then retry.`)
+            }
+            const botInstanceId = String(match._id || match.id)
+            const upd = await appUpdate(appId, { defaultBotInstanceId: botInstanceId, botStatus: "on" })
+            selectAgent({ agentId: id })
+            return { method: "app-update", appId, agentId: id, defaultBotInstanceId: botInstanceId, botInstanceStatus: match.status, appUpdate: upd.data }
+        } catch (e: any) {
+            userPathError = e
+            if (!appTokenFor(appId)) throw e
+        }
+    }
+    if (!appTokenFor(appId)) {
+        throw new Error(`No appToken stored for app ${appId}. Call \`ethora-app-select { appId: "${appId}", appToken: "<appToken>" }\` (the appToken is in the \`ethora-app-create\` result or the admin UI) and retry.`)
+    }
+    try {
+        const res = await agentsActivateV2(id, { chatJid, appId })
+        selectAgent({ agentId: id })
+        return { method: "activate-route", appId, agentId: id, ...(res.data || {}) }
+    } catch (e) {
+        throw userPathError || e
+    }
+}
+
+// ----------------------------------------------------------------------------
+// AI chat widget embed
+// ----------------------------------------------------------------------------
+function widgetTools(server: McpServer) {
+    server.registerTool(
+        "ethora-widget-embed-snippet",
+        {
+            description: "Generate the <script> tag that embeds the Ethora AI chat widget (the floating launcher + chat panel that website visitors use) for an app, plus the prerequisites that must hold before it answers. No API call; pure generator using this deployment's hosted widget URL and public API base. The widget answers with the app's ACTIVE bot: for API-created apps run `ethora-agents-create-v2` -> `ethora-agent-invite-to-chat` -> `ethora-agents-activate-v2 { agentId, chatJid }` first, otherwise `POST /v2/widget/sessions` returns 422 and the widget stays silent.\nAuth: none required (uses the selected app when `appId` is omitted). Errors: effectively none; when no hosted widget is configured the snippet carries a `<WIDGET_URL>` placeholder. Related: `ethora-agents-activate-v2`, `ethora-bot-widget-v2` (legacy per-app bot only).",
+            annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+            inputSchema: {
+                appId: z.string().optional().describe("App the widget belongs to (24-char hex). Defaults to the app from `ethora-app-select`."),
+                botName: z.string().optional().describe("Display name shown in the widget header (`data-bot-name`), e.g. the agent's name."),
+                botAvatar: z.string().optional().describe("Avatar image URL shown for the bot (`data-bot-avatar`)."),
+                botId: z.string().optional().describe("Legacy `data-bot-id` (bot XMPP address); only for old embeds. Prefer `appId`: the backend picks the active agent from the app."),
+                primaryColor: z.string().optional().describe("Brand colour for launcher and bubbles (`data-primary-color`), e.g. `#0052CC`."),
+                locale: z.string().optional().describe("UI locale (`data-locale`), e.g. `en`, `fr`, `es`."),
+                greeting: z.string().optional().describe("Greeting shown when the panel opens (`data-greeting-message`)."),
+                position: z.enum(["right", "left"]).optional().describe("Launcher corner (`data-position`)."),
+                apiBase: z.string().optional().describe("Override the public API base (`data-api-base`). Defaults to this deployment's public API URL."),
+                widgetUrl: z.string().optional().describe("Override the widget bundle base URL (the script is `<widgetUrl>/assistant.js`)."),
+            },
+        },
+        async function ({ appId, botName, botAvatar, botId, primaryColor, locale, greeting, position, apiBase, widgetUrl }) {
+            const meta = getDefaultMeta("ethora-widget-embed-snippet")
+            try {
+                const state = getClientState() as any
+                const targetAppId = String(appId || state.currentAppId || "").trim()
+                const base = String(widgetUrl || appConfig.widgetUrl || "").trim().replace(/\/+$/, "")
+                const api = String(apiBase || appConfig.publicApiUrl || "").trim().replace(/\/+$/, "")
+                const scriptSrc = base ? `${base}/assistant.js` : "<WIDGET_URL>/assistant.js"
+                const attributes: Record<string, string> = {}
+                attributes["data-app-id"] = targetAppId || "<APP_ID>"
+                if (api) attributes["data-api-base"] = api
+                if (botId) attributes["data-bot-id"] = String(botId)
+                if (botName) attributes["data-bot-name"] = String(botName)
+                if (botAvatar) attributes["data-bot-avatar"] = String(botAvatar)
+                if (primaryColor) attributes["data-primary-color"] = String(primaryColor)
+                if (locale) attributes["data-locale"] = String(locale)
+                if (greeting) attributes["data-greeting-message"] = String(greeting)
+                if (position) attributes["data-position"] = String(position)
+                const esc = (v: string) => String(v).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;")
+                const attrText = Object.entries(attributes).map(([k, v]) => `${k}="${esc(v)}"`).join("\n  ")
+                const snippet = `<script id="chat-content-assistant" src="${esc(scriptSrc)}"\n  ${attrText}\n  defer></script>`
+                const prerequisites = [
+                    "The app must have an ACTIVE bot: on API-created apps run `ethora-agents-create-v2`, invite the agent into a room with `ethora-agent-invite-to-chat`, then `ethora-agents-activate-v2 { agentId, chatJid }` (sets App.defaultBotInstanceId). Dashboard-created apps may already have one (AI Widget tab). Without it the widget's `POST /v2/widget/sessions` returns 422 `App has no AI bot configured`.",
+                    "The agent's bot instance must be on (`ethora-bot-instances-list` shows status=on) and the deployment's ai-service must be running.",
+                    "`data-api-base` must be the API URL browsers can reach (this deployment: " + (api || "<not configured; set ETHORA_MCP_PUBLIC_API_URL or pass apiBase>") + "); the API allows cross-origin requests from any website by default.",
+                    "The `<script>` tag must keep id=\"chat-content-assistant\": the bundle locates its own tag by that id to read the data-* attributes.",
+                    "Widget sessions are rate limited per visitor IP (RATE_LIMIT_WIDGET_SESSION_MAX); each visitor gets a private room that persists in their browser storage.",
+                ]
+                const notes = [
+                    base ? `Bundle: ${scriptSrc}` : "No hosted widget is configured on this MCP deployment (ETHORA_MCP_WIDGET_URL empty); replace <WIDGET_URL> with your widget host, or use the admin UI's AI Widget tab which bundles the widget with the web app.",
+                    "Test: paste the snippet into any HTML page, open it, click the launcher and send a message; the active agent should reply within a few seconds. Optional attributes: data-title, data-greeting-title, data-secondary-color, data-launcher-icon, data-launcher-size, data-width, data-height, data-font-size, data-google-font, data-hide-system-messages, data-disable-media, data-start-fullscreen.",
+                    "Cosmetic attributes can also be overridden per page via URL query `?ethora-<attr>=...`; appId and apiBase cannot.",
+                    "Docs: https://github.com/dappros/ethora-mcp-server#readme (Widget embed) and https://github.com/dappros/ethora-ai-chat-widget#readme",
+                ]
+                return asToolResult(ok({ appId: targetAppId || null, snippet, attributes, prerequisites, notes }, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
 export function registerTools(server: McpServer) {
     configureTool(server);
     statusTool(server);
@@ -4148,6 +4290,7 @@ export function registerTools(server: McpServer) {
     userLoginWithEmailTool(server);
     userRegisterWithEmailTool(server);
     apiKeyTools(server);
+    widgetTools(server);
     appListTool(server);
     appCreateTool(server);
     appUpdateTool(server);

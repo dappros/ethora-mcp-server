@@ -127,6 +127,15 @@ export const RECIPES_MD = md`
 4) \`ethora-agent-invite-to-chat\` { agentIdOrAddress, chatJid: "<jid>" }
 5) \`ethora-chats-message-v2\` { roomJid: "<jid>", text: "hello", waitForReplySec: 45 }
 
+### AI chat widget on a website (user auth)
+The embeddable widget answers with the app's ACTIVE bot (App.defaultBotInstanceId). API-created apps have none until an agent is activated:
+1) \`ethora-agents-create-v2 { name, prompt }\`
+2) \`ethora-app-create-chat { appId, title: "Website widget" }\` -> ROOM_JID
+3) \`ethora-agent-invite-to-chat { agentIdOrAddress, chatJid: ROOM_JID }\`
+4) \`ethora-agents-activate-v2 { agentId, chatJid: ROOM_JID }\` (uses the appToken captured from \`ethora-app-create\`; or pass it to \`ethora-app-select\`)
+5) \`ethora-widget-embed-snippet { appId, botName }\` -> paste the \`<script id="chat-content-assistant" ...>\` tag into the site.
+Until step 4 the widget's \`POST /v2/widget/sessions\` returns 422 \`App has no AI bot configured\`.
+
 ### Legacy per-app bot (only apps that already have one)
 API/B2B-created apps have no legacy aiBot (\`ethora-bot-enable-v2\` returns 422 BOT_NOT_INITIALIZED); use the agent recipe above.
 1) \`ethora-app-select\` { appId }
