@@ -153,7 +153,9 @@ export async function startHttpServer(opts: HttpServerOptions) {
           oauth: { authorizationServer: authIssuer, protectedResourceMetadata: prmUrl, scopes: [...ALL_SCOPES] },
         }
       : {}),
-    apiUrl: appConfig.apiUrl,
+    // Public API base for humans/agents reading this document; the server itself
+    // may talk to the API over loopback, which must not leak here.
+    apiUrl: appConfig.publicApiUrl || appConfig.apiUrl,
     docs: "https://github.com/dappros/ethora-mcp-server#readme",
   })
 
