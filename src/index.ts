@@ -36,7 +36,7 @@ const { instructionsFor } = await import("./instructions.js")
 const { applyScopeGuard } = await import("./scopeGuard.js")
 
 const SERVER_NAME = "Ethora MCP Server"
-const SERVER_VERSION = "26.9.0"
+const SERVER_VERSION = "26.9.1"
 
 export function buildServer(profile?: "open" | "authenticated" | "oauth") {
   // In HTTP mode this runs once per session, after setHostedMode(true); the
