@@ -1948,6 +1948,7 @@ function b2bBotEnableTool(server: McpServer) {
         "ethora-b2b-bot-enable",
         {
             description: "Enable the LEGACY per-app aiBot (B2B auth). NOTE: apps created via the API/B2B no longer auto-provision a legacy aiBot, so this returns 422 BOT_NOT_INITIALIZED on a clean app. The forward path for B2B AI is the Agents API — use `ethora-b2b-app-bootstrap-ai` or `ethora-agents-create-v2` + `ethora-agent-invite-to-chat`. This tool remains valid for apps that already have a legacy aiBot (e.g. admin-panel apps created with a default chat).",
+            annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("24-char hex appId whose bot to enable. Optional — defaults to the app set via `ethora-app-select`."),
                 botTrigger: z.string().optional().describe("When the bot responds: `/bot` (only messages starting with /bot) or `any_message` (every message). Omit to leave the existing trigger unchanged."),
@@ -2087,6 +2088,7 @@ function agentsCreateV2Tool(server: McpServer) {
         "ethora-agents-create-v2",
         {
             description: "Create a reusable AI agent (POST /v2/agents). Each agent is a persona — name, avatar, system prompt, LLM config, plus response-gate settings (responseMode, cooldownSec) that control when it speaks in a room. For multi-agent scenarios (two or more personas conversing in one chat) create each one separately, then `ethora-agent-invite-to-chat` them into the same room. See the `ethora-agents-quickstart` prompt for the end-to-end recipe.",
+            annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
             inputSchema: {
                 name: z.string().optional().describe("Short display name. For multi-agent scenarios, prefer single-word names (e.g. 'Hannibal', 'Varro') — the @-mention matcher uses the exact display name with word-boundary matching."),
                 slug: z.string().optional().describe("URL-safe slug (auto-generated from name if omitted)."),
@@ -2128,6 +2130,7 @@ function agentsUpdateV2Tool(server: McpServer) {
         "ethora-agents-update-v2",
         {
             description: "Update a saved AI agent (PUT /v2/agents/:agentId). All fields are optional — only what you pass is updated. Common uses: tune the system `prompt` after a test run, switch `responseMode` to control turn-taking in multi-agent rooms, or adjust `cooldownSec`. See `ethora-agents-quickstart` prompt for the end-to-end recipe.",
+            annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 agentId: z.string().min(1).describe("Mongo _id (24 hex chars) of the agent to update."),
                 name: z.string().optional().describe("New display name. For multi-agent scenarios prefer single-word names — the @-mention matcher uses exact display-name match with word-boundary."),
@@ -2225,6 +2228,7 @@ function agentSetVisibilityTool(server: McpServer) {
         "ethora-agent-set-visibility",
         {
             description: "Set an Agent's visibility (private | unlisted | public). Public agents can be invited cross-app by anyone who knows the address.",
+            annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 agentIdOrAddress: z.string().min(1),
                 visibility: z.enum(["private", "unlisted", "public"]),
@@ -2248,6 +2252,7 @@ function agentInviteToChatTool(server: McpServer) {
         "ethora-agent-invite-to-chat",
         {
             description: "Invite an Agent into a chat room. Multiple agents can coexist in the same room — call this tool once per agent and they will all appear as members able to converse. Lazily creates a per-App BotInstance (an Ethora user with isBot:true) if one does not already exist for (agent, app). Spawns the XMPP client live; no ai-service restart required. For the full multi-agent recipe see the `ethora-agents-quickstart` prompt.",
+            annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
             inputSchema: {
                 agentIdOrAddress: z.string().min(1).describe("Either Mongo _id (24 hex chars) or EOA-style address."),
                 appId: z.string().optional().describe("Required in B2B mode unless already selected via ethora-app-select."),
@@ -2276,6 +2281,7 @@ function agentSoulAppendTool(server: McpServer) {
         "ethora-agent-soul-append",
         {
             description: "Append a fragment to an Agent's SOUL.MD (its evolving identity / private notes). Operator-driven; the Agent itself can also self-edit via the same endpoint when called by ai-service.",
+            annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
             inputSchema: {
                 agentIdOrAddress: z.string().min(1),
                 append: z.string().min(1),
@@ -2299,6 +2305,7 @@ function agentSoulSetTool(server: McpServer) {
         "ethora-agent-soul-set",
         {
             description: "Replace an Agent's SOUL.MD with the provided markdown. Operator-driven; alternative to -append.",
+            annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 agentIdOrAddress: z.string().min(1),
                 soulMd: z.string().min(0).describe("Replace SOUL.MD contents. Pass empty string to clear."),
@@ -2322,6 +2329,7 @@ function botInstancesListTool(server: McpServer) {
         "ethora-bot-instances-list",
         {
             description: "List BotInstances. Filter by appId (caller's App by default) and/or agentId.",
+            annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional(),
                 agentId: z.string().optional(),
@@ -2345,6 +2353,7 @@ function botInstanceStatusTool(server: McpServer) {
         "ethora-bot-instance-status",
         {
             description: "Turn a specific BotInstance on or off. Off detaches it from XMPP; on re-spawns the XMPP client live.",
+            annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 botInstanceId: z.string().min(1),
                 status: z.enum(["on", "off"]),
@@ -2372,6 +2381,7 @@ function agentsDeleteV2Tool(server: McpServer) {
         "ethora-agents-delete-v2",
         {
             description: "Delete an Agent (DELETE /v2/agents/:idOrAddress). Destructive — removes the saved Agent and its BotInstances. Gated behind ETHORA_MCP_ENABLE_DANGEROUS_TOOLS.",
+            annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 agentIdOrAddress: z.string().min(1).describe("Mongo _id (24 hex chars) or EOA-style address."),
             },
@@ -2394,6 +2404,7 @@ function agentsExportV2Tool(server: McpServer) {
         "ethora-agents-export-v2",
         {
             description: "Export an Agent as a portable bundle (GET /v2/agents/:idOrAddress/export). format=json returns the bundle object directly; feed it back to `ethora-agents-import-v2` to recreate the Agent in another App/tenant.",
+            annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 agentIdOrAddress: z.string().min(1),
                 format: z.enum(["json", "zip"]).optional().describe("Defaults to json. Prefer json for MCP round-trips."),
@@ -2417,6 +2428,7 @@ function agentsImportV2Tool(server: McpServer) {
         "ethora-agents-import-v2",
         {
             description: "Import an Agent from a bundle produced by `ethora-agents-export-v2` (POST /v2/agents/import, application/json body IS the bundle). Optionally scope the new Agent to an owning App via ownerAppId.",
+            annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
             inputSchema: {
                 bundle: z.any().describe("The exported bundle object (the json export output)."),
                 ownerAppId: z.string().optional().describe("Owning App for the imported Agent (defaults server-side)."),
@@ -2440,6 +2452,7 @@ function agentBotInstanceDiagTool(server: McpServer) {
         "ethora-bot-instance-diag",
         {
             description: "Diagnose a specific BotInstance for an Agent (GET /v2/agents/:idOrAddress/bot-instances/:botInstanceId/diag). Returns live XMPP/ai-service status and recent activity for troubleshooting.",
+            annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 agentIdOrAddress: z.string().min(1),
                 botInstanceId: z.string().min(1),
@@ -2463,6 +2476,7 @@ function agentBotInstanceTestMessageTool(server: McpServer) {
         "ethora-bot-instance-test-message",
         {
             description: "Send a test message from a BotInstance (POST /v2/agents/:idOrAddress/bot-instances/:botInstanceId/test-message). Omit roomJid to fan out to every room the BotInstance is in. Requires the ai-service to be running.",
+            annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
             inputSchema: {
                 agentIdOrAddress: z.string().min(1),
                 botInstanceId: z.string().min(1),
@@ -2488,6 +2502,7 @@ function agentBotInstanceLeaveChatTool(server: McpServer) {
         "ethora-bot-instance-leave-chat",
         {
             description: "Remove a BotInstance from a chat room (POST /v2/agents/:idOrAddress/bot-instances/:botInstanceId/leave-chat). The inverse of `ethora-agent-invite-to-chat`.",
+            annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 agentIdOrAddress: z.string().min(1),
                 botInstanceId: z.string().min(1),
@@ -2512,6 +2527,7 @@ function messagesSearchV2Tool(server: McpServer) {
         "ethora-messages-search-v2",
         {
             description: "Search an App's chat messages (GET /v2/apps/:appId/messages/search). B2B / tenant-actor auth. Filter by room (chatId), author (fromUserId), and time window.",
+            annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 q: z.string().min(1).max(500).describe("Search query."),
                 appId: z.string().optional().describe("Required in B2B mode unless already selected via ethora-app-select."),
@@ -2544,6 +2560,7 @@ function messagesContextV2Tool(server: McpServer) {
         "ethora-messages-context-v2",
         {
             description: "Fetch the messages surrounding a target message (GET /v2/apps/:appId/chats/:chatId/messages/context). Provide either aroundStanzaId or aroundMessageId; radius controls how many messages before/after.",
+            annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 chatId: z.string().min(1),
                 appId: z.string().optional().describe("Required in B2B mode unless already selected via ethora-app-select."),
@@ -2574,6 +2591,7 @@ function unreadCountsV2Tool(server: McpServer) {
         "ethora-unread-counts-v2",
         {
             description: "Batch per-room unread message counts for a set of users (POST /v2/apps/:appId/users/unread-counts). mode=count returns numbers (capped); mode=flag returns booleans. Requires Mongo message archiving enabled on the deployment.",
+            annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 userIds: z.array(z.string().min(1)).min(1).max(200).describe("uuid / Mongo _id / xmppUsername, 1..200."),
                 appId: z.string().optional().describe("Required in B2B mode unless already selected via ethora-app-select."),
@@ -2601,6 +2619,7 @@ function appExportV2Tool(server: McpServer) {
         "ethora-app-export-v2",
         {
             description: "Export an App as a portable bundle (GET /v2/apps/:appId/export). format=json returns the bundle object directly. Use `include` to select sections (e.g. 'chats,users,sources,botInstances'). Feed the result to `ethora-app-import-v2`.",
+            annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("Required in B2B mode unless already selected via ethora-app-select."),
                 format: z.enum(["json", "zip"]).optional(),
@@ -2626,6 +2645,7 @@ function appImportV2Tool(server: McpServer) {
         "ethora-app-import-v2",
         {
             description: "Import an App from a bundle produced by `ethora-app-export-v2` (POST /v2/apps/import, application/json body IS the bundle). B2B / tenant-actor auth. domainNameOverride renames the imported App's domain.",
+            annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
             inputSchema: {
                 bundle: z.any().describe("The exported bundle object (the json export output)."),
                 domainNameOverride: z.string().optional().describe("Rename the imported App's domainName."),
@@ -2655,6 +2675,7 @@ function botEnableV2Tool(server: McpServer) {
         "ethora-bot-enable-v2",
         {
             description: "Enable the LEGACY per-app aiBot using app-token or B2B auth. NOTE: clean API/B2B-created apps have no legacy aiBot, so this returns 422 BOT_NOT_INITIALIZED there — use the Agents API (`ethora-agents-create-v2` + `ethora-agent-invite-to-chat`, or `ethora-b2b-app-bootstrap-ai`) for B2B AI. Valid for apps that already have a legacy aiBot.",
+            annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("24-char hex appId. Required in B2B mode unless already set via `ethora-app-select`; ignored in app-token mode."),
                 trigger: z.enum(["any_message", "/bot"]).optional().describe("When the bot responds: `any_message` (every message) or `/bot` (only /bot-prefixed messages). Omit to leave the existing trigger unchanged."),
