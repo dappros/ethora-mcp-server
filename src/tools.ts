@@ -1994,7 +1994,7 @@ function walletERC20TransferTool(server: McpServer) {
     server.registerTool(
         'ethora-wallet-erc20-transfer',
         {
-            description: "Send ERC-20 tokens from the authenticated user's wallet to another address — submits a signed on-chain transaction; consumes gas and reduces the sender's balance. Irreversible and NOT idempotent (calling twice sends twice — do not auto-retry blindly). Gated behind ETHORA_MCP_ENABLE_DANGEROUS_TOOLS=true.\nAuth: user-auth mode, active session. Errors: 400 invalid `toWallet` format; 401 not logged in; 402 insufficient balance or gas; 5xx RPC failure.",
+            description: "STDIO ONLY: not available on the hosted server (directory rules forbid connectors that move money or crypto). Send ERC-20 tokens from the authenticated user's wallet to another address — submits a signed on-chain transaction; consumes gas and reduces the sender's balance. Irreversible and NOT idempotent (calling twice sends twice — do not auto-retry blindly). Gated behind ETHORA_MCP_ENABLE_DANGEROUS_TOOLS=true.\nAuth: user-auth mode, active session. Errors: 400 invalid `toWallet` format; 401 not logged in; 402 insufficient balance or gas; 5xx RPC failure.",
             annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
             inputSchema: {
                 toWallet: z.string().describe("Recipient wallet address. Must be a valid 0x-prefixed 40-character hex string. Double-check before calling — transfers cannot be reversed."),

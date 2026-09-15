@@ -113,7 +113,7 @@ The end-to-end journey a new user typically asks for, with the tools in order:
 
 ### Tool groups
 
-91 tools on the hosted server (app deletion, wallet transfer and bulk-delete tools are only registered when `ETHORA_MCP_ENABLE_DANGEROUS_TOOLS=true`, which the monoserver deploy sets; the stdio default is off). Every tool carries MCP annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`) so clients can auto-approve reads and confirm the 13 destructive ones.
+90 tools on the hosted server (app deletion and bulk-delete tools are only registered when `ETHORA_MCP_ENABLE_DANGEROUS_TOOLS=true`, which the monoserver deploy sets; the stdio default is off). Every tool carries a human `title` (top-level and in `annotations.title`) and explicit `readOnlyHint`, `destructiveHint` and `openWorldHint` booleans (plus `idempotentHint` where it applies), which is what the Claude and ChatGPT directory reviews require and what lets clients auto-approve reads and confirm the destructive ones.
 
 | Group | Tools |
 |---|---|
@@ -127,7 +127,7 @@ The end-to-end journey a new user typically asks for, with the tools in order:
 | RAG sources | `ethora-sources-site-crawl-v2`, `ethora-sources-site-crawl-v2-wait`, `ethora-sources-site-reindex-v2`, `ethora-sources-site-reindex-v2-wait`, `ethora-sources-site-list-v2`, `ethora-sources-site-tags-update-v2`, `ethora-sources-site-delete-url-v2`, `ethora-sources-site-delete-url-v2-batch`, `ethora-sources-docs-upload-v2`, `ethora-sources-docs-list-v2`, `ethora-sources-docs-tags-update-v2`, `ethora-sources-docs-delete-v2`, `ethora-sources-docs-upload`, `ethora-sources-docs-delete` |
 | Users and files | `ethora-users-batch-create-v2`, `ethora-users-batch-job-v2`, `ethora-wait-users-batch-job-v2`, `ethora-files-upload-v2`, `ethora-files-get-v2`, `ethora-files-delete-v2` |
 | B2B provisioning (server integrations with a B2B token) | `ethora-b2b-app-create`, `ethora-b2b-app-provision`, `ethora-b2b-app-bootstrap-ai`, `ethora-generate-b2b-bootstrap-runbook`, `ethora-generate-env-examples` |
-| Wallet | `ethora-wallet-get-balance`, `ethora-wallet-erc20-transfer` |
+| Wallet | `ethora-wallet-get-balance`; `ethora-wallet-erc20-transfer` is stdio-only (never offered on the hosted server: directory rules forbid connectors that move money or crypto) |
 | Docs | `search`, `fetch` |
 
 Alias tools (`ethora.b2b.*`, `ethora-bot-message-v2`, `ethora-bot-history-v2`) are off by default (`ETHORA_MCP_ENABLE_ALIASES=true` to expose them); the canonical tools cover the same ground.
@@ -155,6 +155,7 @@ The widget answers with the app's active bot (`defaultBotInstanceId`). On an app
 | `ETHORA_APP_DOMAIN_NAME` | Base app `domainName`; when `ETHORA_APP_JWT` is empty the server fetches the app JWT from `GET /v1/apps/get-config?domainName=...` at startup |
 | `ETHORA_B2B_TOKEN` | B2B server token for `x-custom-token` tenant-actor routes |
 | `ETHORA_MCP_ENABLE_DANGEROUS_TOOLS` | `true` registers app deletion, wallet transfer and bulk-delete tools (default off) |
+| `ETHORA_MCP_OPENAI_APPS_CHALLENGE` | Hosted only. Token issued by the OpenAI apps portal for domain verification; served verbatim at `/.well-known/openai-apps-challenge` (404 when unset) |
 | `ETHORA_MCP_ENABLE_ALIASES` | `true` exposes the dot-namespaced alias tools (default off) |
 
 ### Hosted mode only
