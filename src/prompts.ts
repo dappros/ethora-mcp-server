@@ -120,10 +120,17 @@ export const RECIPES_MD = md`
 4) \`ethora-sources-site-list-v2\` / \`ethora-sources-docs-list-v2\`
 5) \`ethora-sources-site-tags-update-v2\` / \`ethora-sources-docs-tags-update-v2\`
 
-### Bot management (app-token)
-1) \`ethora-app-select\` with \`{ appId, appToken }\`
-2) \`ethora-auth-use-app\`
-3) \`ethora-bot-get-v2\` / \`ethora-bot-update-v2\`
+### AI agent for an app (user auth - the normal path)
+1) \`ethora-app-select\` { appId }
+2) \`ethora-app-create-chat\` { title: "Support", pinned: true } -> note the room \`jid\`
+3) \`ethora-agents-create-v2\` { name: "Helper", prompt: "..." }
+4) \`ethora-agent-invite-to-chat\` { agentIdOrAddress, chatJid: "<jid>" }
+5) \`ethora-chats-message-v2\` { roomJid: "<jid>", text: "hello", waitForReplySec: 45 }
+
+### Legacy per-app bot (only apps that already have one)
+API/B2B-created apps have no legacy aiBot (\`ethora-bot-enable-v2\` returns 422 BOT_NOT_INITIALIZED); use the agent recipe above.
+1) \`ethora-app-select\` { appId }
+2) \`ethora-bot-get-v2\` / \`ethora-bot-update-v2\` (user, B2B or app-token auth)
 
 ### Files upload (user)
 1) \`ethora-auth-use-user\`
@@ -139,8 +146,10 @@ Pre-req tokens (one of):
 
 1) \`ethora-user-register\` { email, firstName, lastName } (skip if already verified)
 2) \`ethora-user-login\` { email, password } -- gets a user JWT
-3) \`ethora-app-create\` { displayName: "My App" } -- get \`appId\` and \`appToken\`
-4) \`ethora-app-select\` { appId, appToken }; \`ethora-auth-use-app\`
+3) \`ethora-app-create\` { displayName: "My App" } -- get \`appId\`
+4) \`ethora-app-select\` { appId } -- stay in user auth mode: the agents, rooms and
+   message tools all accept the user token through \`/v2/apps/:appId/...\` routes.
+   (App-token mode is for server integrations and is rejected by the agents routes.)
 4b) Create a room to host the agents. API/B2B-created apps no longer seed a
     default "Main chat", so create one explicitly and note its \`roomJid\`:
    \`ethora-app-create-chat\` { title: "Salon", pinned: false } -> note the room JID
@@ -156,9 +165,10 @@ Pre-req tokens (one of):
 9) Invite both agents into the room created in step 4b (use its room JID):
    \`ethora-agent-invite-to-chat\` { agentIdOrAddress: "<freud-id>", chatJid: "<roomJid>" }
    \`ethora-agent-invite-to-chat\` { agentIdOrAddress: "<jung-id>", chatJid: "<roomJid>" }
-10) Seed a message:
-    \`ethora-chats-message-v2\` { roomJid: "<roomJid>", text: "Freud, what would you say to Jung about dreams?" }
-11) Watch the agents converse. The smart response gate prevents loops; only the addressed agent replies first.
+10) Seed a message and wait for the first reply:
+    \`ethora-chats-message-v2\` { roomJid: "<roomJid>", text: "Freud, what would you say to Jung about dreams?", waitForReplySec: 45 }
+    Room ids: a room JID is \`${"${appId}_${chatId}"}\`; every room tool accepts the JID or the bare chatId.
+11) Watch the agents converse (\`ethora-chats-history-v2\` { roomJid }). The smart response gate prevents loops; only the addressed agent replies first.
 
 ### Controlling turn-taking (multi-agent rooms)
 For free-form chats the default \`responseMode: 'smart'\` works well. For structured
@@ -341,7 +351,9 @@ developer in one chat. Strict order:
    (Alternatively: \`ethora-agents-create-v2\` for the second agent + \`ethora-agent-invite-to-chat\`
     with the same chatJid.)
 4) Seed the conversation: \`ethora-chats-message-v2\` { roomJid: "<the default room JID>",
-   text: "${firstAgentName || "Freud"}, what would you say to ${secondAgentName || "Jung"} about dreams?" }
+   text: "${firstAgentName || "Freud"}, what would you say to ${secondAgentName || "Jung"} about dreams?", waitForReplySec: 45 }
+   (Without a B2B token, do the same in user mode: \`ethora-app-create\`, \`ethora-app-select\` { appId },
+   \`ethora-app-create-chat\`, \`ethora-agents-create-v2\` x2, \`ethora-agent-invite-to-chat\` x2. Stay in user auth mode.)
 5) Observe and report. Both agents now live as XMPP clients inside the ai-service process; thanks
    to the per-bot loop guard and smart response gate they will only reply when relevant.
 
