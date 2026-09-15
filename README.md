@@ -259,7 +259,7 @@ app, or configured tokens are never visible to another session.
 - `ETHORA_MCP_HTTP_HOST` / `ETHORA_MCP_HTTP_PORT` — bind address (default `127.0.0.1:3030`; put nginx in front)
 - `ETHORA_MCP_PUBLIC_URL` — public base URL advertised in `/.well-known/mcp` (e.g. `https://mcp.chat.ethora.com`)
 - `ETHORA_MCP_TRUST_PROXY=true` — take the client IP from `X-Forwarded-For` (set when behind nginx); it is forwarded to the Ethora API so per-IP rate limits apply per caller, not per MCP host
-- `ETHORA_MCP_SESSION_TTL_MS` — idle session eviction (default 30 min)
+- `ETHORA_MCP_SESSION_TTL_MS` — idle session eviction (default 4 hours)
 - `ETHORA_APP_DOMAIN_NAME` — base app `domainName`; when `ETHORA_APP_JWT` is empty the server fetches the App JWT from `GET /v1/apps/get-config?domainName=...` at startup, so no secret has to be configured for login/register
 - `ETHORA_API_URL` is fixed for the whole server; `ethora-configure` cannot change it per session
 - A `.env` file in the working directory is loaded at startup (real env wins)

@@ -10,7 +10,7 @@ function md(strings: TemplateStringsArray, ...values: any[]) {
   return out.trim() + "\n"
 }
 
-const AUTH_MAP_MD = md`
+export const AUTH_MAP_MD = md`
 ## Ethora auth map (quick reference)
 
 Ethora MCP has two common usage modes:
@@ -51,7 +51,7 @@ Ethora uses multiple token types depending on the caller:
 - Need to run **app-scoped operations for one app** (broadcast/sources/bot) → switch into **App Token**
 `
 
-const CHAT_COMPONENT_QUICKSTART_MD = md`
+export const CHAT_COMPONENT_QUICKSTART_MD = md`
 ## Vite/Next quickstart with \`@ethora/chat-component\`
 
 The fastest path is:
@@ -69,7 +69,7 @@ The chat component repo contains **demo credentials** for quick scaffolding. For
 - Frontend only receives short-lived credentials or uses your own session
 `
 
-const BACKEND_SDK_QUICKSTART_MD = md`
+export const BACKEND_SDK_QUICKSTART_MD = md`
 ## Backend integration quickstart with \`@ethora/sdk-backend\`
 
 Use \`@ethora/sdk-backend\` for server-to-server integration patterns:
@@ -86,7 +86,7 @@ ETHORA_CHAT_APP_SECRET=your_app_secret
 \`\`\`
 `
 
-const RECIPES_MD = md`
+export const RECIPES_MD = md`
 ## Common recipes
 
 ### User-auth quickstart

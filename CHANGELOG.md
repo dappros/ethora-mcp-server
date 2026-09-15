@@ -4,7 +4,23 @@ All notable changes to this package are documented here. For cross-SDK release n
 
 ## Unreleased
 
+### Added
+- `instructions` in the initialize result: hosted clients get the auth flow
+  (status -> login/register -> API key), the app-create/app-select ordering and
+  safety notes before the first tool call; stdio gets the env-var based flow.
+- `search` and `fetch` tools (ChatGPT connector convention) over an in-memory
+  corpus: the auth map, quickstarts and recipes split by heading, a hosted
+  getting-started guide, an API keys guide, and one reference entry per tool
+  with its inputs and annotations. Work unauthenticated.
+
+### Changed
+- Hosted mode idle session TTL default raised from 30 minutes to 4 hours
+  (`ETHORA_MCP_SESSION_TTL_MS`).
+
 ### Fixed
+- Annotations (`readOnlyHint` / `destructiveHint` / `idempotentHint`) added to the
+  21 agents, bot-instance, messaging and export/import tools that lacked them, so
+  clients can auto-approve read-only calls and confirm destructive ones.
 - Error envelope: a 401 no longer triggers a token refresh on bearer/API-key,
   app-token or B2B sessions, and a failed refresh no longer masks the original
   API error (a revoked key now surfaces `REFRESH_RECORD_NOT_FOUND`).

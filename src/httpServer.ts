@@ -107,7 +107,7 @@ export async function startHttpServer(opts: HttpServerOptions) {
 
   const host = String(process.env.ETHORA_MCP_HTTP_HOST || "127.0.0.1")
   const port = envInt("ETHORA_MCP_HTTP_PORT", 3030)
-  const sessionTtlMs = envInt("ETHORA_MCP_SESSION_TTL_MS", 30 * 60 * 1000)
+  const sessionTtlMs = envInt("ETHORA_MCP_SESSION_TTL_MS", 4 * 60 * 60 * 1000)
   const trustProxy = envBool("ETHORA_MCP_TRUST_PROXY")
   const publicUrl = String(process.env.ETHORA_MCP_PUBLIC_URL || "").trim().replace(/\/+$/, "") || `http://${host}:${port}`
   const endpoint = publicUrl.endsWith("/mcp") ? publicUrl : `${publicUrl}/mcp`
