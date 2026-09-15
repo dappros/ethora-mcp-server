@@ -23,7 +23,9 @@ function parseAxiosishError(error: unknown): { message: string; httpStatus?: num
     const e = error as any
     const httpStatus = e.response?.status
     const data = e.response?.data
-    const msg = e.message || "request failed"
+    // Prefer the API's own error text over axios' generic "Request failed with status code N".
+    const apiMsg = typeof data?.error === "string" ? data.error : typeof data?.message === "string" ? data.message : undefined
+    const msg = apiMsg || e.message || "request failed"
     const headers = e.response?.headers || {}
     const requestId =
       headers["x-request-id"] ||

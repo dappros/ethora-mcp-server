@@ -2,6 +2,44 @@
 
 All notable changes to this package are documented here. For cross-SDK release notes, see [ethora/RELEASE-NOTES.md](https://github.com/dappros/ethora/blob/main/RELEASE-NOTES.md).
 
+## Unreleased
+
+### Fixed
+- Error envelope: a 401 no longer triggers a token refresh on bearer/API-key,
+  app-token or B2B sessions, and a failed refresh no longer masks the original
+  API error (a revoked key now surfaces `REFRESH_RECORD_NOT_FOUND`).
+  `error.message` prefers the API's own error text over the generic axios
+  status message.
+
+### Added — hosted mode (Streamable HTTP)
+- `ETHORA_MCP_TRANSPORT=http` / `--http` starts the server as a Streamable HTTP
+  service (`POST|GET|DELETE /mcp`, `GET /healthz`, `GET /.well-known/mcp`).
+  stdio remains the default, so the npm CLI is unchanged.
+- Per-session state: every `Mcp-Session-Id` has its own tokens, auth mode and
+  selected app (AsyncLocalStorage). Idle sessions are evicted after
+  `ETHORA_MCP_SESSION_TTL_MS` (default 30 min).
+- `Authorization: Bearer <token>` on the HTTP endpoint binds the session to a
+  user token / API key, an `appToken`, or a B2B token, chosen from the token
+  type. No tool call needed.
+- The caller's IP (`X-Forwarded-For` when `ETHORA_MCP_TRUST_PROXY=true`) is
+  forwarded to the Ethora API so per-IP rate limits apply per client.
+- `ETHORA_APP_DOMAIN_NAME`: fetch the App JWT from `/v1/apps/get-config` at
+  startup instead of configuring `ETHORA_APP_JWT`.
+- A `.env` file in the working directory is loaded at startup (env wins).
+- `ethora-user-register` now takes an optional `password` (generated and
+  returned once when omitted), calls the v2 signup endpoint, logs the new user
+  in, and by default mints an API key (`createApiKey`, `apiKeyName`,
+  `apiKeyTtlDays`). `ethora-user-login` gained the same `createApiKey` option.
+- New tools: `ethora-api-key-create`, `ethora-api-key-list`,
+  `ethora-api-key-revoke` (backed by `/v2/users/me/api-keys`).
+- `ethora-status` reports `hosted` and `sessionId`; `ethora-help` and
+  `ethora-doctor` explain the hosted auth paths.
+
+### Changed
+- `ethora-configure` refuses to change `apiUrl` on a hosted server (it is fixed
+  per deployment); `appJwt` / `b2bToken` set via the tool are per session.
+- `express` and `cors` are now direct dependencies.
+
 ## 26.9.0
 
 ### Packaging
