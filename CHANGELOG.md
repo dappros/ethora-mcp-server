@@ -4,7 +4,11 @@ All notable changes to this package are documented here. For cross-SDK release n
 
 ## Unreleased
 
-(nothing yet)
+### Changed
+- Directory compliance: every tool now has a human `title` (top-level and `annotations.title`, see `src/toolTitles.ts`) and explicit `readOnlyHint` / `destructiveHint` / `openWorldHint` booleans; `ethora-wallet-erc20-transfer` is no longer offered on the hosted server (stdio only). The discovery document (`/.well-known/mcp`, `/`) publishes `auth` as an object (`open` + `oauth`) plus `description`, `stdio`, `vendor`, `contact`, matching the website copy.
+
+### Added
+- `GET /.well-known/openai-apps-challenge` serves `ETHORA_MCP_OPENAI_APPS_CHALLENGE` for OpenAI apps domain verification.
 
 ## 26.9.1 - 2026-09-15
 

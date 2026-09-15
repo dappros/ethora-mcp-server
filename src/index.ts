@@ -34,6 +34,7 @@ const { registerDocsSearch } = await import("./docsSearch.js")
 const { isHostedMode } = await import("./session.js")
 const { instructionsFor } = await import("./instructions.js")
 const { applyScopeGuard } = await import("./scopeGuard.js")
+const { applyToolMeta, removeStdioOnlyTools } = await import("./toolTitles.js")
 
 const SERVER_NAME = "Ethora MCP Server"
 const SERVER_VERSION = "26.9.1"
@@ -49,8 +50,12 @@ export function buildServer(profile?: "open" | "authenticated" | "oauth") {
   registerTools(server)
   registerPromptsAndResources(server)
   registerDocsSearch(server)
-  // Must run after every tool is registered; enforces OAuth scopes on
-  // /mcp/oauth sessions only.
+  // Hosted surface never offers money/crypto movement (directory review rule);
+  // the stdio CLI keeps it behind ETHORA_MCP_ENABLE_DANGEROUS_TOOLS.
+  if (isHostedMode()) removeStdioOnlyTools(server)
+  // Titles + explicit annotation booleans on every tool (directory requirements),
+  // then the scope guard, which reads the normalised annotations.
+  applyToolMeta(server)
   applyScopeGuard(server)
   return server
 }

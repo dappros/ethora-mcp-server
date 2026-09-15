@@ -145,14 +145,19 @@ export async function startHttpServer(opts: HttpServerOptions) {
     endpoint,
     transport: "streamable-http",
     protocol: "mcp",
-    auth: ["bearer", "tools:ethora-user-login/ethora-user-register", "personal-url"],
+    description: "Create and manage Ethora chat apps, users, rooms, AI agents and website chat widgets from Claude, ChatGPT, Cursor, Claude Code or autonomous agents. Agents can register an account and receive an API key without a human step.",
+    // Object shape is the source of truth (the website copy at ethora.com/mcp mirrors it).
+    auth: {
+      open: "Connect to endpoint and call ethora-user-register or ethora-user-login; both return a revocable API key, sent as Authorization: Bearer <key> or embedded in personalUrl.",
+      ...(authIssuer
+        ? { oauth: { authorizationServer: authIssuer, protectedResourceMetadata: prmUrl, scopes: [...ALL_SCOPES] } }
+        : {}),
+    },
     personalUrl: `${publicBase}/mcp/k/<api-key>`,
-    ...(authIssuer
-      ? {
-          oauthEndpoint,
-          oauth: { authorizationServer: authIssuer, protectedResourceMetadata: prmUrl, scopes: [...ALL_SCOPES] },
-        }
-      : {}),
+    ...(authIssuer ? { oauthEndpoint } : {}),
+    stdio: { package: "@ethora/mcp-server", command: "npx -y @ethora/mcp-server" },
+    vendor: "Dappros Ltd",
+    contact: "https://ethora.com/contact/",
     // Public API base for humans/agents reading this document; the server itself
     // may talk to the API over loopback, which must not leak here.
     apiUrl: appConfig.publicApiUrl || appConfig.apiUrl,
@@ -182,6 +187,13 @@ export async function startHttpServer(opts: HttpServerOptions) {
     if (!authIssuer) { res.status(404).json({ error: "oauth_not_configured" }); return }
     res.json(protectedResourceMetadata())
   }
+  // OpenAI apps domain verification: the portal issues a token that must be
+  // served verbatim at this path on the MCP host.
+  app.get("/.well-known/openai-apps-challenge", (_req, res) => {
+    const token = String(process.env.ETHORA_MCP_OPENAI_APPS_CHALLENGE || "").trim()
+    if (!token) { res.status(404).type("text/plain").send("not configured") ; return }
+    res.status(200).type("text/plain").send(token)
+  })
   app.get("/.well-known/oauth-protected-resource", prmHandler)
   app.get("/.well-known/oauth-protected-resource/mcp/oauth", prmHandler)
 
