@@ -12,6 +12,8 @@ import {
     agentsSetVisibilityV2,
     agentsSoulV2,
     agentsInviteToChatV2,
+    appChatMessagesV2,
+    appChatsListV2,
     botInstancesListV2,
     botInstanceGetV2,
     botInstanceStatusV2,
@@ -97,6 +99,7 @@ import {
     walletGetBalance,
 } from "./apiClientEthora.js"
 import { fail, ok } from "./mcpResponse.js"
+import { ensureTenantActorAuth, splitRoomJid } from "./routeAuth.js"
 import { connectorUrl, CONNECTOR_URL_NOTE } from "./publicUrl.js"
 
 function errorToText(error: unknown) {
@@ -227,7 +230,40 @@ function resolveAppScopedV2Context(passedAppId?: string) {
         return { mode: "b2b" as const, appId: effectiveAppId }
     }
 
-    throw new Error("This tool requires app-token auth or B2B auth. Use `ethora-auth-use-app` for app-token flows or `ethora-auth-use-b2b` for explicit appId flows.")
+    // User mode (hosted server, login/register/API key/OAuth): tenant-scoped
+    // routes accept the user token via their /v2/apps/:appId/... variants, so a
+    // selected or passed appId is enough. Without one, callers fall back to the
+    // bare route, which the backend scopes to the token's own app.
+    if (state.authMode === "user") {
+        if (!state.hasUserToken) {
+            throw new Error("Not logged in. Call `ethora-user-login` or `ethora-user-register` first (or connect with an API key).")
+        }
+        return { mode: "user" as const, appId: effectiveAppId || undefined }
+    }
+
+    throw new Error("This tool requires user auth, app-token auth or B2B auth. Use `ethora-auth-use-user` (then `ethora-user-login`), `ethora-auth-use-app` or `ethora-auth-use-b2b`.")
+}
+
+// Resolve a room reference to the identifiers the v2 routes need. Rooms have
+// two ids: the XMPP local part `${appId}_${suffix}` (a JID, used by broadcast
+// `chatIds` and by invite `chatJid`) and the Mongo Chat `_id` (used by
+// `/v2/apps/:appId/chats/:chatId/messages`). Callers may pass either; this
+// looks the room up in the app's chat list to fill in the other.
+async function resolveRoom(appIdHint: string | undefined, roomJidOrChatId: string | undefined) {
+    const parsed = splitRoomJid(roomJidOrChatId, appIdHint)
+    const res = await appChatsListV2(parsed.appId)
+    const body = res.data?.data ?? res.data ?? {}
+    const items: any[] = body.results || body.items || []
+    const given = String(roomJidOrChatId || "").trim().split("@")[0]
+    const rec = items.find((c) => String(c._id || c.id) === given)
+        || items.find((c) => String(c.name) === parsed.roomName)
+        || items.find((c) => String(c.name || "").endsWith(`_${parsed.chatId}`))
+    if (!rec) {
+        throw new Error(`Room not found in app ${parsed.appId}: ${given}. Pass the room JID returned by ethora-app-create-chat (\`${"${appId}_${chatId}"}\`) or a chat _id from the app's chat list.`)
+    }
+    const name = String(rec.name || parsed.roomName)
+    const suffix = name.startsWith(`${parsed.appId}_`) ? name.slice(parsed.appId.length + 1) : name
+    return { appId: parsed.appId, mongoId: String(rec._id || rec.id), roomName: name, suffix, roomJid: parsed.roomJid.includes("@") ? parsed.roomJid : name, title: rec.title || rec.chatName || "" }
 }
 
 function configureTool(server: McpServer) {
@@ -414,15 +450,15 @@ function helpTool(server: McpServer) {
 
                 // Goal: app-token operations (broadcast/sources/bot/chat test)
                 if (effectiveGoal === "broadcast" || effectiveGoal === "sources-ingest" || effectiveGoal === "bot-manage" || effectiveGoal === "chat-test") {
-                    if (!checks.hasCurrentAppId || !checks.hasAppToken) {
+                    // User mode (hosted default) reaches every tenant-scoped route through
+                    // /v2/apps/:appId/...; only a selected app is needed. App-token mode is
+                    // for server integrations that hold an appToken.
+                    if (!checks.hasCurrentAppId) {
                         nextCalls.push({
                             tool: "ethora-app-select",
-                            args: { appId: "<APP_ID>", appToken: "JWT <APP_TOKEN>" },
-                            why: "App-scoped automation needs a selected app context plus appToken.",
+                            args: { appId: "<APP_ID>" },
+                            why: "App-scoped tools need a selected app context (appToken is optional in user mode).",
                         })
-                    }
-                    if (state.authMode !== "app") {
-                        nextCalls.push({ tool: "ethora-auth-use-app", why: "Switch from tenant-actor/B2B mode into app-token mode for app-scoped operations." })
                     }
 
                     if (effectiveGoal === "broadcast") {
@@ -481,75 +517,73 @@ function helpTool(server: McpServer) {
                     }
 
                     if (effectiveGoal === "bot-manage") {
-                        nextCalls.push({
-                            tool: "ethora-bot-get-v2",
-                            why: "Inspect current bot status, prompt, widget state, and runtime LLM settings.",
-                        })
-
+                        nextCalls.push(
+                            { tool: "ethora-agents-list-v2", why: "See the AI agents that already exist for the selected app." },
+                            { tool: "ethora-agents-create-v2", args: { name: "Helper", prompt: "You are a polite support assistant for this app." }, why: "Create an AI agent persona (user auth; lands in the selected app)." },
+                            { tool: "ethora-agent-invite-to-chat", args: { agentIdOrAddress: "<AGENT_ID>", chatJid: "<ROOM_JID>" }, why: "Put the agent into a room so it starts answering there." },
+                            { tool: "ethora-bot-instances-list", args: { appId: String(state.currentAppId || "<APP_ID>") }, why: "Confirm the agent's bot instance is on." },
+                        )
                         recipes.push({
-                            id: "bot-enable-and-tune",
-                            title: "Enable bot + tune settings (v2)",
-                            description: "Enable a bot for an app and update its prompt/greeting.",
+                            id: "agent-create-and-invite",
+                            title: "Create an AI agent and add it to a room (user auth)",
+                            description: "The standard path for API-created apps: create a room, create an agent, invite it, then talk to it with ethora-chats-message-v2.",
                             steps: [
-                                { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: "JWT <APP_TOKEN>" } },
-                                { tool: "ethora-auth-use-app" },
+                                { tool: "ethora-app-select", args: { appId: "<APP_ID>" } },
+                                { tool: "ethora-app-create-chat", args: { appId: "<APP_ID>", title: "Support", pinned: true } },
+                                { tool: "ethora-agents-create-v2", args: { name: "Helper", prompt: "You are a polite support assistant for this app." } },
+                                { tool: "ethora-agent-invite-to-chat", args: { agentIdOrAddress: "<AGENT_ID>", chatJid: "<ROOM_JID>" } },
+                                { tool: "ethora-chats-message-v2", args: { roomJid: "<ROOM_JID>", text: "hello, is anyone there?", waitForReplySec: 45 } },
+                            ],
+                        })
+                        recipes.push({
+                            id: "legacy-bot-enable-and-tune",
+                            title: "Legacy per-app bot (only for apps that already have one)",
+                            description: "Apps created through the API or B2B have no legacy aiBot (ethora-bot-enable-v2 returns 422 BOT_NOT_INITIALIZED); use the agent recipe above instead.",
+                            steps: [
+                                { tool: "ethora-app-select", args: { appId: "<APP_ID>" } },
                                 { tool: "ethora-bot-enable-v2", args: {} },
-                                { tool: "ethora-bot-update-v2", args: { trigger: "/bot", prompt: "You are a helpful assistant.", greetingMessage: "Hello! Ask me anything.", llmProvider: "openai", llmModel: "gpt-4o-mini" } },
+                                { tool: "ethora-bot-update-v2", args: { trigger: "/bot", prompt: "You are a helpful assistant.", greetingMessage: "Hello! Ask me anything." } },
                             ],
                         })
                     }
-
                     if (effectiveGoal === "chat-test") {
                         nextCalls.push(
                             {
                                 tool: "ethora-chats-message-v2",
-                                args: { text: "Summarize the indexed FAQ in 3 bullets.", mode: "private", nickname: "SDK Tester" },
-                                why: "Send a private automation/test message through the primary /v2/chats surface.",
+                                args: { roomJid: "<ROOM_JID>", text: "hello, is anyone there?", waitForReplySec: 45 },
+                                why: "Post into the room as the app and wait for an invited AI agent to answer; replies come back in the result.",
                             },
                             {
                                 tool: "ethora-chats-history-v2",
-                                args: { mode: "private", nickname: "SDK Tester", limit: 10 },
-                                why: "Read the saved automation/test history back after sending a message.",
+                                args: { roomJid: "<ROOM_JID>", limit: 20 },
+                                why: "Read the room's archived messages (yours and the agent's).",
                             }
                         )
-
                         recipes.push(
                             {
-                                id: "chat-test-private",
-                                title: "Test bot via private chat automation",
-                                description: "Send a private test message and then read back the saved conversation history.",
+                                id: "chat-test-room",
+                                title: "Test an AI agent in a room",
+                                description: "Post a message into a room the agent was invited to, wait for the reply, then read the history.",
                                 steps: [
-                                    { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: "JWT <APP_TOKEN>" } },
-                                    { tool: "ethora-auth-use-app" },
-                                    { tool: "ethora-chats-message-v2", args: { text: "Summarize the indexed FAQ in 3 bullets.", mode: "private", nickname: "SDK Tester" } },
-                                    { tool: "ethora-chats-history-v2", args: { mode: "private", nickname: "SDK Tester", limit: 10 } },
-                                ],
-                            },
-                            {
-                                id: "chat-test-group",
-                                title: "Test bot via group-room automation",
-                                description: "Send a test message into a room-style conversation and then fetch the resulting history.",
-                                steps: [
-                                    { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: "JWT <APP_TOKEN>" } },
-                                    { tool: "ethora-auth-use-app" },
-                                    { tool: "ethora-chats-message-v2", args: { text: "What sources are currently indexed for this app?", mode: "group", roomJid: "<ROOM_JID>" } },
-                                    { tool: "ethora-chats-history-v2", args: { mode: "group", roomJid: "<ROOM_JID>", limit: 10 } },
+                                    { tool: "ethora-app-select", args: { appId: "<APP_ID>" } },
+                                    { tool: "ethora-chats-message-v2", args: { roomJid: "<ROOM_JID>", text: "What can you help me with?", waitForReplySec: 45 } },
+                                    { tool: "ethora-chats-history-v2", args: { roomJid: "<ROOM_JID>", limit: 20 } },
                                 ],
                             },
                             {
                                 id: "widget-config-v2",
-                                title: "Fetch widget config",
-                                description: "Read the widget/embed config and public widget metadata for the selected app.",
+                                title: "Fetch widget config (app-token)",
+                                description: "Read the widget/embed config for the selected app. This route needs the app's appToken (from ethora-app-create or the admin UI).",
                                 steps: [
                                     { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: "JWT <APP_TOKEN>" } },
                                     { tool: "ethora-auth-use-app" },
                                     { tool: "ethora-bot-widget-v2", args: {} },
+                                    { tool: "ethora-auth-use-user" },
                                 ],
                             }
                         )
                     }
                 }
-
                 // Auto mode: minimal “get unstuck” guidance
                 if (effectiveGoal === "auto") {
                     if (!checks.hasApiUrl) {
@@ -727,7 +761,7 @@ async function executeRecipeStep(tool: string, args: any, ctx: { lastJobId?: str
             } as any)
         }
         case "ethora-chats-broadcast-v2": {
-            ensureAppAuthForTool()
+            ensureTenantActorAuth()
             const { text, allRooms, chatIds, chatNames } = args || {}
             const payload: any = { text: String(text || "") }
             if (typeof allRooms === "boolean") payload.allRooms = allRooms
@@ -739,7 +773,7 @@ async function executeRecipeStep(tool: string, args: any, ctx: { lastJobId?: str
             return res.data
         }
         case "ethora-wait-broadcast-job-v2": {
-            ensureAppAuthForTool()
+            ensureTenantActorAuth()
             const { jobId, timeoutMs, intervalMs } = args || {}
             const timeout = timeoutMs ?? 60_000
             const interval = intervalMs ?? 1_000
@@ -755,13 +789,16 @@ async function executeRecipeStep(tool: string, args: any, ctx: { lastJobId?: str
             return { done: false, reason: "timeout", job: last }
         }
         case "ethora-sources-site-crawl-v2": {
-            ensureAppAuthForTool()
+            ensureTenantActorAuth()
             const { url, followLink, knowledgeScope, savedAgentId } = args || {}
-            const res = await sourcesSiteCrawlV2({ url: String(url || ""), followLink, knowledgeScope, savedAgentId })
+            const actx = resolveAppScopedV2Context(undefined)
+            const res = (actx.mode !== "app" && actx.appId)
+                ? await sourcesSiteCrawlForAppV2(actx.appId, { url: String(url || ""), followLink, knowledgeScope, savedAgentId } as any)
+                : await sourcesSiteCrawlV2({ url: String(url || ""), followLink, knowledgeScope, savedAgentId })
             return res.data
         }
         case "ethora-sources-docs-upload-v2": {
-            ensureAppAuthForTool()
+            ensureTenantActorAuth()
             const { files, knowledgeScope, savedAgentId } = args || {}
             const form = new FormData()
             for (const f of (files || [])) {
@@ -772,33 +809,35 @@ async function executeRecipeStep(tool: string, args: any, ctx: { lastJobId?: str
             }
             if (knowledgeScope) form.append("knowledgeScope", knowledgeScope)
             if (savedAgentId) form.append("savedAgentId", savedAgentId)
-            const res = await sourcesDocsUploadV2(form, { "Content-Type": "multipart/form-data" })
+            const actx = resolveAppScopedV2Context(undefined)
+            const res = (actx.mode !== "app" && actx.appId) ? await sourcesDocsUploadForAppV2(actx.appId, form, { "Content-Type": "multipart/form-data" }) : await sourcesDocsUploadV2(form, { "Content-Type": "multipart/form-data" })
             return res.data
         }
         case "ethora-agents-list-v2": {
-            ensureAppAuthForTool()
-            const res = await agentsListV2()
+            ensureTenantActorAuth()
+            const res = await agentsListV2(resolveAppScopedV2Context((args as any)?.appId).appId)
             return res.data
         }
         case "ethora-agents-get-v2": {
-            ensureAppAuthForTool()
+            ensureUserAuthForTool()
             const { agentId } = args || {}
             const res = await agentsGetV2(String(agentId || ""))
             return res.data
         }
         case "ethora-agents-create-v2": {
-            ensureAppAuthForTool()
-            const res = await agentsCreateV2(args as any)
+            ensureTenantActorAuth()
+            const { appId: caseAppId, ...caseRest } = (args as any) || {}
+            const res = await agentsCreateV2(caseRest as any, resolveAppScopedV2Context(caseAppId).appId)
             return res.data
         }
         case "ethora-agents-update-v2": {
-            ensureAppAuthForTool()
+            ensureUserAuthForTool()
             const { agentId, ...payload } = args || {}
             const res = await agentsUpdateV2(String(agentId || ""), payload as any)
             return res.data
         }
         case "ethora-agents-clone-v2": {
-            ensureAppAuthForTool()
+            ensureUserAuthForTool()
             const { agentId, ...payload } = args || {}
             const res = await agentsCloneV2(String(agentId || ""), payload as any)
             return res.data
@@ -810,14 +849,18 @@ async function executeRecipeStep(tool: string, args: any, ctx: { lastJobId?: str
             return res.data
         }
         case "ethora-bot-enable-v2": {
-            ensureAppAuthForTool()
+            ensureTenantActorAuth()
             const { trigger } = args || {}
-            const res = await botUpdateV2({ status: "on", trigger } as any)
+            const actx = resolveAppScopedV2Context(undefined)
+            const res = (actx.mode !== "app" && actx.appId)
+                ? await botUpdateForAppV2(actx.appId, { status: "on", trigger } as any)
+                : await botUpdateV2({ status: "on", trigger } as any)
             return res.data
         }
         case "ethora-bot-update-v2": {
-            ensureAppAuthForTool()
-            const res = await botUpdateV2(args as any)
+            ensureTenantActorAuth()
+            const actx = resolveAppScopedV2Context(undefined)
+            const res = (actx.mode !== "app" && actx.appId) ? await botUpdateForAppV2(actx.appId, args as any) : await botUpdateV2(args as any)
             return res.data
         }
         case "ethora-files-upload-v2": {
@@ -1303,7 +1346,7 @@ function chatsBroadcastTool(server: McpServer) {
                 if (chatIds?.length) payload.chatIds = chatIds
                 if (chatNames?.length) payload.chatNames = chatNames
 
-                const res = ctx.mode === "b2b"
+                const res = (ctx.mode !== "app" && ctx.appId)
                     ? await chatsBroadcastForAppV2(ctx.appId!, payload)
                     : await chatsBroadcastV2(payload)
                 return asToolResult(ok(res.data, getDefaultMeta("ethora-chats-broadcast-v2")))
@@ -1328,7 +1371,7 @@ function chatsBroadcastJobTool(server: McpServer) {
         async function ({ appId, jobId }) {
             try {
                 const ctx = resolveAppScopedV2Context(appId)
-                const res = ctx.mode === "b2b"
+                const res = (ctx.mode !== "app" && ctx.appId)
                     ? await chatsBroadcastJobForAppV2(ctx.appId!, jobId)
                     : await chatsBroadcastJobV2(jobId)
                 return asToolResult(ok(res.data, getDefaultMeta("ethora-chats-broadcast-job-v2")))
@@ -1365,7 +1408,7 @@ function waitBroadcastJobTool(server: McpServer) {
                 const started = Date.now()
                 let last: any = null
                 while (Date.now() - started < timeout) {
-                    const res = ctx.mode === "b2b"
+                    const res = (ctx.mode !== "app" && ctx.appId)
                         ? await chatsBroadcastJobForAppV2(ctx.appId!, jobId)
                         : await chatsBroadcastJobV2(jobId)
                     last = res.data
@@ -2000,7 +2043,7 @@ function botGetV2Tool(server: McpServer) {
             const meta = getDefaultMeta("ethora-bot-get-v2")
             try {
                 const ctx = resolveAppScopedV2Context(appId)
-                const res = ctx.mode === "b2b"
+                const res = (ctx.mode !== "app" && ctx.appId)
                     ? await botGetForAppV2(ctx.appId!)
                     : await botGetV2()
                 return asToolResult(ok(res.data, meta))
@@ -2041,7 +2084,7 @@ function botUpdateV2Tool(server: McpServer) {
             const meta = getDefaultMeta("ethora-bot-update-v2")
             try {
                 const ctx = resolveAppScopedV2Context(appId)
-                const res = ctx.mode === "b2b"
+                const res = (ctx.mode !== "app" && ctx.appId)
                     ? await botUpdateForAppV2(ctx.appId!, payload as any)
                     : await botUpdateV2(payload as any)
                 return asToolResult(ok(res.data, meta))
@@ -2056,14 +2099,18 @@ function agentsListV2Tool(server: McpServer) {
     server.registerTool(
         "ethora-agents-list-v2",
         {
-            description: "List the reusable saved agents owned by the current app (`GET /v2/agents`) — a saved agent is a reusable bot definition. Returns an array of agents with ids, names, and config.\nAuth: app-token mode (after `ethora-app-select` + `ethora-auth-use-app`). Errors: 401/403 not in app-token mode or invalid appToken; empty list if the app has no saved agents.",
+            description: "List the reusable saved agents of an app (`GET /v2/apps/:appId/agents`, or `GET /v2/agents` for the token's own app) — a saved agent is a reusable bot definition. Returns an array of agents with ids, names, and config.\nAuth: app-token mode (after `ethora-app-select` + `ethora-auth-use-app`). Errors: 401/403 not in app-token mode or invalid appToken; empty list if the app has no saved agents.",
             annotations: { readOnlyHint: true, openWorldHint: true },
+            inputSchema: {
+                appId: z.string().optional().describe("24-char hex appId whose agents to list (`GET /v2/apps/:appId/agents`). Defaults to the app selected with `ethora-app-select`; without either, lists the agents of the token's own app."),
+            },
         },
-        async function () {
+        async function ({ appId }) {
             const meta = getDefaultMeta("ethora-agents-list-v2")
             try {
-                ensureAppAuthForTool()
-                const res = await agentsListV2()
+                ensureTenantActorAuth()
+                const ctx = resolveAppScopedV2Context(appId)
+                const res = await agentsListV2(ctx.appId)
                 return asToolResult(ok(res.data, meta))
             } catch (error) {
                 return asToolResult(fail(error, meta))
@@ -2085,7 +2132,7 @@ function agentsGetV2Tool(server: McpServer) {
         async function ({ agentId }) {
             const meta = getDefaultMeta("ethora-agents-get-v2")
             try {
-                ensureAppAuthForTool()
+                ensureUserAuthForTool()
                 const res = await agentsGetV2(agentId)
                 selectAgent({ agentId })
                 return asToolResult(ok(res.data, meta))
@@ -2100,9 +2147,10 @@ function agentsCreateV2Tool(server: McpServer) {
     server.registerTool(
         "ethora-agents-create-v2",
         {
-            description: "Create a reusable AI agent (POST /v2/agents). Each agent is a persona — name, avatar, system prompt, LLM config, plus response-gate settings (responseMode, cooldownSec) that control when it speaks in a room. For multi-agent scenarios (two or more personas conversing in one chat) create each one separately, then `ethora-agent-invite-to-chat` them into the same room. See the `ethora-agents-quickstart` prompt for the end-to-end recipe.",
+            description: "Create a reusable AI agent (POST /v2/apps/:appId/agents). Works in user auth mode (the normal hosted mode) or B2B mode; app-token mode is not accepted by the backend. Each agent is a persona — name, avatar, system prompt, LLM config, plus response-gate settings (responseMode, cooldownSec) that control when it speaks in a room. For multi-agent scenarios (two or more personas conversing in one chat) create each one separately, then `ethora-agent-invite-to-chat` them into the same room. See the `ethora-agents-quickstart` prompt for the end-to-end recipe.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
             inputSchema: {
+                appId: z.string().optional().describe("24-char hex appId the agent belongs to (`POST /v2/apps/:appId/agents`). Defaults to the app selected with `ethora-app-select`. Pass it when you just created an app so the agent lands there rather than in the token's own app."),
                 name: z.string().optional().describe("Short display name. For multi-agent scenarios, prefer single-word names (e.g. 'Hannibal', 'Varro') — the @-mention matcher uses the exact display name with word-boundary matching."),
                 slug: z.string().optional().describe("URL-safe slug (auto-generated from name if omitted)."),
                 summary: z.string().optional().describe("Short bio shown in agent lists."),
@@ -2126,8 +2174,10 @@ function agentsCreateV2Tool(server: McpServer) {
         async function (payload) {
             const meta = getDefaultMeta("ethora-agents-create-v2")
             try {
-                ensureAppAuthForTool()
-                const res = await agentsCreateV2(payload as any)
+                ensureTenantActorAuth()
+                const { appId, ...rest } = payload as any
+                const ctx = resolveAppScopedV2Context(appId)
+                const res = await agentsCreateV2(rest as any, ctx.appId)
                 const createdId = String(res?.data?.agent?.id || res?.data?.agent?._id || "")
                 if (createdId) selectAgent({ agentId: createdId })
                 return asToolResult(ok(res.data, meta))
@@ -2169,7 +2219,7 @@ function agentsUpdateV2Tool(server: McpServer) {
         async function ({ agentId, ...payload }) {
             const meta = getDefaultMeta("ethora-agents-update-v2")
             try {
-                ensureAppAuthForTool()
+                ensureUserAuthForTool()
                 const res = await agentsUpdateV2(agentId, payload as any)
                 selectAgent({ agentId })
                 return asToolResult(ok(res.data, meta))
@@ -2196,7 +2246,7 @@ function agentsCloneV2Tool(server: McpServer) {
         async function ({ agentId, ...payload }) {
             const meta = getDefaultMeta("ethora-agents-clone-v2")
             try {
-                ensureAppAuthForTool()
+                ensureUserAuthForTool()
                 const res = await agentsCloneV2(agentId, payload as any)
                 const createdId = String(res?.data?.agent?.id || res?.data?.agent?._id || "")
                 if (createdId) selectAgent({ agentId: createdId })
@@ -2250,7 +2300,7 @@ function agentSetVisibilityTool(server: McpServer) {
         async function ({ agentIdOrAddress, visibility }) {
             const meta = getDefaultMeta("ethora-agent-set-visibility")
             try {
-                ensureAppAuthForTool()
+                ensureUserAuthForTool()
                 const res = await agentsSetVisibilityV2(agentIdOrAddress, visibility)
                 return asToolResult(ok(res.data, meta))
             } catch (error) {
@@ -2270,16 +2320,16 @@ function agentInviteToChatTool(server: McpServer) {
                 agentIdOrAddress: z.string().min(1).describe("Either Mongo _id (24 hex chars) or EOA-style address."),
                 appId: z.string().optional().describe("Required in B2B mode unless already selected via ethora-app-select."),
                 chatId: z.string().optional().describe("Mongo Chat _id (preferred when invoking from admin)."),
-                chatJid: z.string().optional().describe("Fully-qualified room JID (preferred when invoking from MCP server / chat-command flow)."),
+                chatJid: z.string().optional().describe("Room JID `${appId}_${chatId}` (optionally with `@conference.<host>`), exactly the `jid` returned by `ethora-app-create-chat`. Preferred over `chatId`."),
             },
         },
         async function ({ agentIdOrAddress, appId, chatId, chatJid }) {
             const meta = getDefaultMeta("ethora-agent-invite-to-chat")
             try {
-                ensureAppAuthForTool()
+                ensureTenantActorAuth()
                 const ctx = resolveAppScopedV2Context(appId)
                 const payload: any = { chatId, chatJid }
-                if (ctx.mode === "b2b" && ctx.appId) payload.appId = ctx.appId
+                if (ctx.mode !== "app" && ctx.appId) payload.appId = ctx.appId
                 const res = await agentsInviteToChatV2(agentIdOrAddress, payload)
                 return asToolResult(ok(res.data, meta))
             } catch (error) {
@@ -2303,7 +2353,7 @@ function agentSoulAppendTool(server: McpServer) {
         async function ({ agentIdOrAddress, append }) {
             const meta = getDefaultMeta("ethora-agent-soul-append")
             try {
-                ensureAppAuthForTool()
+                ensureUserAuthForTool()
                 const res = await agentsSoulV2(agentIdOrAddress, { append })
                 return asToolResult(ok(res.data, meta))
             } catch (error) {
@@ -2327,7 +2377,7 @@ function agentSoulSetTool(server: McpServer) {
         async function ({ agentIdOrAddress, soulMd }) {
             const meta = getDefaultMeta("ethora-agent-soul-set")
             try {
-                ensureAppAuthForTool()
+                ensureUserAuthForTool()
                 const res = await agentsSoulV2(agentIdOrAddress, { soulMd })
                 return asToolResult(ok(res.data, meta))
             } catch (error) {
@@ -2351,7 +2401,7 @@ function botInstancesListTool(server: McpServer) {
         async function ({ appId, agentId }) {
             const meta = getDefaultMeta("ethora-bot-instances-list")
             try {
-                ensureAppAuthForTool()
+                ensureUserAuthForTool()
                 const res = await botInstancesListV2({ appId, agentId })
                 return asToolResult(ok(res.data, meta))
             } catch (error) {
@@ -2375,7 +2425,7 @@ function botInstanceStatusTool(server: McpServer) {
         async function ({ botInstanceId, status }) {
             const meta = getDefaultMeta("ethora-bot-instance-status")
             try {
-                ensureAppAuthForTool()
+                ensureUserAuthForTool()
                 const res = await botInstanceStatusV2(botInstanceId, status)
                 return asToolResult(ok(res.data, meta))
             } catch (error) {
@@ -2402,7 +2452,7 @@ function agentsDeleteV2Tool(server: McpServer) {
         async function ({ agentIdOrAddress }) {
             const meta = getDefaultMeta("ethora-agents-delete-v2")
             try {
-                ensureAppAuthForTool()
+                ensureUserAuthForTool()
                 const res = await agentsDeleteV2(agentIdOrAddress)
                 return asToolResult(ok(res.data, meta))
             } catch (error) {
@@ -2426,7 +2476,7 @@ function agentsExportV2Tool(server: McpServer) {
         async function ({ agentIdOrAddress, format }) {
             const meta = getDefaultMeta("ethora-agents-export-v2")
             try {
-                ensureAppAuthForTool()
+                ensureUserAuthForTool()
                 const res = await agentsExportV2(agentIdOrAddress, format || "json")
                 return asToolResult(ok(res.data, meta))
             } catch (error) {
@@ -2450,7 +2500,7 @@ function agentsImportV2Tool(server: McpServer) {
         async function ({ bundle, ownerAppId }) {
             const meta = getDefaultMeta("ethora-agents-import-v2")
             try {
-                ensureAppAuthForTool()
+                ensureUserAuthForTool()
                 const res = await agentsImportV2(bundle, ownerAppId)
                 return asToolResult(ok(res.data, meta))
             } catch (error) {
@@ -2474,7 +2524,7 @@ function agentBotInstanceDiagTool(server: McpServer) {
         async function ({ agentIdOrAddress, botInstanceId }) {
             const meta = getDefaultMeta("ethora-bot-instance-diag")
             try {
-                ensureAppAuthForTool()
+                ensureUserAuthForTool()
                 const res = await agentBotInstanceDiagV2(agentIdOrAddress, botInstanceId)
                 return asToolResult(ok(res.data, meta))
             } catch (error) {
@@ -2500,7 +2550,7 @@ function agentBotInstanceTestMessageTool(server: McpServer) {
         async function ({ agentIdOrAddress, botInstanceId, text, roomJid }) {
             const meta = getDefaultMeta("ethora-bot-instance-test-message")
             try {
-                ensureAppAuthForTool()
+                ensureUserAuthForTool()
                 const res = await agentBotInstanceTestMessageV2(agentIdOrAddress, botInstanceId, { text, roomJid })
                 return asToolResult(ok(res.data, meta))
             } catch (error) {
@@ -2525,7 +2575,7 @@ function agentBotInstanceLeaveChatTool(server: McpServer) {
         async function ({ agentIdOrAddress, botInstanceId, chatJid }) {
             const meta = getDefaultMeta("ethora-bot-instance-leave-chat")
             try {
-                ensureAppAuthForTool()
+                ensureUserAuthForTool()
                 const res = await agentBotInstanceLeaveChatV2(agentIdOrAddress, botInstanceId, { chatJid })
                 return asToolResult(ok(res.data, meta))
             } catch (error) {
@@ -2698,7 +2748,7 @@ function botEnableV2Tool(server: McpServer) {
             const meta = getDefaultMeta("ethora-bot-enable-v2")
             try {
                 const ctx = resolveAppScopedV2Context(appId)
-                const res = ctx.mode === "b2b"
+                const res = (ctx.mode !== "app" && ctx.appId)
                     ? await botUpdateForAppV2(ctx.appId!, { status: "on", trigger } as any)
                     : await botUpdateV2({ status: "on", trigger } as any)
                 return asToolResult(ok(res.data, meta))
@@ -2723,7 +2773,7 @@ function botDisableV2Tool(server: McpServer) {
             const meta = getDefaultMeta("ethora-bot-disable-v2")
             try {
                 const ctx = resolveAppScopedV2Context(appId)
-                const res = ctx.mode === "b2b"
+                const res = (ctx.mode !== "app" && ctx.appId)
                     ? await botUpdateForAppV2(ctx.appId!, { status: "off" } as any)
                     : await botUpdateV2({ status: "off" } as any)
                 return asToolResult(ok(res.data, meta))
@@ -2758,106 +2808,167 @@ function chatsMessageCreateV2Tool(server: McpServer) {
     server.registerTool(
         "ethora-chats-message-v2",
         {
-            description: "Send a message through the app's chat/bot automation surface — useful for testing the bot or driving automated conversations. Posts a real message; if the app's bot is enabled it reacts to it. `private` mode = 1:1 session keyed by `nickname`, `group` mode = room by `roomJid`.\nAuth: app-token mode (after `ethora-app-select` + `ethora-auth-use-app`). Errors: 401/403 wrong auth; 400 missing `roomJid`/`nickname` for the mode; 404 unknown `roomJid`. Related: read back with `ethora-chats-history-v2`.",
+            description: "Post a message into a chat room of an app (POST /v2/apps/:appId/chats/broadcast targeting one room). The message is attributed to the app's broadcast sender (override the shown name with `senderName`). Use it to seed or test a conversation, e.g. right after `ethora-agent-invite-to-chat`, and set `waitForReplySec` (up to 60) to wait for an AI agent's answer; replies are returned in `replies`. Identify the room by `roomJid` (`${appId}_${chatId}`, exactly what `ethora-app-create-chat` returns as `jid`) or by the bare `chatId` plus the selected app.\nAuth: user auth (the default on the hosted server) or B2B; app-token mode is not accepted by this route. Errors: 401 not logged in; 403 not the app owner; 404 unknown app/room; 422 empty text. Reply detection needs the message archive (MAM) on the deployment; when it is unavailable `replies` is null and `historyUnavailable` is true.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
             inputSchema: {
-                text: z.string().min(1).describe("Message body to send."),
-                mode: z.enum(["private", "group"]).optional().describe("`private` = 1:1 automation session keyed by `nickname`; `group` = a room identified by `roomJid`. Defaults to the backend's default mode."),
-                nickname: z.string().optional().describe("Sender/participant nickname for the private automation session. Required when `mode` is `private`."),
-                roomJid: z.string().optional().describe("Room JID to post into. Required when `mode` is `group`. Get it from `ethora-app-get-default-rooms`."),
+                text: z.string().min(1).max(4000).describe("Message body to post (1-4000 chars)."),
+                roomJid: z.string().optional().describe("Room JID `${appId}_${chatId}` (optionally with `@conference.<host>`), as returned by `ethora-app-create-chat`. Either this or `chatId` is required."),
+                chatId: z.string().optional().describe("Chat id: either the Mongo chat `_id` (as listed by the app's chat list) or the suffix after `${appId}_` in the room JID. Needs an app: pass `appId` or select one with `ethora-app-select`."),
+                appId: z.string().optional().describe("24-char hex appId. Optional when `roomJid` carries it or an app is selected."),
+                senderName: z.string().max(60).optional().describe("Display name shown as the message sender (defaults to the app's broadcast sender / app name)."),
+                waitForReplySec: z.number().int().min(0).max(60).optional().describe("Seconds to wait for a reply from someone else in the room (an AI agent, typically). 0 (default) returns right after posting."),
             },
         },
-        async function ({ text, mode, nickname, roomJid }) {
+        async function ({ text, roomJid, chatId, appId, senderName, waitForReplySec }) {
             const meta = getDefaultMeta("ethora-chats-message-v2")
             try {
-                ensureAppAuthForTool()
-                const res = await chatsMessageCreateV2({ text, mode, nickname, roomJid })
-                return asToolResult(ok(res.data, meta))
+                ensureTenantActorAuth()
+                const ctx = resolveAppScopedV2Context(appId)
+                const room = await resolveRoom(ctx.appId, roomJid || chatId)
+                const sleepMs = (ms: number) => new Promise((r) => setTimeout(r, ms))
+                const readHistory = async (limit: number) => {
+                    const h = await appChatMessagesV2(room.appId, room.mongoId, { limit })
+                    const body = h.data?.data ?? h.data ?? {}
+                    return { rows: (body.results || []) as any[], unavailable: Boolean(body.mamUnavailable) }
+                }
+                // Snapshot the newest archived message so only later ones count as replies.
+                let baselineTs = 0
+                let historyUnavailable = false
+                try {
+                    const snap = await readHistory(5)
+                    historyUnavailable = snap.unavailable
+                    baselineTs = snap.rows.reduce((m, r) => Math.max(m, Number(r.ts) || 0), 0)
+                } catch {
+                    historyUnavailable = true
+                }
+                const payload: any = { text, chatNames: [room.roomName] }
+                if (senderName) payload.sender = { firstName: senderName }
+                const res = await chatsBroadcastForAppV2(room.appId, payload)
+                const out: any = {
+                    posted: true,
+                    appId: room.appId,
+                    chatId: room.mongoId,
+                    roomJid: room.roomJid,
+                    job: res.data?.data ?? res.data,
+                    replies: null as any,
+                    historyUnavailable,
+                }
+                const wait = Math.min(60, Math.max(0, Number(waitForReplySec) || 0))
+                if (wait > 0 && !historyUnavailable) {
+                    const deadline = Date.now() + wait * 1000
+                    const replies: any[] = []
+                    let postedTs = 0
+                    while (Date.now() < deadline) {
+                        await sleepMs(3000)
+                        try {
+                            const h = await readHistory(30)
+                            if (h.unavailable) { historyUnavailable = true; break }
+                            const later = h.rows.filter((r) => (Number(r.ts) || 0) > baselineTs)
+                            const mine = later.find((r) => String(r.body || "") === String(text))
+                            if (mine) postedTs = Number(mine.ts) || postedTs
+                            const others = later.filter((r) => String(r.body || "") !== String(text) && (Number(r.ts) || 0) >= postedTs)
+                            if (others.length) { replies.push(...others); break }
+                        } catch (e: any) {
+                            if (e?.response?.status === 502) { historyUnavailable = true; break }
+                        }
+                    }
+                    out.waitedSec = wait
+                    out.historyUnavailable = historyUnavailable
+                    out.postedVisibleInHistory = postedTs > 0
+                    out.replies = replies.map((r) => ({ from: r.nick || r.from, text: r.body, ts: r.ts }))
+                    if (!replies.length) out.note = historyUnavailable
+                        ? "Message archive unavailable on this deployment; cannot observe replies."
+                        : `No reply from another participant within ${wait}s. Agents reply only if invited into this room (ethora-agent-invite-to-chat) and their response gate allows it; check ethora-bot-instances-list.`
+                }
+                return asToolResult(ok(out, meta))
             } catch (error) {
                 return asToolResult(fail(error, meta))
             }
         }
     )
 }
-
 function chatsHistoryGetV2Tool(server: McpServer) {
     server.registerTool(
         "ethora-chats-history-v2",
         {
-            description: "Read the persisted message history of a chat automation session — the conversation produced by `ethora-chats-message-v2` and the bot's replies. Returns the most recent messages (up to `limit`).\nAuth: app-token mode (after `ethora-app-select` + `ethora-auth-use-app`). Errors: 401/403 wrong auth; 400 incomplete `mode`/`nickname`/`roomJid`; 404 room/session not found.",
+            description: "Read the archived messages of a chat room (GET /v2/apps/:appId/chats/:chatId/messages, newest last). Returns `results` with `from`, `nick`, `body`, `ts` (ms) plus a `nextBefore` cursor for older pages. Identify the room by `roomJid` (`${appId}_${chatId}`) or bare `chatId` plus the selected app.\nAuth: user auth (default on the hosted server) or B2B; app-token mode is not accepted. Errors: 401 not logged in; 403 not the app owner; 404 unknown app/room; 502 MAM_READ_FAILED or `mamUnavailable: true` when the deployment has no message archive.",
             annotations: { readOnlyHint: true, openWorldHint: true },
             inputSchema: {
-                mode: z.enum(["private", "group"]).optional().describe("`private` = 1:1 automation session keyed by `nickname`; `group` = a room identified by `roomJid`. Should match what was used to send."),
-                nickname: z.string().optional().describe("Participant nickname for the private automation session. Required when `mode` is `private`."),
-                roomJid: z.string().optional().describe("Room JID to read history from. Required when `mode` is `group`."),
-                limit: z.number().int().min(1).max(100).optional().describe("Maximum number of most-recent messages to return. 1–100. Defaults to the backend's default page size."),
+                roomJid: z.string().optional().describe("Room JID `${appId}_${chatId}` (optionally with `@conference.<host>`). Either this or `chatId` is required."),
+                chatId: z.string().optional().describe("Bare chat id. Needs an app: pass `appId` or select one with `ethora-app-select`."),
+                appId: z.string().optional().describe("24-char hex appId. Optional when `roomJid` carries it or an app is selected."),
+                limit: z.number().int().min(1).max(500).optional().describe("Maximum number of most-recent messages to return (default 100)."),
+                before: z.number().int().min(0).optional().describe("Pagination cursor: only messages older than this timestamp (ms), from a previous `nextBefore`."),
             },
         },
-        async function ({ mode, nickname, roomJid, limit }) {
+        async function ({ roomJid, chatId, appId, limit, before }) {
             const meta = getDefaultMeta("ethora-chats-history-v2")
             try {
-                ensureAppAuthForTool()
-                const res = await chatsHistoryGetV2({ mode, nickname, roomJid, limit })
-                return asToolResult(ok(res.data, meta))
+                ensureTenantActorAuth()
+                const ctx = resolveAppScopedV2Context(appId)
+                const room = await resolveRoom(ctx.appId, roomJid || chatId)
+                const res = await appChatMessagesV2(room.appId, room.mongoId, { limit, before })
+                return asToolResult(ok({ appId: room.appId, chatId: room.mongoId, roomJid: room.roomJid, ...(res.data?.data ?? res.data) }, meta))
             } catch (error) {
                 return asToolResult(fail(error, meta))
             }
         }
     )
 }
-
 function botMessageCreateV2Tool(server: McpServer) {
     server.registerTool(
         "ethora-bot-message-v2",
         {
-            description: "Compatibility alias for `ethora-chats-message-v2` — identical behavior, kept for clients expecting a `bot-`prefixed name. Sends a message through the app's chat/bot automation surface; the enabled bot reacts to it.\nAuth: app-token mode (after `ethora-app-select` + `ethora-auth-use-app`). Errors: 401/403 wrong auth; 400 incomplete `mode`/`nickname`/`roomJid`. Related: prefer `ethora-chats-message-v2` in new integrations.",
+            description: "DEPRECATED alias of `ethora-chats-message-v2` (the old /v2/chats/messages automation route no longer exists). Posts a message into a room by `roomJid` or `chatId`; prefer `ethora-chats-message-v2`, which also supports `waitForReplySec`.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
             inputSchema: {
-                text: z.string().min(1).describe("Message body to send."),
-                mode: z.enum(["private", "group"]).optional().describe("`private` = 1:1 automation session keyed by `nickname`; `group` = a room identified by `roomJid`."),
-                nickname: z.string().optional().describe("Sender/participant nickname for the private automation session. Required when `mode` is `private`."),
-                roomJid: z.string().optional().describe("Room JID to post into. Required when `mode` is `group`."),
+                text: z.string().min(1).max(4000).describe("Message body to post."),
+                roomJid: z.string().optional().describe("Room JID `${appId}_${chatId}`."),
+                chatId: z.string().optional().describe("Bare chat id (needs a selected app or `appId`)."),
+                appId: z.string().optional().describe("24-char hex appId."),
             },
         },
-        async function ({ text, mode, nickname, roomJid }) {
+        async function ({ text, roomJid, chatId, appId }) {
             const meta = getDefaultMeta("ethora-bot-message-v2")
             try {
-                ensureAppAuthForTool()
-                const res = await botMessageCreateV2({ text, mode, nickname, roomJid })
-                return asToolResult(ok(res.data, meta))
+                ensureTenantActorAuth()
+                const ctx = resolveAppScopedV2Context(appId)
+                const room = await resolveRoom(ctx.appId, roomJid || chatId)
+                const res = await chatsBroadcastForAppV2(room.appId, { text, chatNames: [room.roomName] })
+                return asToolResult(ok({ posted: true, roomJid: room.roomJid, job: res.data?.data ?? res.data, deprecated: "use ethora-chats-message-v2" }, meta))
             } catch (error) {
                 return asToolResult(fail(error, meta))
             }
         }
     )
 }
-
 function botHistoryGetV2Tool(server: McpServer) {
     server.registerTool(
         "ethora-bot-history-v2",
         {
-            description: "Compatibility alias for `ethora-chats-history-v2` — identical behavior, kept for clients expecting a `bot-`prefixed name. Reads the persisted message history of a chat automation session.\nAuth: app-token mode (after `ethora-app-select` + `ethora-auth-use-app`). Errors: 401/403 wrong auth; 400 incomplete `mode`/`nickname`/`roomJid`. Related: prefer `ethora-chats-history-v2` in new integrations.",
+            description: "DEPRECATED alias of `ethora-chats-history-v2` (the old /v2/chats/history automation route no longer exists). Reads a room's archived messages by `roomJid` or `chatId`.",
             annotations: { readOnlyHint: true, openWorldHint: true },
             inputSchema: {
-                mode: z.enum(["private", "group"]).optional().describe("`private` = 1:1 automation session keyed by `nickname`; `group` = a room identified by `roomJid`."),
-                nickname: z.string().optional().describe("Participant nickname for the private automation session. Required when `mode` is `private`."),
-                roomJid: z.string().optional().describe("Room JID to read history from. Required when `mode` is `group`."),
-                limit: z.number().int().min(1).max(100).optional().describe("Maximum number of most-recent messages to return. 1–100."),
+                roomJid: z.string().optional().describe("Room JID `${appId}_${chatId}`."),
+                chatId: z.string().optional().describe("Bare chat id (needs a selected app or `appId`)."),
+                appId: z.string().optional().describe("24-char hex appId."),
+                limit: z.number().int().min(1).max(500).optional().describe("Maximum number of most-recent messages."),
             },
         },
-        async function ({ mode, nickname, roomJid, limit }) {
+        async function ({ roomJid, chatId, appId, limit }) {
             const meta = getDefaultMeta("ethora-bot-history-v2")
             try {
-                ensureAppAuthForTool()
-                const res = await botHistoryGetV2({ mode, nickname, roomJid, limit })
-                return asToolResult(ok(res.data, meta))
+                ensureTenantActorAuth()
+                const ctx = resolveAppScopedV2Context(appId)
+                const room = await resolveRoom(ctx.appId, roomJid || chatId)
+                const res = await appChatMessagesV2(room.appId, room.mongoId, { limit })
+                return asToolResult(ok({ roomJid: room.roomJid, ...(res.data?.data ?? res.data), deprecated: "use ethora-chats-history-v2" }, meta))
             } catch (error) {
                 return asToolResult(fail(error, meta))
             }
         }
     )
 }
-
 async function runB2BAppBootstrapAi(args: {
     displayName: string
     setAsCurrent?: boolean
@@ -3118,7 +3229,7 @@ function b2bAliases(server: McpServer) {
         async function ({ jobId, timeoutMs, intervalMs }) {
             const meta = getDefaultMeta("ethora.b2b.broadcast.wait")
             try {
-                ensureAppAuthForTool()
+                ensureTenantActorAuth()
                 const timeout = timeoutMs ?? 60_000
                 const interval = intervalMs ?? 1_000
                 const started = Date.now()
@@ -3389,7 +3500,7 @@ function sourcesSiteCrawlV2AppTool(server: McpServer) {
         async function ({ appId, url, followLink }) {
             try {
                 const ctx = resolveAppScopedV2Context(appId)
-                const res = ctx.mode === "b2b"
+                const res = (ctx.mode !== "app" && ctx.appId)
                     ? await sourcesSiteCrawlForAppV2(ctx.appId!, { url, followLink })
                     : await sourcesSiteCrawlV2({ url, followLink })
                 return asToolResult(ok(res.data, getDefaultMeta("ethora-sources-site-crawl-v2")))
@@ -3414,7 +3525,7 @@ function sourcesSiteReindexV2AppTool(server: McpServer) {
         async function ({ appId, urlId }) {
             try {
                 const ctx = resolveAppScopedV2Context(appId)
-                const res = ctx.mode === "b2b"
+                const res = (ctx.mode !== "app" && ctx.appId)
                     ? await sourcesSiteReindexForAppV2(ctx.appId!, { urlId })
                     : await sourcesSiteReindexV2({ urlId })
                 return asToolResult(ok(res.data, getDefaultMeta("ethora-sources-site-reindex-v2")))
@@ -3443,7 +3554,7 @@ function sourcesSiteCrawlV2WaitTool(server: McpServer) {
             try {
                 const ctx = resolveAppScopedV2Context(appId)
                 const started = Date.now()
-                const res = ctx.mode === "b2b"
+                const res = (ctx.mode !== "app" && ctx.appId)
                     ? await sourcesSiteCrawlForAppV2(ctx.appId!, { url, followLink }, { timeoutMs: timeoutMs ?? 120_000 })
                     : await sourcesSiteCrawlV2({ url, followLink }, { timeoutMs: timeoutMs ?? 120_000 })
                 return asToolResult(ok({ done: true, durationMs: Date.now() - started, result: res.data }, meta))
@@ -3471,7 +3582,7 @@ function sourcesSiteReindexV2WaitTool(server: McpServer) {
             try {
                 const ctx = resolveAppScopedV2Context(appId)
                 const started = Date.now()
-                const res = ctx.mode === "b2b"
+                const res = (ctx.mode !== "app" && ctx.appId)
                     ? await sourcesSiteReindexForAppV2(ctx.appId!, { urlId }, { timeoutMs: timeoutMs ?? 120_000 })
                     : await sourcesSiteReindexV2({ urlId }, { timeoutMs: timeoutMs ?? 120_000 })
                 return asToolResult(ok({ done: true, durationMs: Date.now() - started, result: res.data }, meta))
@@ -3496,7 +3607,7 @@ function sourcesSiteListV2Tool(server: McpServer) {
             const meta = getDefaultMeta("ethora-sources-site-list-v2")
             try {
                 const ctx = resolveAppScopedV2Context(appId)
-                const res = ctx.mode === "b2b"
+                const res = (ctx.mode !== "app" && ctx.appId)
                     ? await sourcesSiteListForAppV2(ctx.appId!)
                     : await sourcesSiteListV2()
                 return asToolResult(ok(res.data, meta))
@@ -3523,7 +3634,7 @@ function sourcesSiteTagsUpdateV2Tool(server: McpServer) {
             const meta = getDefaultMeta("ethora-sources-site-tags-update-v2")
             try {
                 const ctx = resolveAppScopedV2Context(appId)
-                const res = ctx.mode === "b2b"
+                const res = (ctx.mode !== "app" && ctx.appId)
                     ? await sourcesSiteTagsUpdateForAppV2(ctx.appId!, sourceId, tags)
                     : await sourcesSiteTagsUpdateV2(sourceId, tags)
                 return asToolResult(ok(res.data, meta))
@@ -3846,7 +3957,7 @@ function sourcesSiteDeleteUrlV2AppTool(server: McpServer) {
         async function ({ appId, url }) {
             try {
                 const ctx = resolveAppScopedV2Context(appId)
-                const res = ctx.mode === "b2b"
+                const res = (ctx.mode !== "app" && ctx.appId)
                     ? await sourcesSiteDeleteUrlForAppV2(ctx.appId!, { url })
                     : await sourcesSiteDeleteUrlV2Single({ url })
                 return asToolResult(ok(res.data, getDefaultMeta("ethora-sources-site-delete-url-v2")))
@@ -3871,7 +3982,7 @@ function sourcesSiteDeleteUrlV2BatchAppTool(server: McpServer) {
         async function ({ appId, ids }) {
             try {
                 const ctx = resolveAppScopedV2Context(appId)
-                const res = ctx.mode === "b2b"
+                const res = (ctx.mode !== "app" && ctx.appId)
                     ? await sourcesSiteDeleteBatchForAppV2(ctx.appId!, { ids })
                     : await sourcesSiteDeleteUrlV2Batch({ urls: ids })
                 return asToolResult(ok(res.data, getDefaultMeta("ethora-sources-site-delete-url-v2-batch")))
@@ -3909,7 +4020,7 @@ function sourcesDocsUploadV2AppTool(server: McpServer) {
                     const blob = new Blob([buf], { type: f.mimeType })
                     form.append("files", blob, f.name)
                 }
-                const res = ctx.mode === "b2b"
+                const res = (ctx.mode !== "app" && ctx.appId)
                     ? await sourcesDocsUploadForAppV2(ctx.appId!, form, { "Content-Type": "multipart/form-data" })
                     : await sourcesDocsUploadV2(form, { "Content-Type": "multipart/form-data" })
                 return asToolResult(ok(res.data, getDefaultMeta("ethora-sources-docs-upload-v2")))
@@ -3934,7 +4045,7 @@ function sourcesDocsDeleteV2AppTool(server: McpServer) {
         async function ({ appId, docId }) {
             try {
                 const ctx = resolveAppScopedV2Context(appId)
-                const res = ctx.mode === "b2b"
+                const res = (ctx.mode !== "app" && ctx.appId)
                     ? await sourcesDocsDeleteForAppV2(ctx.appId!, docId)
                     : await sourcesDocsDeleteV2(docId)
                 return asToolResult(ok(res.data, getDefaultMeta("ethora-sources-docs-delete-v2")))
@@ -3959,7 +4070,7 @@ function sourcesDocsListV2Tool(server: McpServer) {
             const meta = getDefaultMeta("ethora-sources-docs-list-v2")
             try {
                 const ctx = resolveAppScopedV2Context(appId)
-                const res = ctx.mode === "b2b"
+                const res = (ctx.mode !== "app" && ctx.appId)
                     ? await sourcesDocsListForAppV2(ctx.appId!)
                     : await sourcesDocsListV2()
                 return asToolResult(ok(res.data, meta))
@@ -3986,7 +4097,7 @@ function sourcesDocsTagsUpdateV2Tool(server: McpServer) {
             const meta = getDefaultMeta("ethora-sources-docs-tags-update-v2")
             try {
                 const ctx = resolveAppScopedV2Context(appId)
-                const res = ctx.mode === "b2b"
+                const res = (ctx.mode !== "app" && ctx.appId)
                     ? await sourcesDocsTagsUpdateForAppV2(ctx.appId!, docId, tags)
                     : await sourcesDocsTagsUpdateV2(docId, tags)
                 return asToolResult(ok(res.data, meta))

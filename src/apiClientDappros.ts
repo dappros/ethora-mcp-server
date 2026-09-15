@@ -469,7 +469,12 @@ export function botUpdateForAppV2(appId: string, payload: {
   return httpClientDappros.put(`/v2/apps/${String(appId || "").trim()}/bot`, payload)
 }
 
-export function agentsListV2() {
+// Agents: the app-scoped `/v2/apps/:appId/agents` routes accept a user token
+// or a B2B token (tenantActor) and land the agent in that app; the bare
+// `/v2/agents` routes are user-only and default to the token's own app.
+export function agentsListV2(appId?: string) {
+  const id = String(appId || "").trim()
+  if (id) return httpClientDappros.get(`/v2/apps/${id}/agents`)
   return httpClientDappros.get(`/v2/agents`)
 }
 
@@ -497,7 +502,10 @@ export function agentsCreateV2(payload: {
   isPublished?: boolean
   categories?: string[]
   meta?: Record<string, any>
-}) {
+  ownerAppId?: string
+}, appId?: string) {
+  const id = String(appId || "").trim()
+  if (id) return httpClientDappros.post(`/v2/apps/${id}/agents`, { ...(payload || {}), ownerAppId: (payload && payload.ownerAppId) || id })
   return httpClientDappros.post(`/v2/agents`, payload || {})
 }
 
@@ -559,6 +567,17 @@ export function agentsInviteToChatV2(idOrAddress: string, payload: { appId?: str
 
 export function botInstancesListV2(params?: { appId?: string; agentId?: string }) {
   return httpClientDappros.get(`/v2/bot-instances`, { params })
+}
+
+// Rooms of an app - GET /v2/apps/:appId/chats (tenantActor). Items carry the Mongo `_id`
+// (what the messages route wants as :chatId) and `name` (the XMPP local part `${appId}_${suffix}`).
+export function appChatsListV2(appId: string, params?: { limit?: number; offset?: number; includeMembers?: boolean }) {
+  return httpClientDappros.get(`/v2/apps/${String(appId || "").trim()}/chats`, { params: { includeMembers: false, limit: 500, ...(params || {}) } })
+}
+
+// Room message history (mod_mam archive) - GET /v2/apps/:appId/chats/:chatId/messages (tenantActor).
+export function appChatMessagesV2(appId: string, chatId: string, params?: { limit?: number; before?: number }) {
+  return httpClientDappros.get(`/v2/apps/${String(appId || "").trim()}/chats/${String(chatId || "").trim()}/messages`, { params: params || {} })
 }
 
 export function botInstanceGetV2(id: string) {

@@ -4,6 +4,11 @@ All notable changes to this package are documented here. For cross-SDK release n
 
 ## Unreleased
 
+### Fixed
+- Agents and room tools now work in user auth mode (the hosted default). `ethora-agents-*`, `ethora-agent-invite-to-chat`, `ethora-bot-instance*`, broadcast and sources tools previously insisted on app-token auth while the backend routes reject app tokens (`/v2/agents*` are user-only, `/v2/apps/:appId/...` accept a user or B2B token). Gating now follows the backend: user or B2B on tenant routes, user on agent routes, app-token only where the backend really wants it (`/v2/bot`, widget, activate). `ethora-agents-list-v2` / `-create-v2` take an optional `appId` and use `/v2/apps/:appId/agents` so a new agent lands in the selected app.
+- `ethora-chats-message-v2` / `ethora-chats-history-v2` called routes that no longer exist (`/v2/chats/messages`, `/v2/chats/history`). They now post through `/v2/apps/:appId/chats/broadcast` (one room) and read `/v2/apps/:appId/chats/:chatId/messages`, accept `roomJid` (`${appId}_${chatId}`) or `chatId` (Mongo `_id` or JID suffix), and the message tool gained `waitForReplySec` returning `replies` so an agent can check that an AI agent answered. `ethora-bot-message-v2` / `-history-v2` are deprecated aliases of the same.
+- `ethora-help` goals `bot-manage` / `chat-test`, the recipes resource and the agents quickstart prompt now describe the user-mode path (create app, create room, create agent, invite, message with waitForReplySec) instead of the app-token / legacy-bot path that fails for API-created apps. Instructions tell hosted assistants to stay in user auth mode and explain the room JID format.
+
 ### Changed
 - Initialize `instructions` now depend on how identity arrived: OAuth sessions (`/mcp/oauth`) and key-authenticated sessions (`/mcp/k/<key>` or a Bearer header) are told the connection is already authenticated and never to ask for a password or API key; only the open `/mcp` entry keeps the login / register guidance.
 
