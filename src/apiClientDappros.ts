@@ -11,6 +11,8 @@ export const httpTokens = {
   set appJwt(v: string) { getSession().tokens.appJwt = v },
   get appToken() { return getSession().tokens.appToken },
   set appToken(v: string) { getSession().tokens.appToken = v },
+  get appTokenAppId() { return getSession().tokens.appTokenAppId },
+  set appTokenAppId(v: string) { getSession().tokens.appTokenAppId = v },
   get b2bToken() { return getSession().tokens.b2bToken },
   set b2bToken(v: string) { getSession().tokens.b2bToken = v },
   get token() { return getSession().tokens.token },
@@ -98,6 +100,21 @@ httpClientDappros.interceptors.request.use((config) => {
     // Keep any existing Authorization header untouched.
     ;(config.headers as any)["x-custom-token"] = httpTokens.b2bToken
     return config
+  }
+
+  // Single-call override: a tool that must hit an app-token-only route (e.g.
+  // /v2/agents/:id/activate) from a user session marks the request with
+  // `x-ethora-auth: app`; the stored appToken is used for that call only.
+  const authOverride = (config.headers as any)?.["x-ethora-auth"]
+  if (authOverride) {
+    delete (config.headers as any)["x-ethora-auth"]
+    if (authOverride === "app") {
+      if (!httpTokens.appToken) {
+        throw new Error("This call needs the app's appToken. Call `ethora-app-select { appId, appToken }` (appToken comes from the `ethora-app-create` result or the admin UI) and retry.")
+      }
+      config.headers.Authorization = httpTokens.appToken
+      return config
+    }
   }
 
   if (ethoraContext.authMode === "app") {
@@ -222,11 +239,14 @@ export function selectApp(params: { appId: string; appToken?: string; authMode?:
   }
   if (typeof appToken === "string") {
     httpTokens.appToken = appToken.trim()
+    httpTokens.appTokenAppId = httpTokens.appToken ? ethoraContext.currentAppId : ""
   }
   if (authMode) {
     ethoraContext.authMode = authMode
-  } else if (httpTokens.appToken) {
-    // If caller provided appToken, default to app auth.
+  } else if (typeof appToken === "string" && appToken.trim()) {
+    // Only an appToken passed in THIS call switches to app auth. A token merely
+    // remembered from `ethora-app-create` must not flip a user session into
+    // app mode (the agents/rooms routes reject app tokens).
     ethoraContext.authMode = "app"
   }
   return getClientState()
@@ -541,8 +561,32 @@ export function agentsCloneV2(agentId: string, payload?: {
   return httpClientDappros.post(`/v2/agents/${String(agentId || "").trim()}/clone`, payload || {})
 }
 
-export function agentsActivateV2(agentId: string) {
-  return httpClientDappros.post(`/v2/agents/${String(agentId || "").trim()}/activate`, {})
+// App-token-only route (authMw('app')). Sent with the session's stored appToken
+// via the `x-ethora-auth: app` override so user-mode sessions do not have to
+// switch auth mode. `chatJid` tells the backend which room becomes the widget
+// chat; API-created apps have no bound AI Widget chat, so it is required there.
+export function agentsActivateV2(agentId: string, body?: { chatJid?: string; appId?: string }) {
+  return httpClientDappros.post(
+    `/v2/agents/${String(agentId || "").trim()}/activate`,
+    { ...(body?.chatJid ? { chatJid: body.chatJid } : {}), ...(body?.appId ? { appId: body.appId } : {}) },
+    { headers: { "x-ethora-auth": "app" } }
+  )
+}
+
+// Remember the appToken returned by app creation (or passed to app-select) so
+// app-token-only calls for that app work from a user session.
+export function rememberAppToken(appId: string, appToken: string) {
+  const id = String(appId || "").trim(); const tok = String(appToken || "").trim()
+  if (!id || !tok) return
+  httpTokens.appToken = tok
+  httpTokens.appTokenAppId = id
+}
+
+export function appTokenFor(appId: string): string {
+  const id = String(appId || "").trim()
+  if (!httpTokens.appToken) return ""
+  if (httpTokens.appTokenAppId && id && httpTokens.appTokenAppId !== id) return ""
+  return httpTokens.appToken
 }
 
 // Phase 1 (Agents): additional wrappers backing the new MCP tools.

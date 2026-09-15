@@ -261,6 +261,8 @@ app, or configured tokens are never visible to another session.
 - `ETHORA_MCP_TRUST_PROXY=true` — take the client IP from `X-Forwarded-For` (set when behind nginx); it is forwarded to the Ethora API so per-IP rate limits apply per caller, not per MCP host
 - `ETHORA_MCP_SESSION_TTL_MS` — idle session eviction (default 4 hours)
 - `ETHORA_MCP_AUTH_ISSUER` — public URL of the OAuth authorization server (the Ethora API host); enables `/mcp/oauth` and the protected-resource metadata
+- `ETHORA_MCP_WIDGET_URL` — base URL of the hosted AI chat widget (the embed script is `<url>/assistant.js`); used by `ethora-widget-embed-snippet`
+- `ETHORA_MCP_PUBLIC_API_URL` — public API base browsers can reach, emitted as `data-api-base` in widget snippets (falls back to `ETHORA_MCP_AUTH_ISSUER`, then a non-loopback `ETHORA_API_URL`)
 - `ETHORA_APP_DOMAIN_NAME` — base app `domainName`; when `ETHORA_APP_JWT` is empty the server fetches the App JWT from `GET /v1/apps/get-config?domainName=...` at startup, so no secret has to be configured for login/register
 - `ETHORA_API_URL` is fixed for the whole server; `ethora-configure` cannot change it per session
 - A `.env` file in the working directory is loaded at startup (real env wins)
@@ -670,6 +672,10 @@ Example: apply retrieval tags to an indexed document
 ```
 
 ---
+
+## 🧩 Widget embed
+
+`ethora-widget-embed-snippet` returns the `<script id="chat-content-assistant" src="<widget>/assistant.js" data-app-id="..." data-api-base="...">` tag for the embeddable AI chat widget, plus the prerequisites. The widget answers with the app's active bot (`App.defaultBotInstanceId`), so on an API-created app run `ethora-agents-create-v2` -> `ethora-app-create-chat` -> `ethora-agent-invite-to-chat` -> `ethora-agents-activate-v2 { agentId, chatJid }` first (`ethora-help { goal: "widget" }` lists the steps). Activation runs in user auth: the server looks up the agent's bot instance in the app and sets `App.defaultBotInstanceId` through the app update route (the admin AI Widget dropdown does the same); the app-token-only `/v2/agents/:id/activate` route is only a fallback using the appToken captured from `ethora-app-create`. `ethora-bot-widget-v2` only serves apps that still have a legacy per-app bot.
 
 ## 🛡️ Security notes
 
