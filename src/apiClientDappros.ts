@@ -131,10 +131,25 @@ httpClientDappros.interceptors.response.use(null, async (error) => {
     return Promise.reject(error);
   }
 
+  // Only a user session that holds a refresh token can recover from a 401.
+  // Bearer/API-key sessions, app-token and B2B sessions have nothing to
+  // refresh, so surface the API's own error (e.g. REFRESH_RECORD_NOT_FOUND
+  // for a revoked key) instead of a misleading refresh failure.
+  if (
+    ethoraContext.authMode !== "user" ||
+    !httpTokens.refreshToken ||
+    (request as any)._ethoraRetried
+  ) {
+    return Promise.reject(error);
+  }
+
   try {
     await refreshToken();
+    ;(request as any)._ethoraRetried = true
     return httpClientDappros(request);
-  } catch (error) {
+  } catch (refreshError: any) {
+    console.error(`[api] token refresh after 401 failed: ${refreshError?.response?.data?.code || refreshError?.message || refreshError}`)
+    // Reject with the ORIGINAL error so callers see why the request failed.
     return Promise.reject(error);
   }
 });

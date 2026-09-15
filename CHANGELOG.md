@@ -4,6 +4,13 @@ All notable changes to this package are documented here. For cross-SDK release n
 
 ## Unreleased
 
+### Fixed
+- Error envelope: a 401 no longer triggers a token refresh on bearer/API-key,
+  app-token or B2B sessions, and a failed refresh no longer masks the original
+  API error (a revoked key now surfaces `REFRESH_RECORD_NOT_FOUND`).
+  `error.message` prefers the API's own error text over the generic axios
+  status message.
+
 ### Added — hosted mode (Streamable HTTP)
 - `ETHORA_MCP_TRANSPORT=http` / `--http` starts the server as a Streamable HTTP
   service (`POST|GET|DELETE /mcp`, `GET /healthz`, `GET /.well-known/mcp`).
