@@ -4,6 +4,10 @@ All notable changes to this package are documented here. For cross-SDK release n
 
 ## Unreleased
 
+(nothing yet)
+
+## 26.9.1 - 2026-09-15
+
 ### Added
 - `ethora-widget-embed-snippet`: generates the AI chat widget `<script>` tag (data-app-id, data-api-base, cosmetic attributes) with prerequisites; new env `ETHORA_MCP_WIDGET_URL` and `ETHORA_MCP_PUBLIC_API_URL`; `ethora-help { goal: "widget" }` and a recipe describe agent -> invite -> activate -> embed.
 

@@ -41,10 +41,11 @@ let changed = 0;
 }
 
 // src/index.ts — serverInfo version literal
+// Matches both the McpServer serverInfo literal and the SERVER_VERSION constant.
 {
   const path = join(root, "src", "index.ts");
   const src = readFileSync(path, "utf8");
-  const re = /(version:\s*)"[^"]*"/;
+  const re = /(version:\s*|const SERVER_VERSION = )"[^"]*"/;
   if (!re.test(src)) {
     console.error(`src/index.ts         -> WARNING: no version literal matched`);
   } else {
