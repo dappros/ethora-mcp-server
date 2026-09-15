@@ -33,6 +33,7 @@ const { registerPromptsAndResources } = await import("./prompts.js")
 const { registerDocsSearch } = await import("./docsSearch.js")
 const { isHostedMode } = await import("./session.js")
 const { HOSTED_INSTRUCTIONS, STDIO_INSTRUCTIONS } = await import("./instructions.js")
+const { applyScopeGuard } = await import("./scopeGuard.js")
 
 const SERVER_NAME = "Ethora MCP Server"
 const SERVER_VERSION = "26.9.0"
@@ -47,6 +48,9 @@ export function buildServer() {
   registerTools(server)
   registerPromptsAndResources(server)
   registerDocsSearch(server)
+  // Must run after every tool is registered; enforces OAuth scopes on
+  // /mcp/oauth sessions only.
+  applyScopeGuard(server)
   return server
 }
 

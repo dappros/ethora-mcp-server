@@ -5,6 +5,15 @@ All notable changes to this package are documented here. For cross-SDK release n
 ## Unreleased
 
 ### Added
+- Personal connector URL: `/mcp/k/<api-key>` authenticates URL-only clients
+  (Claude.ai / ChatGPT custom connectors) without a login step. Register, login
+  (`createApiKey: true`) and `ethora-api-key-create` return it as `connectorUrl`.
+- OAuth entry point: with `ETHORA_MCP_AUTH_ISSUER` set, `/mcp/oauth` requires a
+  Bearer token (401 + `WWW-Authenticate` with `resource_metadata` otherwise),
+  serves RFC 9728 protected-resource metadata, validates tokens against the API
+  once per session, enforces the JWT `scope` claim per tool (`read` / `write` /
+  `admin`, derived from tool annotations; `INSUFFICIENT_SCOPE` on violation) and
+  hides identity tools. `/mcp` stays open.
 - `instructions` in the initialize result: hosted clients get the auth flow
   (status -> login/register -> API key), the app-create/app-select ordering and
   safety notes before the first tool call; stdio gets the env-var based flow.

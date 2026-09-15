@@ -18,6 +18,15 @@ export type SessionCtx = {
   currentAgentId: string
 }
 
+// OAuth entry point state (only set on /mcp/oauth sessions).
+export type SessionOAuth = {
+  // Token last validated against the API (GET /v2/users/me) and when.
+  validatedToken: string
+  validatedAt: number
+  // Scopes granted to the token; enforced per tool call by scopeGuard.
+  scopes: Set<string>
+}
+
 export type SessionContext = {
   id: string
   tokens: SessionTokens
@@ -25,6 +34,10 @@ export type SessionContext = {
   clientIp: string
   createdAt: number
   lastSeenAt: number
+  // "open": /mcp and /mcp/k/<key> (no scope enforcement).
+  // "oauth": /mcp/oauth (bearer required, scopes enforced, auth tools hidden).
+  entry: "open" | "oauth"
+  oauth?: SessionOAuth
 }
 
 export function createSessionContext(id?: string): SessionContext {
@@ -48,6 +61,7 @@ export function createSessionContext(id?: string): SessionContext {
     clientIp: "",
     createdAt: now,
     lastSeenAt: now,
+    entry: "open",
   }
 }
 

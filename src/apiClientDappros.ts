@@ -276,6 +276,12 @@ export function apiKeyRevoke(id: string) {
   return httpClientDappros.delete(`/v2/users/me/api-keys/${String(id || "").trim()}`)
 }
 
+// Current user for the session's token. Used by the OAuth entry point to
+// validate a bearer token against the API before serving the session.
+export function usersMe(timeoutMs = 5000) {
+  return httpClientDappros.get(`/v2/users/me`, { timeout: timeoutMs })
+}
+
 // Fetch the public app config (incl. the App JWT used to bootstrap login /
 // register) for an app by its domainName. Used by the hosted server so a
 // deployment only needs to know its base app's domainName, not a secret.
