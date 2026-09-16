@@ -35,7 +35,15 @@ function parseAxiosishError(error: unknown): { message: string; httpStatus?: num
     const code = typeof data?.code === "string" ? data.code : undefined
     return { message: msg, httpStatus, details: data, requestId, code }
   }
-  if (error instanceof Error) return { message: error.message }
+  if (error instanceof Error) {
+    // A tool may classify its own failure by attaching an UPPER_SNAKE `code`
+    // (e.g. LEGACY_WIDGET_NOT_CONFIGURED); honour it rather than falling back
+    // to message inference. Node/system errnos match the same shape and are
+    // more useful in the envelope than INTERNAL_ERROR too.
+    const own = (error as any).code
+    const code = typeof own === "string" && /^[A-Z][A-Z0-9_]+$/.test(own) ? own : undefined
+    return { message: error.message, code }
+  }
   return { message: String(error) }
 }
 
@@ -88,6 +96,10 @@ const RAW_MESSAGE_REWRITES: Array<[RegExp, string]> = [
   // axios' own text when the API answers with a status and no body. Naming the
   // status is more use to a caller than "Request failed with status code N".
   [/^Request failed with status code (\d+)$/, "The Ethora API returned HTTP $1 with no error body."],
+  // Joi's rejection of an unknown key. The bare text does not say what to do,
+  // and the field is usually one the caller passed to the wrong tool.
+  [/^"([^"]+)" is not allowed$/, "The Ethora API does not accept the field `$1` on this call. Remove it, or check the tool description for the supported inputs."],
+  [/^"([^"]+)" is required$/, "The Ethora API requires the field `$1` on this call; the tool description lists what it expects."],
 ]
 
 function humaniseMessage(msg: string): string {

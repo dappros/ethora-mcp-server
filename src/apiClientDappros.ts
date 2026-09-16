@@ -30,6 +30,17 @@ export const ethoraContext = {
   set currentAgentId(v: string) { getSession().context.currentAgentId = v },
 }
 
+// A tool chose the auth mode or supplied credentials for this session. On the
+// hosted server the Bearer header is re-applied on every request; this tells it
+// not to undo the choice. See applyBearerToSession in httpServer.ts.
+export function markExplicitAuth() {
+  try {
+    getSession().explicitAuthMode = true
+  } catch {
+    /* stdio default session: nothing to guard against */
+  }
+}
+
 export const httpClientDappros = axios.create({
   baseURL: appConfig.apiUrl,
 });
@@ -205,9 +216,11 @@ export function configureClient(params: { apiUrl?: string; appJwt?: string; appT
   }
   if (typeof appToken === "string") {
     httpTokens.appToken = appToken.trim()
+    if (appToken.trim()) markExplicitAuth()
   }
   if (typeof b2bToken === "string") {
     httpTokens.b2bToken = b2bToken.trim()
+    if (b2bToken.trim()) markExplicitAuth()
     if (!isHostedMode()) appConfig.b2bToken = b2bToken.trim()
   }
   return getClientState()
@@ -243,6 +256,7 @@ export function selectApp(params: { appId: string; appToken?: string; authMode?:
   }
   if (authMode) {
     ethoraContext.authMode = authMode
+    markExplicitAuth()
   } else if (typeof appToken === "string" && appToken.trim()) {
     // Only an appToken passed in THIS call switches to app auth. A token merely
     // remembered from `ethora-app-create` must not flip a user session into
@@ -259,6 +273,7 @@ export function selectAgent(params: { agentId: string }) {
 
 export function setAuthMode(authMode: "app" | "user" | "b2b") {
   ethoraContext.authMode = authMode
+  markExplicitAuth()
   return getClientState()
 }
 
@@ -790,6 +805,16 @@ export function sourcesSiteReindexV2(payload: { urlId: string; knowledgeScope?: 
 
 export function sourcesSiteReindexForAppV2(appId: string, payload: { urlId: string }, opts?: { timeoutMs?: number }) {
   return httpClientDappros.post(`/v2/apps/${String(appId || "").trim()}/sources/site-crawl-reindex`, payload, { timeout: opts?.timeoutMs })
+}
+
+// Crawl and reindex answer as soon as the job is enqueued; these read its
+// progress so the `-wait` tools can poll instead of claiming completion.
+export function sourcesSiteCrawlJobV2(jobId: string) {
+  return httpClientDappros.get(`/v2/sources/site-crawl-jobs/${String(jobId || "").trim()}`)
+}
+
+export function sourcesSiteCrawlJobForAppV2(appId: string, jobId: string) {
+  return httpClientDappros.get(`/v2/apps/${String(appId || "").trim()}/sources/site-crawl-jobs/${String(jobId || "").trim()}`)
 }
 
 export function sourcesSiteTagsUpdateV2(sourceId: string, tags: string[], extra?: { knowledgeScope?: "app" | "saved_agent"; savedAgentId?: string }) {

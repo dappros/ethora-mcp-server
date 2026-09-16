@@ -85,6 +85,8 @@ import {
     sourcesDocsUploadForAppV2,
     sourcesDocsUploadV2,
     sourcesSiteCrawlForAppV2,
+    sourcesSiteCrawlJobV2,
+    sourcesSiteCrawlJobForAppV2,
     sourcesSiteCrawlV2,
     sourcesSiteDeleteBatchForAppV2,
     sourcesSiteDeleteUrlForAppV2,
@@ -1911,18 +1913,19 @@ function appUpdateTool(server: McpServer) {
     server.registerTool(
         'ethora-app-update',
         {
-            description: "Update mutable fields on an app the caller owns (displayName, domainName, appDescription, primaryColor, botStatus). Partial update — omitted fields are left unchanged.\nRequires: an `appId` from `ethora-app-list` or `ethora-app-create`.\nAuth: user-auth mode, active session; the caller must own the app. Errors: 401 not logged in; 403 not owner; 404 unknown `appId`; 422 validation (e.g. `domainName` taken, `primaryColor` not `#RRGGBB`).",
+            description: "Update mutable fields on an app the caller owns (displayName, domainName, appTagline, primaryColor, botStatus). Partial update — omitted fields are left unchanged.\nRequires: an `appId` from `ethora-app-list` or `ethora-app-create`.\nAuth: user-auth mode, active session; the caller must own the app. Errors: 401 not logged in; 403 not owner; 404 unknown `appId`; 422 validation (e.g. `domainName` taken, `primaryColor` not `#RRGGBB`).",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("24-char hex ObjectId of the app to update. Optional — defaults to the app most recently passed to `ethora-app-select`."),
                 displayName: z.string().optional().describe("New human-readable app name. Visible in the app picker and on the public landing page."),
                 domainName: z.string().optional().describe("Subdomain to host the web app at. Setting `abcd` makes the web app available at `abcd.ethora.com`. Must be unique across all Ethora apps; lower-case alphanumerics and dashes only."),
-                appDescription: z.string().optional().describe("Long-form description shown on the public app landing page."),
+                appTagline: z.string().optional().describe("Short tagline shown on the public app landing page."),
+                appDescription: z.string().optional().describe("Deprecated alias for `appTagline`, kept so older callers keep working. Prefer `appTagline`."),
                 primaryColor: z.string().optional().describe("Primary brand color in hex `#RRGGBB` format (e.g. `#F54927`). Used throughout the app UI."),
                 botStatus: z.enum(["on", "off"]).optional().describe("`on` enables the AI bot for new conversations (requires a configured prompt — see `ethora-bot-update-v2`); `off` disables it. Does not change the bot's configured prompt or sources.")
             }
         },
-        async function ({ appId, displayName, domainName, appDescription, primaryColor, botStatus }) {
+        async function ({ appId, displayName, domainName, appTagline, appDescription, primaryColor, botStatus }) {
             try {
                 const state = getClientState() as any
                 const effectiveAppId = appId || state.currentAppId
@@ -1937,8 +1940,11 @@ function appUpdateTool(server: McpServer) {
                 if (domainName) {
                     changes.domainName = domainName
                 }
-                if (appDescription) {
-                    changes.appDescription = appDescription
+                // The backend field is `appTagline`; `appDescription` was never
+                // accepted and produced a 422. Accept both names, send the real one.
+                const tagline = appTagline || appDescription
+                if (tagline) {
+                    changes.appTagline = tagline
                 }
                 if (primaryColor) {
                     changes.primaryColor = primaryColor
@@ -2929,6 +2935,14 @@ function botWidgetGetV2Tool(server: McpServer) {
                 const res = await botWidgetGetV2()
                 return asToolResult(ok(res.data, meta))
             } catch (error) {
+                // An API-created app has no legacy aiBot, so this route answers a
+                // bare 404. Say what that means instead of surfacing the status.
+                const status = (error as any)?.response?.status
+                if (status === 404 || status === 422) {
+                    return asToolResult(fail(Object.assign(new Error(
+                        "This app has no legacy per-app widget, which is normal for an app created through the API or B2B. Build the embed with `ethora-widget-embed-snippet` after `ethora-agents-create-v2` -> `ethora-agent-invite-to-chat` -> `ethora-agents-activate-v2`."
+                    ), { code: "LEGACY_WIDGET_NOT_CONFIGURED" }), meta))
+                }
                 return asToolResult(fail(error, meta))
             }
         }
@@ -3667,17 +3681,53 @@ function sourcesSiteReindexV2AppTool(server: McpServer) {
     )
 }
 
+// The crawl and reindex routes answer as soon as the job is enqueued, so the
+// `-wait` tools used to return `done: true` with `status: "queued"` after ~60ms.
+// Poll the job row until it reaches a terminal state or the budget runs out.
+const CRAWL_TERMINAL_STATUSES = new Set(["completed", "failed", "cancelled", "canceled"])
+
+async function waitForCrawlJob(
+    ctx: ReturnType<typeof resolveAppScopedV2Context>,
+    jobId: string,
+    budgetMs: number,
+): Promise<{ done: boolean; status?: string; job?: any; polls: number; timedOut: boolean }> {
+    const deadline = Date.now() + budgetMs
+    let polls = 0
+    let job: any = undefined
+    let status: string | undefined = undefined
+    while (Date.now() < deadline) {
+        await sleep(Math.min(2000, Math.max(500, Math.floor(budgetMs / 60))))
+        polls++
+        try {
+            const res = useAppScopedRoute(ctx)
+                ? await sourcesSiteCrawlJobForAppV2(ctx.appId!, jobId)
+                : await sourcesSiteCrawlJobV2(jobId)
+            // This route answers `{ result: { status, savedPages, ... } }`.
+            job = res.data?.result ?? res.data?.data ?? res.data
+            status = String(job?.status || job?.job?.status || "")
+            if (CRAWL_TERMINAL_STATUSES.has(status)) {
+                return { done: true, status, job, polls, timedOut: false }
+            }
+        } catch (e: any) {
+            // A 404 right after enqueue means the row is not visible yet; keep
+            // polling. Anything else is a real failure worth surfacing.
+            if (e?.response?.status !== 404) throw e
+        }
+    }
+    return { done: false, status, job, polls, timedOut: true }
+}
+
 function sourcesSiteCrawlV2WaitTool(server: McpServer) {
     server.registerTool(
         "ethora-sources-site-crawl-v2-wait",
         {
-            description: "Crawl a website URL and block until the server finishes — a single-call, long-timeout variant of `ethora-sources-site-crawl-v2` (same crawl + embed effect). Returns `{ done: true, durationMs, result }`.\nRequires: a selected app (`ethora-app-select`) or an explicit `appId`.\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth; 400 malformed `url`; 504/timeout if it takes longer than `timeoutMs` (the job may still complete server-side — check with `ethora-sources-site-list-v2`).",
+            description: "Crawl a website URL and wait for the crawl to finish: enqueues the job, then polls it until it reports `completed` or `failed`. Returns `{ done, status, jobId, polls, durationMs, result }`; `done: false` with a `note` means the budget ran out while the job was still running (it usually finishes server-side anyway).\nRequires: a selected app (`ethora-app-select`) or an explicit `appId`.\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth; 400 malformed `url`; 504/timeout if it takes longer than `timeoutMs` (the job may still complete server-side — check with `ethora-sources-site-list-v2`).",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("24-char hex appId to ingest into. Required in B2B mode unless already set via `ethora-app-select`; ignored in app-token mode."),
                 url: z.string().min(1).describe("Absolute URL to crawl, e.g. `https://example.com/docs`."),
                 followLink: z.boolean().optional().describe("If true, also crawl in-domain links reachable from `url`. Can ingest many pages — use with care."),
-                timeoutMs: z.number().int().min(1000).max(600000).optional().describe("How long to wait for the crawl to finish, in milliseconds. Default 120000. Caps at 600000 (10 min)."),
+                timeoutMs: z.number().int().min(1000).max(600000).optional().describe("How long to poll for the crawl to finish, in milliseconds. Default 45000, chosen to stay under the ~60s request timeout most MCP clients enforce. Caps at 600000 (10 min) for clients that allow longer calls."),
             },
         },
         async function ({ appId, url, followLink, timeoutMs }) {
@@ -3685,10 +3735,27 @@ function sourcesSiteCrawlV2WaitTool(server: McpServer) {
             try {
                 const ctx = resolveAppScopedV2Context(appId)
                 const started = Date.now()
+                const budget = timeoutMs ?? 45_000
                 const res = useAppScopedRoute(ctx)
-                    ? await sourcesSiteCrawlForAppV2(ctx.appId!, { url, followLink }, { timeoutMs: timeoutMs ?? 120_000 })
-                    : await sourcesSiteCrawlV2({ url, followLink }, { timeoutMs: timeoutMs ?? 120_000 })
-                return asToolResult(ok({ done: true, durationMs: Date.now() - started, result: res.data }, meta))
+                    ? await sourcesSiteCrawlForAppV2(ctx.appId!, { url, followLink }, { timeoutMs: budget })
+                    : await sourcesSiteCrawlV2({ url, followLink }, { timeoutMs: budget })
+                const enqueued = res.data?.result ?? res.data?.data ?? res.data
+                const jobId = String(enqueued?.jobId || enqueued?.job?.jobId || "")
+                if (!jobId) {
+                    // No job handle to follow: report what the API said rather
+                    // than claiming the crawl finished.
+                    return asToolResult(ok({ done: false, durationMs: Date.now() - started, result: enqueued, note: "The API did not return a jobId, so completion could not be confirmed. Check `ethora-sources-site-list-v2`." }, meta))
+                }
+                const waited = await waitForCrawlJob(ctx, jobId, Math.max(0, budget - (Date.now() - started)))
+                return asToolResult(ok({
+                    done: waited.done,
+                    status: waited.status,
+                    jobId,
+                    polls: waited.polls,
+                    durationMs: Date.now() - started,
+                    result: waited.job ?? enqueued,
+                    ...(waited.timedOut ? { note: `Still ${waited.status || "in progress"} after ${budget}ms. The crawl usually continues server-side; check \`ethora-sources-site-list-v2\` or raise \`timeoutMs\`.` } : {}),
+                }, meta))
             } catch (error) {
                 return asToolResult(fail(error, meta))
             }
@@ -3700,12 +3767,12 @@ function sourcesSiteReindexV2WaitTool(server: McpServer) {
     server.registerTool(
         "ethora-sources-site-reindex-v2-wait",
         {
-            description: "Re-crawl and re-embed a previously crawled URL and block until the server finishes — a single-call, long-timeout variant of `ethora-sources-site-reindex-v2` (same refresh effect). Returns `{ done: true, durationMs, result }`.\nRequires: an indexed site URL from `ethora-sources-site-list-v2` (crawled with `ethora-sources-site-crawl-v2`).\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth; 404 unknown `appId` or `urlId`; 504/timeout if it takes longer than `timeoutMs` (the job may still complete server-side). Related: get `urlId` from `ethora-sources-site-list-v2`.",
+            description: "Re-crawl and re-embed a previously crawled URL and wait for it to finish: enqueues the job, then polls it until it reports `completed` or `failed`. Returns `{ done, status, jobId, polls, durationMs, result }`; `done: false` with a `note` means the budget ran out while the job was still running.\nRequires: an indexed site URL from `ethora-sources-site-list-v2` (crawled with `ethora-sources-site-crawl-v2`).\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth; 404 unknown `appId` or `urlId`; 504/timeout if it takes longer than `timeoutMs` (the job may still complete server-side). Related: get `urlId` from `ethora-sources-site-list-v2`.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("24-char hex appId the URL belongs to. Required in B2B mode unless already set via `ethora-app-select`; ignored in app-token mode."),
                 urlId: z.string().min(1).describe("Id of a previously crawled URL record. Get it from `ethora-sources-site-list-v2`."),
-                timeoutMs: z.number().int().min(1000).max(600000).optional().describe("How long to wait for the reindex to finish, in milliseconds. Default 120000. Caps at 600000 (10 min)."),
+                timeoutMs: z.number().int().min(1000).max(600000).optional().describe("How long to poll for the reindex to finish, in milliseconds. Default 45000, chosen to stay under the ~60s request timeout most MCP clients enforce. Caps at 600000 (10 min) for clients that allow longer calls."),
             },
         },
         async function ({ appId, urlId, timeoutMs }) {
@@ -3713,10 +3780,25 @@ function sourcesSiteReindexV2WaitTool(server: McpServer) {
             try {
                 const ctx = resolveAppScopedV2Context(appId)
                 const started = Date.now()
+                const budget = timeoutMs ?? 45_000
                 const res = useAppScopedRoute(ctx)
-                    ? await sourcesSiteReindexForAppV2(ctx.appId!, { urlId }, { timeoutMs: timeoutMs ?? 120_000 })
-                    : await sourcesSiteReindexV2({ urlId }, { timeoutMs: timeoutMs ?? 120_000 })
-                return asToolResult(ok({ done: true, durationMs: Date.now() - started, result: res.data }, meta))
+                    ? await sourcesSiteReindexForAppV2(ctx.appId!, { urlId }, { timeoutMs: budget })
+                    : await sourcesSiteReindexV2({ urlId }, { timeoutMs: budget })
+                const enqueued = res.data?.result ?? res.data?.data ?? res.data
+                const jobId = String(enqueued?.jobId || enqueued?.job?.jobId || "")
+                if (!jobId) {
+                    return asToolResult(ok({ done: false, durationMs: Date.now() - started, result: enqueued, note: "The API did not return a jobId, so completion could not be confirmed. Check `ethora-sources-site-list-v2`." }, meta))
+                }
+                const waited = await waitForCrawlJob(ctx, jobId, Math.max(0, budget - (Date.now() - started)))
+                return asToolResult(ok({
+                    done: waited.done,
+                    status: waited.status,
+                    jobId,
+                    polls: waited.polls,
+                    durationMs: Date.now() - started,
+                    result: waited.job ?? enqueued,
+                    ...(waited.timedOut ? { note: `Still ${waited.status || "in progress"} after ${budget}ms. The reindex usually continues server-side; check \`ethora-sources-site-list-v2\` or raise \`timeoutMs\`.` } : {}),
+                }, meta))
             } catch (error) {
                 return asToolResult(fail(error, meta))
             }
