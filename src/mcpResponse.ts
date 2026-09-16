@@ -39,18 +39,73 @@ function parseAxiosishError(error: unknown): { message: string; httpStatus?: num
   return { message: String(error) }
 }
 
+// Locally thrown errors carry no HTTP status and no API code, so without a match
+// here they fall through to INTERNAL_ERROR. That is wrong for what are ordinary
+// validation, precondition and auth problems, and directory reviews single out
+// connectors that report internal failures on valid input.
 function inferCodeFromMessage(msg: string) {
   const m = String(msg || "")
+  // auth mode
+  if (m.includes("Not logged in")) return "AUTH_USER_REQUIRED"
+  if (m.includes("requires app-token or B2B auth")) return "AUTH_APP_OR_B2B_REQUIRED"
   if (m.includes("requires app-token auth")) return "AUTH_APP_REQUIRED"
   if (m.includes("requires user auth")) return "AUTH_USER_REQUIRED"
   if (m.includes("requires B2B auth")) return "AUTH_B2B_REQUIRED"
-  if (m.includes("No current app selected")) return "APP_NOT_SELECTED"
+  // app context. Both wordings exist in the tool layer; match either.
+  if (m.includes("No current app selected") || m.includes("No app selected")) return "APP_NOT_SELECTED"
   if (m.includes("appId is required")) return "VALIDATION_ERROR"
+  // room/message addressing
+  if (m.includes("A room is required")) return "VALIDATION_ERROR"
+  if (m.includes("Cannot determine the appId for this room")) return "VALIDATION_ERROR"
+  if (m.includes("aroundStanzaId or aroundMessageId")) return "VALIDATION_ERROR"
+  // missing input the schema cannot express
+  if (m.includes("No bundle supplied")) return "VALIDATION_ERROR"
+  // server/session configuration rather than a bad request
+  if (/\bETHORA_[A-Z_]+ is (not configured|empty)/.test(m)) return "CONFIG_REQUIRED"
+  // credential families. Match the shape rather than each wording, so new
+  // call sites inherit the classification instead of falling to INTERNAL_ERROR.
+  if (/appToken is missing|no appToken (available|is configured)|No appToken stored|no app token was created/i.test(m)) return "AUTH_APP_REQUIRED"
+  if (/b2bToken is missing|no b2bToken is configured/i.test(m)) return "AUTH_B2B_REQUIRED"
+  if (/does not accept app-token auth/i.test(m)) return "AUTH_USER_OR_B2B_REQUIRED"
+  // caller-fixable argument problems
+  if (/Room id is empty|Room not found in app/i.test(m)) return "VALIDATION_ERROR"
+  if (/needs appId|needs the app\b/i.test(m)) return "VALIDATION_ERROR"
+  if (/does not support step tool/i.test(m)) return "VALIDATION_ERROR"
+  // asked for something the hosted surface deliberately does not allow
+  if (/is fixed on a hosted MCP server/i.test(m)) return "UNSUPPORTED_ON_HOSTED"
+  // preconditions: the call is well formed but something has to exist first
+  if (m.includes("No bot instance of agent")) return "PRECONDITION_REQUIRED"
   if (m.includes("timeout")) return "TIMEOUT"
   return undefined
 }
 
+// Some backend errors surface an internal sentinel rather than a sentence.
+// Replace the known ones with something a caller can act on; the original is
+// still carried in `details`.
+const RAW_MESSAGE_REWRITES: Array<[RegExp, string]> = [
+  [/^!refreshRecord$/, "The session credential is no longer valid. It may have been revoked or expired. Authenticate again."],
+]
+
+function humaniseMessage(msg: string): string {
+  const m = String(msg || "")
+  for (const [pattern, replacement] of RAW_MESSAGE_REWRITES) {
+    if (pattern.test(m.trim())) return replacement
+  }
+  return m
+}
+
 function inferHint(code: string | undefined, httpStatus: number | undefined, msg: string) {
+  if (code === "AUTH_APP_OR_B2B_REQUIRED") return "Call `ethora-auth-use-app` (app token) or `ethora-auth-use-b2b` (B2B token). `ethora-status` shows the active mode."
+  // The API returns this for a token of the wrong kind for the route. Without a
+  // hint the caller only sees "Invalid token type" and cannot tell what to switch to.
+  if (code === "INVALID_TOKEN_TYPE") return "The active token is the wrong kind for this route. Agents, rooms and source routes want user auth with an app selected (`ethora-auth-use-user`, then `ethora-app-select`); bot and token-admin routes want app-token or B2B auth (`ethora-auth-use-app` / `ethora-auth-use-b2b`). Check the current mode with `ethora-status`."
+  if (code === "REFRESH_RECORD_NOT_FOUND") return "The session credential was revoked or expired. Call `ethora-user-login` again, or reconnect with a valid API key."
+  if (code === "PRECONDITION_REQUIRED") return "Something this call depends on does not exist yet. Read the message for the missing object and create it first."
+  if (code === "AUTH_USER_OR_B2B_REQUIRED") return "This route rejects app tokens. Call `ethora-auth-use-user` (then `ethora-user-login`) or `ethora-auth-use-b2b`."
+  if (code === "UNSUPPORTED_ON_HOSTED") return "This is not available on the hosted server. Run the stdio server locally (`npx -y @ethora/mcp-server`) if you need it."
+  if (code === "CONFIG_REQUIRED") return "The server or session is missing configuration named in the message. Set it via env, or call `ethora-configure` for per-session credentials. `ethora-doctor` lists what is missing."
+  if (code === "VALIDATION_ERROR") return "The message names the argument to fix. Correct it and call again; `search`/`fetch` have the full input reference for every tool."
+  if (code === "APP_NOT_SELECTED") return "Call `ethora-app-select` to set the current appId (and optionally appToken)."
   if (code === "AUTH_APP_REQUIRED") return "Call `ethora-auth-use-app` and set appToken via `ethora-app-select`."
   if (code === "AUTH_USER_REQUIRED") return "Call `ethora-auth-use-user` then `ethora-user-login`."
   if (code === "AUTH_B2B_REQUIRED") return "Call `ethora-auth-use-b2b` and set `ETHORA_B2B_TOKEN` (or `ethora-configure`)."
@@ -70,7 +125,7 @@ export function ok(data: any, meta?: Record<string, any>): McpEnvelope {
 
 export function fail(error: unknown, meta?: Record<string, any>): McpEnvelope {
   const parsed = parseAxiosishError(error)
-  const message = parsed.message
+  const message = humaniseMessage(parsed.message)
   const httpStatus = parsed.httpStatus
   const code = parsed.code || inferCodeFromMessage(message) || (httpStatus ? `HTTP_${httpStatus}` : "INTERNAL_ERROR")
   const hint = inferHint(code, httpStatus, message)

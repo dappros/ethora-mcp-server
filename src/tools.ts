@@ -2536,6 +2536,12 @@ function agentsImportV2Tool(server: McpServer) {
             const meta = getDefaultMeta("ethora-agents-import-v2")
             try {
                 ensureUserAuthForTool()
+                // `bundle` is z.any(), which Zod treats as optional, so an agent can
+                // call this with no arguments and get an opaque schemaVersion error
+                // from the API. Fail here with something it can act on instead.
+                if (bundle === undefined || bundle === null || (typeof bundle === "object" && Object.keys(bundle as object).length === 0)) {
+                    throw new Error("No bundle supplied. Pass the object returned by `ethora-agents-export-v2` as `bundle`.")
+                }
                 const res = await agentsImportV2(bundle, ownerAppId)
                 return asToolResult(ok(res.data, meta))
             } catch (error) {

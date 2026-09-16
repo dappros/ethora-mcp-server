@@ -107,8 +107,18 @@ export const TOOL_TITLES: Record<string, string> = {
 }
 
 // Tools that are never offered on the hosted (remote) surface. Directory
-// reviews reject connectors that move money or crypto; the stdio CLI keeps them.
-export const STDIO_ONLY_TOOLS = ["ethora-wallet-erc20-transfer"] as const
+// reviews reject connectors that move money or crypto; the stdio CLI keeps them,
+// where the deployment operator controls the environment.
+//
+// `ethora-wallet-get-balance` is read-only, but it hangs on the hosted server:
+// a call with a valid authenticated session returned nothing after 61s and again
+// after 120s (QA, 260916). A tool that never returns stalls the client's turn,
+// and it is the last wallet surface on the remote server, so it comes out until
+// the underlying lookup has a bounded timeout.
+export const STDIO_ONLY_TOOLS = [
+  "ethora-wallet-erc20-transfer",
+  "ethora-wallet-get-balance",
+] as const
 
 function generatedTitle(name: string): string {
   return name
