@@ -2528,7 +2528,19 @@ function agentsImportV2Tool(server: McpServer) {
             description: "Import an Agent from a bundle produced by `ethora-agents-export-v2` (POST /v2/agents/import, application/json body IS the bundle). Optionally scope the new Agent to an owning App via ownerAppId.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
             inputSchema: {
-                bundle: z.any().describe("The exported bundle object (the json export output)."),
+                // Typed rather than z.any(). z.any() is optional in Zod, so the tool
+                // advertised no required arguments, an agent could call it empty, and
+                // the API answered with an opaque schemaVersion error. The shape below
+                // matches a real `ethora-agents-export-v2` bundle; passthrough keeps it
+                // forward compatible with fields added to the bundle later.
+                bundle: z
+                    .object({
+                        schemaVersion: z.string().min(1).describe("Bundle schema version, e.g. `ethora.agent.bundle.v1`. Every export carries one."),
+                        kind: z.string().optional().describe("Bundle kind: `agent` for agent exports."),
+                        agent: z.record(z.any()).describe("The agent definition carried by the bundle: displayName, prompt, llmProvider, llmModel and so on."),
+                    })
+                    .passthrough()
+                    .describe("The bundle object returned by `ethora-agents-export-v2` with format=json. Pass it through unchanged."),
                 ownerAppId: z.string().optional().describe("Owning App for the imported Agent (defaults server-side)."),
             },
         },
@@ -2536,12 +2548,6 @@ function agentsImportV2Tool(server: McpServer) {
             const meta = getDefaultMeta("ethora-agents-import-v2")
             try {
                 ensureUserAuthForTool()
-                // `bundle` is z.any(), which Zod treats as optional, so an agent can
-                // call this with no arguments and get an opaque schemaVersion error
-                // from the API. Fail here with something it can act on instead.
-                if (bundle === undefined || bundle === null || (typeof bundle === "object" && Object.keys(bundle as object).length === 0)) {
-                    throw new Error("No bundle supplied. Pass the object returned by `ethora-agents-export-v2` as `bundle`.")
-                }
                 const res = await agentsImportV2(bundle, ownerAppId)
                 return asToolResult(ok(res.data, meta))
             } catch (error) {
