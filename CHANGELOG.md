@@ -4,6 +4,9 @@ All notable changes to this package are documented here. For cross-SDK release n
 
 ## Unreleased
 
+### Security
+- Tool results no longer include app credentials: `appSecret`, `tenantSecret`, `appToken`, passwords and similar keys are replaced with `[redacted]` at any depth (`src/redact.ts`), for every tool except the ones that exist to hand over a credential once (login, register, api-key-create, app-tokens create/rotate). New tool `ethora-app-credentials { appId, confirm: true }` reveals an app's `appToken` deliberately (requires the `admin` scope on `/mcp/oauth`); the App Secret is never returned over MCP. New docs entry `doc:credentials`.
+
 ### Changed
 - Directory compliance: every tool now has a human `title` (top-level and `annotations.title`, see `src/toolTitles.ts`) and explicit `readOnlyHint` / `destructiveHint` / `openWorldHint` booleans; `ethora-wallet-erc20-transfer` is no longer offered on the hosted server (stdio only). The discovery document (`/.well-known/mcp`, `/`) publishes `auth` as an object (`open` + `oauth`) plus `description`, `stdio`, `vendor`, `contact`, matching the website copy.
 

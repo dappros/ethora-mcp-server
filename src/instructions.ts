@@ -10,6 +10,7 @@ export const HOSTED_INSTRUCTIONS = [
   "Stay in user auth mode on the hosted server (`ethora-status` shows authMode=user); app-token and B2B modes are for server integrations and the agents/rooms routes reject app tokens. Room ids: a room JID is `${appId}_${chatId}` and every room tool accepts the JID or the bare chatId.",
   "Use `search` and `fetch` to look up documentation (auth model, quickstarts, recipes, tool reference) before guessing; `ethora-help` returns recommended next calls for the current state.",
   "Never print API keys or passwords in your replies unless the user explicitly asks for them.",
+  "App credentials are never included in tool results: appSecret, tenantSecret, appToken and passwords come back as [redacted]. When a snippet or config needs the appToken, call `ethora-app-credentials { appId, confirm: true }`; the App Secret is only available in the web dashboard API tab.",
   "Tools marked destructive delete data owned by the authenticated user (apps, agents, users, files); confirm with the user before calling them.",
   "Manage keys with `ethora-api-key-create`, `ethora-api-key-list` and `ethora-api-key-revoke`. Each MCP session is private: nothing from another client's session is visible here.",
   "After registering or creating a key, give the user their `connectorUrl` (returned alongside the key): pasting it as a custom connector in Claude.ai or ChatGPT reconnects them authenticated in every future conversation with no login step.",
@@ -20,6 +21,7 @@ export const STDIO_INSTRUCTIONS = [
   "Configuration comes from env vars: ETHORA_API_URL (API base, defaults to Ethora Cloud), ETHORA_APP_JWT (app JWT needed by login/register), optional ETHORA_B2B_TOKEN for server-to-server automation. `ethora-configure` can set them at runtime.",
   "Auth: call `ethora-status`, then `ethora-user-login` (email + password) or `ethora-user-register`; or switch to app/B2B auth with `ethora-auth-use-app` / `ethora-auth-use-b2b` when you hold those tokens.",
   "Typical flow after auth: `ethora-app-create`, `ethora-app-select`, then chats/users/agents tools. Use `search` and `fetch` for documentation and `ethora-help` for recommended next calls.",
+  "App credentials (appSecret, tenantSecret, appToken, passwords) are redacted from tool results; use `ethora-app-credentials { appId, confirm: true }` for the appToken.",
   "Never print API keys, tokens or passwords unless the user explicitly asks. Destructive tools are gated behind ETHORA_MCP_ENABLE_DANGEROUS_TOOLS=true and delete data owned by the current user; confirm before calling them.",
 ].join("\n")
 
@@ -34,6 +36,7 @@ const AUTHENTICATED_COMMON = [
   "Use `search` and `fetch` to look up documentation (quickstarts, recipes, tool reference) before guessing; `ethora-help` returns recommended next calls for the current state.",
   "Tools marked destructive delete data owned by the user (apps, agents, users, files); confirm with the user before calling them.",
   "Each MCP session is private: nothing from another client's session is visible here.",
+  "App credentials are never included in tool results: appSecret, tenantSecret, appToken and passwords come back as [redacted]. When a snippet or config needs the appToken, call `ethora-app-credentials { appId, confirm: true }`; the App Secret is only available in the web dashboard API tab.",
 ]
 
 export const OAUTH_INSTRUCTIONS = [

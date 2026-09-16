@@ -20,6 +20,30 @@ type Doc = {
   guide?: boolean
 }
 
+const CREDENTIALS_MD = `
+# Credentials: which one for what
+
+## App ID
+Public identifier of an app (24-char hex). Safe to share; every app-scoped call needs it.
+
+## appToken
+App-scoped JWT used by the chat component, the AI chat widget and app-token automation.
+Never included in tool results (they show \`[redacted]\`). Reveal it on purpose with
+\`ethora-app-credentials { appId, confirm: true }\`; rotate it with \`ethora-app-tokens-rotate-v2\`.
+
+## App Secret and tenant secret
+Signing keys for the app's tokens. Never returned over MCP. Available only to the app owner
+in the web dashboard (app settings, API tab). Anything holding the secret can act as the app.
+
+## User API key
+A long-lived user token for assistants and agents (\`ethora-api-key-create\`, \`-list\`,
+\`-revoke\`, or the dashboard Account > AI Assistants tab). Shown once; revocation is immediate.
+
+## Server (B2B) token
+For your own backend acting as the app (sent as the \`x-custom-token\` header). Minted and
+revoked in the dashboard API tab, so no code has to hold the App Secret.
+`
+
 const API_KEYS_MD = `
 ## API keys (hosted MCP server)
 
@@ -89,6 +113,7 @@ function buildCorpus(server: McpServer): Doc[] {
   const docs: Doc[] = [
     { id: "doc:hosted-guide", title: "Ethora MCP: getting started (hosted server)", text: HOSTED_INSTRUCTIONS, url: README_URL, kind: "doc", guide: true },
     ...splitMarkdown("api-keys", "API keys", API_KEYS_MD).map((d) => ({ ...d, guide: true })),
+    ...splitMarkdown("credentials", "Credentials: which one for what", CREDENTIALS_MD).map((d) => ({ ...d, guide: true })),
     ...splitMarkdown("auth-map", "Ethora auth map", AUTH_MAP_MD),
     ...splitMarkdown("chat-component-quickstart", "Chat component quickstart", CHAT_COMPONENT_QUICKSTART_MD),
     ...splitMarkdown("sdk-backend-quickstart", "Backend SDK quickstart", BACKEND_SDK_QUICKSTART_MD),

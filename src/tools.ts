@@ -38,6 +38,7 @@ import {
     appImportV2,
     appCreate,
     appCreateV2,
+    appGet,
     appCreateChat,
     appDelete,
     appDeleteChat,
@@ -109,6 +110,7 @@ import {
 } from "./apiClientEthora.js"
 import { appConfig } from "./config.js"
 import { fail, ok } from "./mcpResponse.js"
+import { redactSecrets } from "./redact.js"
 import { ensureTenantActorAuth, splitRoomJid } from "./routeAuth.js"
 import { connectorUrl, CONNECTOR_URL_NOTE } from "./publicUrl.js"
 
@@ -125,7 +127,27 @@ function errorToText(error: unknown) {
     return `error: ${String(error)}`
 }
 
+// Tools whose whole purpose is to hand a credential to the caller, exactly once.
+// Every other tool result is passed through `redactSecrets` (see src/redact.ts):
+// app documents carry appSecret / tenantSecret / appToken / passwords, and a
+// tool result ends up in the model's context and the client vendor's logs.
+export const REDACTION_EXEMPT_TOOLS = new Set([
+    "ethora-user-login",
+    "ethora-user-register",
+    "ethora-api-key-create",
+    "ethora-app-credentials",
+    "ethora-app-tokens-create-v2",
+    "ethora-app-tokens-rotate-v2",
+])
+
 function asToolResult(envelope: any): CallToolResult {
+    const tool = envelope?.meta?.tool
+    if (envelope && typeof envelope === "object" && !(tool && REDACTION_EXEMPT_TOOLS.has(String(tool)))) {
+        if ("data" in envelope) envelope = { ...envelope, data: redactSecrets(envelope.data) }
+        if (envelope.error && envelope.error.details !== undefined) {
+            envelope = { ...envelope, error: { ...envelope.error, details: redactSecrets(envelope.error.details) } }
+        }
+    }
     return { content: [{ type: "text", text: JSON.stringify(envelope) }] }
 }
 
@@ -623,7 +645,7 @@ function helpTool(server: McpServer) {
                     recipes.push({
                         id: "widget-embed",
                         title: "Embed the AI chat widget on a website (user auth)",
-                        description: "Create an agent, bind it as the app's active widget bot, then generate the embed script.",
+                        description: "Create an agent, bind it as the app's active widget bot, then generate the embed script. If a config needs the appToken, get it from `ethora-app-credentials { appId, confirm: true }`.",
                         steps: [
                             { tool: "ethora-app-select", args: { appId: "<APP_ID>" } },
                             { tool: "ethora-agents-create-v2", args: { name: "Helper", prompt: "You are a polite support assistant for this website." } },
@@ -1719,6 +1741,43 @@ function userRegisterWithEmailTool(server: McpServer) {
     )
 }
 
+
+function appCredentialsTool(server: McpServer) {
+    server.registerTool(
+        "ethora-app-credentials",
+        {
+            title: "Reveal App Token",
+            description: "Reveal the appToken of an app the caller owns, for a chat-component snippet or a widget config. Every other tool redacts appToken, appSecret and tenantSecret from its results because tool output enters the model's context and client logs; this tool returns exactly { appId, appToken, note } and nothing else. The App Secret is never returned over MCP: it is shown only in the web dashboard (app settings, API tab), and backend integrations should use revocable server tokens from that tab instead of the secret.\nRequires: an app you own (`ethora-app-create` or `ethora-app-list`) and `confirm: true`.\nAuth: user auth (app owner). Errors: 401 not logged in; 403 not the owner; 404 unknown `appId`; validation error unless `confirm` is `true`.",
+            annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+            inputSchema: {
+                appId: z.string().optional().describe("24-char hex app id. Defaults to the app selected with `ethora-app-select`."),
+                confirm: z.literal(true).describe("Must be `true`: acknowledges that the token is a credential and will appear in this conversation."),
+            },
+        },
+        async function ({ appId, confirm }) {
+            const meta = getDefaultMeta("ethora-app-credentials")
+            try {
+                if (confirm !== true) throw new Error("Pass `confirm: true` to reveal the app token.")
+                const id = String(appId || (getClientState() as any).currentAppId || "").trim()
+                if (!id) throw new Error(APP_CONTEXT_MISSING_MESSAGE)
+                const resp = await appGet(id)
+                const body: any = resp.data || {}
+                const app = body.result || body.app || body
+                const token = app?.appToken || appTokenFor(id)
+                if (!token) throw new Error("The API did not return an appToken for this app. Only the owner can read it; check `ethora-status` for the active auth mode.")
+                rememberAppToken(id, String(token))
+                return asToolResult(ok({
+                    appId: id,
+                    appToken: String(token),
+                    note: "Credential: use it as the appToken in chat-component or widget configs and keep it out of repositories. Rotate it with `ethora-app-tokens-rotate-v2` if it leaks. The App Secret is only shown in the web dashboard API tab.",
+                }, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
 function apiKeyTools(server: McpServer) {
     server.registerTool(
         "ethora-api-key-create",
@@ -1785,7 +1844,7 @@ function appListTool(server: McpServer) {
     server.registerTool(
         'ethora-app-list',
         {
-            description: "List all Ethora apps (tenants) owned by the currently logged-in user. Returns an array with `appId` (24-char hex), `displayName`, `domainName`, ownership and bot-status metadata.\nAuth: user-auth mode, active session (`ethora-user-login` first). Errors: 401 not logged in; empty list if the user owns no apps. Related: feed `appId` into `ethora-app-update` / `ethora-app-select`.",
+            description: "List all Ethora apps (tenants) owned by the currently logged-in user. Returns an array with `appId` (24-char hex), `displayName`, `domainName`, ownership and bot-status metadata. Credential fields (appSecret, tenantSecret, appToken, passwords) are redacted in the result; call `ethora-app-credentials { appId, confirm: true }` to reveal an app's appToken.\nAuth: user-auth mode, active session (`ethora-user-login` first). Errors: 401 not logged in; empty list if the user owns no apps. Related: feed `appId` into `ethora-app-update` / `ethora-app-select`.",
             annotations: { readOnlyHint: true, openWorldHint: true },
         },
         async function () {
@@ -1803,7 +1862,7 @@ function appCreateTool(server: McpServer) {
     server.registerTool(
         'ethora-app-create',
         {
-            description: "Create a new Ethora app (tenant) owned by the currently logged-in user. Allocates a fresh 24-char hex `appId` and sets the caller as owner; counts against the owner's plan limit. Returns the new app object including `appId`.\nAuth: user-auth mode, active session (`ethora-user-login` first). Errors: 401 not logged in; 402/403 plan limit reached; 422 invalid `displayName`. Related: server-side provisioning uses `ethora-b2b-app-create`.",
+            description: "Create a new Ethora app (tenant) owned by the currently logged-in user. Allocates a fresh 24-char hex `appId` and sets the caller as owner; counts against the owner's plan limit. Returns the new app object including `appId`. The returned app has its credential fields redacted; call `ethora-app-credentials { appId, confirm: true }` when a snippet needs the appToken.\nAuth: user-auth mode, active session (`ethora-user-login` first). Errors: 401 not logged in; 402/403 plan limit reached; 422 invalid `displayName`. Related: server-side provisioning uses `ethora-b2b-app-create`.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
             inputSchema: {
                 displayName: z.string().describe("Human-readable app name shown to users in the app picker and on the public landing page. Not required to be unique across accounts.")
@@ -3407,7 +3466,7 @@ function generateChatComponentAppTsxTool(server: McpServer) {
     server.registerTool(
         "ethora-generate-chat-component-app-tsx",
         {
-            description: "Generate a ready-to-paste React `App.tsx` snippet that mounts `@ethora/chat-component`. Returns `{ filename: \"App.tsx\", snippet }`; unpassed values are emitted as placeholders. Does not write any file.\nAuth: none required — pure code generator, no API calls. Errors: effectively none. Security note: the snippet includes `appToken` inline only as a quickstart convenience — do not ship hardcoded tokens to production.",
+            description: "Generate a ready-to-paste React `App.tsx` snippet that mounts `@ethora/chat-component`. Returns `{ filename: \"App.tsx\", snippet }`; unpassed values are emitted as placeholders. Does not write any file. Get the appToken from `ethora-app-credentials { appId, confirm: true }` (other tools redact it).\nAuth: none required — pure code generator, no API calls. Errors: effectively none. Security note: the snippet includes `appToken` inline only as a quickstart convenience — do not ship hardcoded tokens to production.",
             annotations: { readOnlyHint: true, openWorldHint: false },
             inputSchema: {
                 apiUrl: z.string().optional().describe("Ethora API base URL to embed in the snippet, e.g. `https://api.chat.ethora.com/v1`. Omit to emit a placeholder."),
@@ -4327,6 +4386,7 @@ export function registerTools(server: McpServer) {
     userLoginWithEmailTool(server);
     userRegisterWithEmailTool(server);
     apiKeyTools(server);
+    appCredentialsTool(server);
     widgetTools(server);
     appListTool(server);
     appCreateTool(server);

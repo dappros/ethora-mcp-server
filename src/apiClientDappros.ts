@@ -333,6 +333,12 @@ export function appList() {
   )
 }
 
+// Single app document (owner view). The tool layer redacts credentials from
+// results; `ethora-app-credentials` is the one place appToken is passed through.
+export function appGet(appId: string) {
+  return httpClientDappros.get(`/apps/${String(appId || "").trim()}`)
+}
+
 export function appCreate(displayName: string) {
   return httpClientDappros.post(
     `/apps/`,

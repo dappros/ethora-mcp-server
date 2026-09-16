@@ -28,9 +28,16 @@ export const OAUTH_HIDDEN_TOOLS = new Set([
   "ethora-api-key-revoke",
 ])
 
-// Required scope for a tool, derived from its annotations.
+// Per-tool overrides: tools whose annotations understate their sensitivity.
+// Revealing a credential is read-only in API terms but is an admin action.
+export const SCOPE_OVERRIDES: Record<string, Scope> = {
+  "ethora-app-credentials": "admin",
+}
+
+// Required scope for a tool, derived from its annotations (overrides first).
 export function requiredScope(name: string, annotations: any): Scope | null {
   if (SCOPE_EXEMPT_TOOLS.has(name)) return null
+  if (SCOPE_OVERRIDES[name]) return SCOPE_OVERRIDES[name]
   if (annotations?.destructiveHint) return "admin"
   if (annotations?.readOnlyHint) return "read"
   return "write"
