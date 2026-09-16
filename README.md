@@ -273,6 +273,18 @@ With `ETHORA_B2B_TOKEN` configured, `ethora-auth-use-b2b` switches the session t
 
 ## Development
 
+### Tool naming
+
+Tool names are a public contract; treat them like an API:
+
+- Existing names are frozen for client compatibility and are never renamed.
+- New tools use `ethora-<area>-<verb>` with no version suffix. The `-v2` suffixes are
+  historical (they marked the v2 REST routes they call) and must not be extended.
+- Every tool description carries an `Auth:` line and, when a first call needs prior
+  setup, a `Requires:` line naming the prerequisite tool(s).
+- Back-compat aliases stay behind `ETHORA_MCP_ENABLE_ALIASES` (off by default).
+
+
 ```bash
 git clone https://github.com/dappros/ethora-mcp-server.git
 cd ethora-mcp-server
