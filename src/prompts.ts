@@ -86,6 +86,71 @@ ETHORA_CHAT_APP_SECRET=your_app_secret
 \`\`\`
 `
 
+// Authoring reference for Agent.flowsYaml. Kept in sync with the compiler at
+// services/api/src/modules/agents/flows/compileFlows.js - that file validates
+// on save, this text is what an assistant reads before writing a script.
+export const AGENT_FLOWS_MD = md`
+# Agent flows (scripted conversations)
+
+A flow is a deterministic script an agent follows instead of letting the model choose every turn.
+Use one for anything with a fixed shape: an opening menu, an appointment request, an intake
+questionnaire, a survey. The model still handles everything outside a flow.
+
+Set it with \`ethora-agents-create-v2\` or \`ethora-agents-update-v2\`, field \`flowsYaml\`.
+The server compiles and validates the YAML on save. If it does not compile you get
+\`FLOWS_INVALID\` with per-problem details and **nothing is stored**, so a bad script cannot
+break a live agent. Send an empty string to remove the script.
+
+## Format
+
+\`\`\`yaml
+version: 1
+flows:
+  start:                          # reserved name: runs when a conversation opens
+    steps:
+      - say: "Hi! How can I help?"
+        buttons:
+          - { label: "Request appointment", goto: appointment }
+          - { label: "Something else", end: true }
+  appointment:
+    description: "Collect an appointment request"
+    trigger: { phrases: ["appointment", "book a visit"] }
+    steps:
+      - ask: "Which location suits you?"
+        id: location
+        options: [Downtown, Westside]
+      - ask: "Best phone number to reach you?"
+        id: phone
+        type: phone
+        retry: "That doesn't look like a phone number, could you check it?"
+      - say: "Thanks, we'll call {phone} to confirm a slot at {location}."
+      - end: true
+\`\`\`
+
+## Rules worth knowing
+
+- **Step kinds**: \`say\` (send a message), \`ask\` (ask for one value and store it in a slot),
+  \`goto\` (jump to another flow), \`end\` (finish).
+- **\`start\` is reserved.** If present it fires when a conversation opens, which is how you get an
+  opening menu. Without it, flows are entered by \`trigger.phrases\` or from a button.
+- **Buttons** come from \`buttons:\` on a \`say\` step, or from \`options:\` on an \`ask\` step.
+  A button carries \`label\` plus one of \`goto\` or \`end\`. Tapping one posts its value into the
+  room as an ordinary message, so the answer reaches the agent through the normal path.
+- **Slots**: \`ask\` stores the answer under its \`id\`. Refer to it later as \`{id}\` in any text.
+  \`type\` validates the answer (for example \`phone\`) and \`retry\` is what the agent says when
+  validation fails.
+- **Conditions**: any step may carry \`when: "slot == value"\` or \`when: "slot != value"\` and is
+  skipped when the condition is false.
+- Collected slot values are readable afterwards through the API, so a flow doubles as a structured
+  intake form.
+
+## Suggested shape for a first script
+
+Start with \`start\` plus one task flow. Keep \`say\` text short: it renders as chat bubbles, not a
+page. Give every \`ask\` an \`id\` you will actually reference. Validate by saving and reading the
+error details rather than guessing.
+`
+
 export const RECIPES_MD = md`
 ## Common recipes
 
