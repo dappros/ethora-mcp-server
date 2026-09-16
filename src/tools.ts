@@ -2204,6 +2204,7 @@ function agentsCreateV2Tool(server: McpServer) {
                 visibility: z.enum(["private", "public"]).optional().describe("'private' (only invitable inside the owning app) or 'public' (cross-app invitable)."),
                 isPublished: z.boolean().optional().describe("Convenience alias for setting visibility='public'."),
                 categories: z.array(z.string().min(1)).optional().describe("Free-form category tags for agent directory listings."),
+                flowsYaml: z.string().optional().describe('Deterministic scripted conversation for this agent, as YAML. Drives the agent through a fixed sequence (opening menu, appointment request, intake questionnaire, survey) instead of leaving every turn to the model. Compiled and validated server-side on save: an invalid script is rejected with code `FLOWS_INVALID` and per-line details, and nothing is stored. A flow named `start` is reserved and fires when a conversation opens. Buttons are authored here (`buttons:` on a `say` step, or `options:` on an `ask` step). Call `fetch` with id `doc:agent-flows` for the full authoring format before writing one. Pass an empty string to clear the script.'),
             },
         },
         async function (payload) {
@@ -2249,6 +2250,7 @@ function agentsUpdateV2Tool(server: McpServer) {
                 visibility: z.enum(["private", "public"]).optional().describe("'private' or 'public' (cross-app invitable)."),
                 isPublished: z.boolean().optional().describe("Convenience alias for visibility='public'."),
                 categories: z.array(z.string().min(1)).optional().describe("Category tags for directory listings."),
+                flowsYaml: z.string().optional().describe('Deterministic scripted conversation for this agent, as YAML. Drives the agent through a fixed sequence (opening menu, appointment request, intake questionnaire, survey) instead of leaving every turn to the model. Compiled and validated server-side on save: an invalid script is rejected with code `FLOWS_INVALID` and per-line details, and nothing is stored. A flow named `start` is reserved and fires when a conversation opens. Buttons are authored here (`buttons:` on a `say` step, or `options:` on an `ask` step). Call `fetch` with id `doc:agent-flows` for the full authoring format before writing one. Pass an empty string to clear the script.'),
             },
         },
         async function ({ agentId, ...payload }) {

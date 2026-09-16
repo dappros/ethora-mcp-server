@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp"
 import z from "zod"
-import { AUTH_MAP_MD, CHAT_COMPONENT_QUICKSTART_MD, BACKEND_SDK_QUICKSTART_MD, RECIPES_MD } from "./prompts.js"
+import { AUTH_MAP_MD, CHAT_COMPONENT_QUICKSTART_MD, BACKEND_SDK_QUICKSTART_MD, RECIPES_MD, AGENT_FLOWS_MD } from "./prompts.js"
 import { HOSTED_INSTRUCTIONS } from "./instructions.js"
 
 // `search` + `fetch`: the two-tool convention ChatGPT connectors expect, also
@@ -93,6 +93,7 @@ function buildCorpus(server: McpServer): Doc[] {
     ...splitMarkdown("chat-component-quickstart", "Chat component quickstart", CHAT_COMPONENT_QUICKSTART_MD),
     ...splitMarkdown("sdk-backend-quickstart", "Backend SDK quickstart", BACKEND_SDK_QUICKSTART_MD),
     ...splitMarkdown("recipes", "Ethora recipes", RECIPES_MD),
+    ...splitMarkdown("agent-flows", "Agent flows (scripted conversations)", AGENT_FLOWS_MD),
     ...toolDocs(server),
   ]
   return docs

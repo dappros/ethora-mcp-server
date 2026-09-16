@@ -521,6 +521,7 @@ export function agentsCreateV2(payload: {
   visibility?: "private" | "public"
   isPublished?: boolean
   categories?: string[]
+  flowsYaml?: string
   meta?: Record<string, any>
   ownerAppId?: string
 }, appId?: string) {
@@ -548,6 +549,7 @@ export function agentsUpdateV2(agentId: string, payload: {
   visibility?: "private" | "public"
   isPublished?: boolean
   categories?: string[]
+  flowsYaml?: string
   meta?: Record<string, any>
 }) {
   return httpClientDappros.put(`/v2/agents/${String(agentId || "").trim()}`, payload || {})

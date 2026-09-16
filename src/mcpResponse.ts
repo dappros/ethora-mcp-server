@@ -103,6 +103,7 @@ function inferHint(code: string | undefined, httpStatus: number | undefined, msg
   if (code === "PRECONDITION_REQUIRED") return "Something this call depends on does not exist yet. Read the message for the missing object and create it first."
   if (code === "AUTH_USER_OR_B2B_REQUIRED") return "This route rejects app tokens. Call `ethora-auth-use-user` (then `ethora-user-login`) or `ethora-auth-use-b2b`."
   if (code === "UNSUPPORTED_ON_HOSTED") return "This is not available on the hosted server. Run the stdio server locally (`npx -y @ethora/mcp-server`) if you need it."
+  if (code === "FLOWS_INVALID") return "The flows YAML did not compile; `details` lists what failed and where. Nothing was saved. Call `fetch` with id `doc:agent-flows` for the authoring format, fix the script and retry."
   if (code === "CONFIG_REQUIRED") return "The server or session is missing configuration named in the message. Set it via env, or call `ethora-configure` for per-session credentials. `ethora-doctor` lists what is missing."
   if (code === "VALIDATION_ERROR") return "The message names the argument to fix. Correct it and call again; `search`/`fetch` have the full input reference for every tool."
   if (code === "APP_NOT_SELECTED") return "Call `ethora-app-select` to set the current appId (and optionally appToken)."
