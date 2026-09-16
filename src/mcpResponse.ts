@@ -84,12 +84,16 @@ function inferCodeFromMessage(msg: string) {
 // still carried in `details`.
 const RAW_MESSAGE_REWRITES: Array<[RegExp, string]> = [
   [/^!refreshRecord$/, "The session credential is no longer valid. It may have been revoked or expired. Authenticate again."],
+  [/^Not found userAcl$/, "The current credential has no access control entry for this app, so the API refused the call. Select an app you own with `ethora-app-select`, or use a credential issued for it."],
+  // axios' own text when the API answers with a status and no body. Naming the
+  // status is more use to a caller than "Request failed with status code N".
+  [/^Request failed with status code (\d+)$/, "The Ethora API returned HTTP $1 with no error body."],
 ]
 
 function humaniseMessage(msg: string): string {
-  const m = String(msg || "")
+  const m = String(msg || "").trim()
   for (const [pattern, replacement] of RAW_MESSAGE_REWRITES) {
-    if (pattern.test(m.trim())) return replacement
+    if (pattern.test(m)) return m.replace(pattern, replacement)
   }
   return m
 }
