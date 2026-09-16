@@ -51,6 +51,7 @@ export const TOOL_TITLES: Record<string, string> = {
   "ethora-widget-embed-snippet": "Widget Embed Snippet",
   "ethora-app-list": "List Apps",
   "ethora-app-create": "Create App",
+  "ethora-app-credentials": "Reveal App Token",
   "ethora-app-update": "Update App",
   "ethora-app-get-default-rooms": "Get Default Rooms",
   "ethora-app-get-default-rooms-with-app-id": "Get Default Rooms for App",

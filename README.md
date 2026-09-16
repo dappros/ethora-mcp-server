@@ -266,6 +266,8 @@ With `ETHORA_B2B_TOKEN` configured, `ethora-auth-use-b2b` switches the session t
 
 ## Security notes
 
+- **Credentials are redacted from tool results.** `appSecret`, `tenantSecret`, `appToken`, passwords and similar keys come back as `[redacted]` from every tool (results enter the model's context and client logs). `ethora-app-credentials { appId, confirm: true }` reveals an app's `appToken` on purpose and needs the `admin` scope over OAuth; the App Secret is only ever shown in the web dashboard API tab. Login, register and the api-key / app-token minting tools still return their credential once by design.
+
 - API keys and personal URLs act as the user until revoked. Keep them in your client's secret store, never in shared config or screenshots, and revoke on suspicion.
 - The server never logs request URLs or tokens. Keep your reverse proxy's access log free of request paths for the MCP host (the monoserver nginx template does).
 - Anything returned by a tool is visible to the model and stored in the conversation transcript; the server tells assistants not to print keys or passwords, and to confirm destructive tools with the user.
