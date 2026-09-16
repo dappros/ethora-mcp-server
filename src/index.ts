@@ -35,6 +35,7 @@ const { isHostedMode } = await import("./session.js")
 const { instructionsFor } = await import("./instructions.js")
 const { applyScopeGuard } = await import("./scopeGuard.js")
 const { applyToolMeta, removeStdioOnlyTools } = await import("./toolTitles.js")
+const { applyAgentIdAliases } = await import("./agentIdAliases.js")
 
 const SERVER_NAME = "Ethora MCP Server"
 const SERVER_VERSION = "26.9.1"
@@ -54,8 +55,10 @@ export function buildServer(profile?: "open" | "authenticated" | "oauth") {
   // the stdio CLI keeps it behind ETHORA_MCP_ENABLE_DANGEROUS_TOOLS.
   if (isHostedMode()) removeStdioOnlyTools(server)
   // Titles + explicit annotation booleans on every tool (directory requirements),
-  // then the scope guard, which reads the normalised annotations.
+  // then the agent-id aliases, then the scope guard, which reads the normalised
+  // annotations and must wrap the outermost callback.
   applyToolMeta(server)
+  applyAgentIdAliases(server)
   applyScopeGuard(server)
   return server
 }

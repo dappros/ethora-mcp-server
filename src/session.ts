@@ -41,6 +41,15 @@ export type SessionContext = {
   // "oauth": /mcp/oauth (bearer required, scopes enforced, auth tools hidden).
   entry: "open" | "oauth"
   oauth?: SessionOAuth
+  // The Bearer header is re-applied on every request so a long-lived client
+  // keeps working after an idle eviction. That used to silently undo an
+  // in-session `ethora-auth-use-b2b` / `ethora-configure`, which reported
+  // success while every later call still ran as the header's identity.
+  // `explicitAuthMode` records that a tool chose the mode deliberately; the
+  // header then stops overwriting it until its value actually changes
+  // (`headerToken` is what was last seen, so a rotated key still takes effect).
+  explicitAuthMode?: boolean
+  headerToken?: string
 }
 
 export function createSessionContext(id?: string): SessionContext {

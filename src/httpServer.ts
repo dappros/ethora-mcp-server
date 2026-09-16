@@ -58,6 +58,14 @@ function extractBearer(authorization: string | undefined): string {
 export function applyBearerToSession(session: SessionContext, authorization: string | undefined) {
   const jwt = extractBearer(authorization)
   if (!jwt) return
+  // A tool in this session picked the auth mode deliberately (auth-use-*,
+  // configure, app-select). Leave it alone while the header is the same one we
+  // already applied; a changed header value means the client swapped identity
+  // and wins again.
+  const sameHeaderAsBefore = session.headerToken === jwt
+  if (session.explicitAuthMode && sameHeaderAsBefore) return
+  if (!sameHeaderAsBefore) session.explicitAuthMode = false
+  session.headerToken = jwt
   const payload = decodeJwtPayload(jwt)
   const data = payload?.data || {}
   const type = String(data.type || "").toLowerCase()
