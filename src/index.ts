@@ -39,7 +39,7 @@ const { applyAgentIdAliases } = await import("./agentIdAliases.js")
 const { applyToolContext } = await import("./toolContext.js")
 
 const SERVER_NAME = "Ethora MCP Server"
-const SERVER_VERSION = "26.9.1"
+const SERVER_VERSION = "26.9.2"
 
 export function buildServer(profile?: "open" | "authenticated" | "oauth") {
   // In HTTP mode this runs once per session, after setHostedMode(true); the
