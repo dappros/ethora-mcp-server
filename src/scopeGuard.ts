@@ -5,6 +5,18 @@ import { fail } from "./mcpResponse.js"
 export const ALL_SCOPES = ["read", "write", "admin"] as const
 export type Scope = (typeof ALL_SCOPES)[number]
 
+// OIDC scopes. They carry no tool permissions, so they stay out of ALL_SCOPES
+// and out of the guard: a token holding only `openid email` still gets no
+// access to anything. They exist so a client knows it may ask for identity,
+// which ChatGPT requires before it will call /oauth/userinfo.
+export const OIDC_SCOPES = ["openid", "email"] as const
+
+// What the metadata documents advertise, as distinct from what the guard
+// enforces. The authorisation server already advertises this set; the
+// protected resource metadata has to agree, because a client reads the PRM
+// first to decide what to request.
+export const ADVERTISED_SCOPES = [...ALL_SCOPES, ...OIDC_SCOPES] as const
+
 // Tools that establish or inspect identity / docs and never touch user data.
 export const SCOPE_EXEMPT_TOOLS = new Set([
   "search",
