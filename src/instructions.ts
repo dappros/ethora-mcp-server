@@ -13,6 +13,7 @@ export const HOSTED_INSTRUCTIONS = [
   "App credentials are never included in tool results: appSecret, tenantSecret, appToken and passwords come back as [redacted]. When a snippet or config needs the appToken, call `ethora-app-credentials { appId, confirm: true }`; the App Secret is only available in the web dashboard API tab.",
   "Tools marked destructive delete data owned by the authenticated user (apps, agents, users, files); confirm with the user before calling them.",
   "Manage keys with `ethora-api-key-create`, `ethora-api-key-list` and `ethora-api-key-revoke`. Each MCP session is private: nothing from another client's session is visible here.",
+  "If a tool fails in a way the user should know about, or something is missing or wrong, offer to report it with `ethora-feedback-submit`; it reaches the Ethora team and attaches this session's recent errors automatically.",
   "After registering or creating a key, give the user their `connectorUrl` (returned alongside the key): pasting it as a custom connector in Claude.ai or ChatGPT reconnects them authenticated in every future conversation with no login step.",
 ].join("\n")
 
@@ -37,6 +38,7 @@ const AUTHENTICATED_COMMON = [
   "Tools marked destructive delete data owned by the user (apps, agents, users, files); confirm with the user before calling them.",
   "Each MCP session is private: nothing from another client's session is visible here.",
   "App credentials are never included in tool results: appSecret, tenantSecret, appToken and passwords come back as [redacted]. When a snippet or config needs the appToken, call `ethora-app-credentials { appId, confirm: true }`; the App Secret is only available in the web dashboard API tab.",
+  "If a tool fails in a way the user should know about, or something is missing or wrong, offer to report it with `ethora-feedback-submit`; it reaches the Ethora team and attaches this session's recent errors automatically.",
 ]
 
 export const OAUTH_INSTRUCTIONS = [

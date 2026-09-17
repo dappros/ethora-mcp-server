@@ -36,6 +36,7 @@ const { instructionsFor } = await import("./instructions.js")
 const { applyScopeGuard } = await import("./scopeGuard.js")
 const { applyToolMeta, removeStdioOnlyTools } = await import("./toolTitles.js")
 const { applyAgentIdAliases } = await import("./agentIdAliases.js")
+const { applyToolContext } = await import("./toolContext.js")
 
 const SERVER_NAME = "Ethora MCP Server"
 const SERVER_VERSION = "26.9.1"
@@ -59,6 +60,8 @@ export function buildServer(profile?: "open" | "authenticated" | "oauth") {
   // annotations and must wrap the outermost callback.
   applyToolMeta(server)
   applyAgentIdAliases(server)
+  // Records the executing tool so outbound API calls carry X-Ethora-Tool.
+  applyToolContext(server)
   applyScopeGuard(server)
   return server
 }

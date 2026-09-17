@@ -4,6 +4,10 @@ All notable changes to this package are documented here. For cross-SDK release n
 
 ## Unreleased
 
+### Added
+- `ethora-feedback-submit`: send feedback (bug / unexpected / feature / docs) to the Ethora team from inside a session. The session's last few tool failures - tool name, error code, API request id - are attached automatically, so a report joins straight to the server-side log instead of arriving as a paraphrase. Works anonymously, so a problem that blocks sign-up can still be reported, and is exempt from OAuth scope so a read-only grant can still report a problem. A `Feedback` entry was added to the `search` / `fetch` docs corpus.
+- Usage attribution: outbound API calls now carry `X-Ethora-Client: mcp/<version>` and `X-Ethora-Tool: <tool>`, which the API records as `client` and `source: mcp:<tool>` so MCP traffic can be told apart from the web app and counted per tool. Public unauthenticated endpoints (`/ping`, `/apps/get-config`) stay unattributed.
+
 ### Security
 - Tool results no longer include app credentials: `appSecret`, `tenantSecret`, `appToken`, passwords and similar keys are replaced with `[redacted]` at any depth (`src/redact.ts`), for every tool except the ones that exist to hand over a credential once (login, register, api-key-create, app-tokens create/rotate). New tool `ethora-app-credentials { appId, confirm: true }` reveals an app's `appToken` deliberately (requires the `admin` scope on `/mcp/oauth`); the App Secret is never returned over MCP. New docs entry `doc:credentials`.
 
