@@ -2,20 +2,31 @@
 
 All notable changes to this package are documented here. For cross-SDK release notes, see [ethora/RELEASE-NOTES.md](https://github.com/dappros/ethora/blob/main/RELEASE-NOTES.md).
 
-## Unreleased
+## 26.9.2 - 2026-09-17
 
 ### Added
 - `ethora-feedback-submit`: send feedback (bug / unexpected / feature / docs) to the Ethora team from inside a session. The session's last few tool failures - tool name, error code, API request id - are attached automatically, so a report joins straight to the server-side log instead of arriving as a paraphrase. Works anonymously, so a problem that blocks sign-up can still be reported, and is exempt from OAuth scope so a read-only grant can still report a problem. A `Feedback` entry was added to the `search` / `fetch` docs corpus.
 - Usage attribution: outbound API calls now carry `X-Ethora-Client: mcp/<version>` and `X-Ethora-Tool: <tool>`, which the API records as `client` and `source: mcp:<tool>` so MCP traffic can be told apart from the web app and counted per tool. Public unauthenticated endpoints (`/ping`, `/apps/get-config`) stay unattributed.
+- `GET /.well-known/openai-apps-challenge` serves `ETHORA_MCP_OPENAI_APPS_CHALLENGE` for OpenAI apps domain verification.
+- Agent flows over MCP: `flowsYaml` on `ethora-agents-create-v2` and `ethora-agents-update-v2` (empty string clears the script), with the authoring reference in the docs corpus as `doc:agent-flows` so a model can read the format before writing one. `FLOWS_INVALID` now says what failed and that nothing was saved.
+- 64 tool descriptions gain a `Requires:` line naming their prerequisite tools; the envelope `meta` carries `sessionId` and `hosted` alongside `currentAppId` and `authMode` so a model can notice session drift.
 
 ### Security
 - Tool results no longer include app credentials: `appSecret`, `tenantSecret`, `appToken`, passwords and similar keys are replaced with `[redacted]` at any depth (`src/redact.ts`), for every tool except the ones that exist to hand over a credential once (login, register, api-key-create, app-tokens create/rotate). New tool `ethora-app-credentials { appId, confirm: true }` reveals an app's `appToken` deliberately (requires the `admin` scope on `/mcp/oauth`); the App Secret is never returned over MCP. New docs entry `doc:credentials`.
 
 ### Changed
 - Directory compliance: every tool now has a human `title` (top-level and `annotations.title`, see `src/toolTitles.ts`) and explicit `readOnlyHint` / `destructiveHint` / `openWorldHint` booleans; `ethora-wallet-erc20-transfer` is no longer offered on the hosted server (stdio only). The discovery document (`/.well-known/mcp`, `/`) publishes `auth` as an object (`open` + `oauth`) plus `description`, `stdio`, `vendor`, `contact`, matching the website copy.
+- `ethora-wallet-get-balance` joins the transfer tool as stdio-only: the underlying lookup has no bounded timeout and a tool that never returns stalls the client's turn.
+- Errors thrown by the tool layer itself (missing tokens, wrong auth mode, room or argument problems, missing configuration) are classified by family instead of falling back to `INTERNAL_ERROR`; a tool can also set its own UPPER_SNAKE code.
 
-### Added
-- `GET /.well-known/openai-apps-challenge` serves `ETHORA_MCP_OPENAI_APPS_CHALLENGE` for OpenAI apps domain verification.
+### Fixed
+- `ethora-app-update` advertised `appDescription`; the API field is `appTagline` (the old name is kept as a deprecated alias).
+- The crawl and reindex `-wait` tools reported `done: true` while the job was still queued; they now poll to a terminal status, with a default budget of 45s so the call fits inside a typical MCP client timeout.
+- Every agent tool accepts both `agentId` and `agentIdOrAddress`, applied centrally so new agent tools inherit it.
+- An explicit `ethora-auth-use-*` or `ethora-configure` choice was silently undone by the Bearer header being re-applied on the next request.
+- `ethora-bot-widget-v2` on an API-created app returned a bare `HTTP_404`; it now returns `LEGACY_WIDGET_NOT_CONFIGURED` pointing at the widget snippet tool.
+- `ethora-agents-import-v2` declares a typed bundle instead of `z.any()`, so an empty call is rejected at the protocol layer instead of reaching the API.
+- Joi `is not allowed` / `is required` messages, `Not found userAcl` and axios' `Request failed with status code N` are rewritten into plain explanations.
 
 ## 26.9.1 - 2026-09-15
 
