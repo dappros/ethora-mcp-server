@@ -101,6 +101,7 @@ import {
     userLogin,
     userRegistration,
     apiKeyCreate,
+    feedbackSubmit,
     apiKeyList,
     apiKeyRevoke,
     usersBatchCreateJobV2,
@@ -110,9 +111,10 @@ import {
     rememberAppToken,
     appTokenFor,
 } from "./apiClientEthora.js"
-import { appConfig } from "./config.js"
+import { appConfig, MCP_VERSION } from "./config.js"
 import { fail, ok } from "./mcpResponse.js"
 import { redactSecrets } from "./redact.js"
+import { getSession, pushRecentError, isHostedMode } from "./session.js"
 import { ensureTenantActorAuth, splitRoomJid } from "./routeAuth.js"
 import { connectorUrl, CONNECTOR_URL_NOTE } from "./publicUrl.js"
 
@@ -149,6 +151,17 @@ function asToolResult(envelope: any): CallToolResult {
         if (envelope.error && envelope.error.details !== undefined) {
             envelope = { ...envelope, error: { ...envelope.error, details: redactSecrets(envelope.error.details) } }
         }
+    }
+    // Remember failures so `ethora-feedback-submit` can report them without the
+    // caller having to retype what went wrong. Post-redaction on purpose.
+    if (envelope?.ok === false && envelope.error) {
+        pushRecentError({
+            tool: String(tool || "unknown"),
+            code: envelope.error.code ? String(envelope.error.code) : undefined,
+            message: String(envelope.error.message || "").slice(0, 400),
+            requestId: envelope.error.requestId ? String(envelope.error.requestId) : undefined,
+            ts: Date.now(),
+        })
     }
     return { content: [{ type: "text", text: JSON.stringify(envelope) }] }
 }
@@ -750,6 +763,7 @@ function helpTool(server: McpServer) {
                         "Start with user auth for local manual exploration; use B2B + app-token for repeatable automation.",
                         "Tip: use goal='broadcast', goal='b2b-bootstrap-ai', or goal='chat-test' to tailor recommendations.",
                         "Dangerous tools are deny-by-default; see ETHORA_MCP_ENABLE_DANGEROUS_TOOLS in README.",
+                        "If something here is broken, behaves unexpectedly or is missing, report it with `ethora-feedback-submit` — it reaches the Ethora team and attaches this session's recent errors.",
                     ],
                 }, meta))
             } catch (error) {
@@ -1743,6 +1757,59 @@ function userRegisterWithEmailTool(server: McpServer) {
     )
 }
 
+
+function feedbackSubmitTool(server: McpServer) {
+    server.registerTool(
+        "ethora-feedback-submit",
+        {
+            title: "Send Feedback",
+            description: "Send feedback about Ethora to the Ethora team: something that does not work, behaves differently from what the tool description promised, is missing, or is badly documented. It reaches the team directly, so prefer it over guessing or silently giving up when a tool fails. Recent failures in this session (tool, error code, request id) are attached automatically when `includeRecentErrors` is true, which is what makes a report from here more useful than a web form: the team can join it to the server-side log. Works whether or not you are signed in, so a problem that blocks sign-up can still be reported. Do not put credentials, API keys or end-user personal data in `message`; credential-shaped values in the attached context are redacted before sending.\nRequires: nothing.\nAuth: none. Works anonymously; when the session is authenticated the report is attributed to that account. Errors: 422 if `message` is shorter than 5 characters or looks like spam; 429 if too many reports were sent from this address.",
+            annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+            inputSchema: {
+                category: z.enum(["bug", "unexpected", "feature", "docs", "other"]).optional().describe("What kind of report this is: `bug` (something is broken), `unexpected` (it works but not as described), `feature` (a request), `docs` (a description or guide is wrong or missing), `other`. Defaults to `other`."),
+                message: z.string().min(5).max(4000).describe("What happened, in the user's own words where possible: what was attempted, what was expected, what occurred instead. No credentials or end-user personal data."),
+                email: z.string().optional().describe("Reply address. Only useful when the session is not signed in; an authenticated report already carries the account, so leave this out unless the user offers an address."),
+                includeRecentErrors: z.boolean().optional().describe("Attach this session's last few tool failures (tool name, error code, request id) so the team can trace them. Default true; set false if the report is unrelated to a failure."),
+            },
+        },
+        async function ({ category, message, email, includeRecentErrors }) {
+            const meta = getDefaultMeta("ethora-feedback-submit")
+            try {
+                const session = getSession()
+                const state = getClientState() as any
+                const recent = (session.recentErrors || []).slice()
+                const attach = includeRecentErrors !== false
+                const context = redactSecrets({
+                    mcpVersion: MCP_VERSION,
+                    entryPoint: session.entry,
+                    hosted: isHostedMode(),
+                    sessionId: state.sessionId,
+                    authMode: state.authMode,
+                    currentAppId: state.currentAppId || undefined,
+                    // The tool that failed most recently, which is usually what
+                    // the report is about.
+                    tool: recent.length ? recent[recent.length - 1].tool : undefined,
+                    recentErrors: attach ? recent : undefined,
+                })
+                const resp = await feedbackSubmit({
+                    category: category || "other",
+                    message,
+                    ...(email ? { email } : {}),
+                    context,
+                })
+                const body: any = resp.data || {}
+                const data = body.data || body.result || body
+                return asToolResult(ok({
+                    id: data?.id,
+                    receivedAt: data?.receivedAt,
+                    note: "Sent to the Ethora team. Tell the user it was passed on. To add detail later, send another report referring to the same problem; there is no way to edit one already sent.",
+                }, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
 
 function appCredentialsTool(server: McpServer) {
     server.registerTool(
@@ -4469,6 +4536,7 @@ export function registerTools(server: McpServer) {
     userRegisterWithEmailTool(server);
     apiKeyTools(server);
     appCredentialsTool(server);
+    feedbackSubmitTool(server);
     widgetTools(server);
     appListTool(server);
     appCreateTool(server);

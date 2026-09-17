@@ -1,3 +1,11 @@
+import { createRequire } from "node:module"
+
+// Read from package.json rather than re-declaring the version here: index.ts
+// holds the stamped `SERVER_VERSION` (scripts/sync-version.mjs edits that one
+// file), and importing index.ts from the API client would be circular.
+const pkg = createRequire(import.meta.url)("../package.json") as { version?: string }
+export const MCP_VERSION: string = String(pkg?.version || "unknown")
+
 export function normalizeApiUrl(input: string): string {
   const raw = String(input || "").trim()
   if (!raw) return "https://api.chat.ethora.com/v1"

@@ -32,6 +32,9 @@ export const OAUTH_HIDDEN_TOOLS = new Set([
 // Revealing a credential is read-only in API terms but is an admin action.
 export const SCOPE_OVERRIDES: Record<string, Scope> = {
   "ethora-app-credentials": "admin",
+  // Writes nothing the caller owns and must work on a read-only grant:
+  // being unable to report a problem because of scope would be perverse.
+  "ethora-feedback-submit": "read",
 }
 
 // Required scope for a tool, derived from its annotations (overrides first).

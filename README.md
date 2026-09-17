@@ -113,11 +113,11 @@ The end-to-end journey a new user typically asks for, with the tools in order:
 
 ### Tool groups
 
-90 tools on the hosted server (app deletion and bulk-delete tools are only registered when `ETHORA_MCP_ENABLE_DANGEROUS_TOOLS=true`, which the monoserver deploy sets; the stdio default is off). Every tool carries a human `title` (top-level and in `annotations.title`) and explicit `readOnlyHint`, `destructiveHint` and `openWorldHint` booleans (plus `idempotentHint` where it applies), which is what the Claude and ChatGPT directory reviews require and what lets clients auto-approve reads and confirm the destructive ones.
+91 tools on the hosted server (app deletion and bulk-delete tools are only registered when `ETHORA_MCP_ENABLE_DANGEROUS_TOOLS=true`, which the monoserver deploy sets; the stdio default is off). Every tool carries a human `title` (top-level and in `annotations.title`) and explicit `readOnlyHint`, `destructiveHint` and `openWorldHint` booleans (plus `idempotentHint` where it applies), which is what the Claude and ChatGPT directory reviews require and what lets clients auto-approve reads and confirm the destructive ones.
 
 | Group | Tools |
 |---|---|
-| Session and help | `ethora-status`, `ethora-doctor`, `ethora-help`, `ethora-run-recipe`, `ethora-configure`, `ethora-auth-use-user`, `ethora-auth-use-app`, `ethora-auth-use-b2b` |
+| Session and help | `ethora-status`, `ethora-doctor`, `ethora-help`, `ethora-run-recipe`, `ethora-configure`, `ethora-auth-use-user`, `ethora-auth-use-app`, `ethora-auth-use-b2b`, `ethora-feedback-submit` |
 | Accounts and keys | `ethora-user-register`, `ethora-user-login`, `ethora-api-key-create`, `ethora-api-key-list`, `ethora-api-key-revoke` |
 | Apps | `ethora-app-create`, `ethora-app-list`, `ethora-app-select`, `ethora-app-update`, `ethora-app-delete`, `ethora-app-export-v2`, `ethora-app-import-v2`, `ethora-app-tokens-create-v2`, `ethora-app-tokens-list-v2`, `ethora-app-tokens-rotate-v2`, `ethora-app-tokens-revoke-v2` |
 | Rooms and messages | `ethora-app-create-chat`, `ethora-app-delete-chat`, `ethora-app-get-default-rooms`, `ethora-app-get-default-rooms-with-app-id`, `ethora-chats-message-v2`, `ethora-chats-history-v2`, `ethora-chats-broadcast-v2`, `ethora-chats-broadcast-job-v2`, `ethora-wait-broadcast-job-v2`, `ethora-messages-search-v2`, `ethora-messages-context-v2`, `ethora-unread-counts-v2` |
@@ -263,6 +263,20 @@ With `ETHORA_B2B_TOKEN` configured, `ethora-auth-use-b2b` switches the session t
 | `Not Acceptable` (406) from `/mcp` | The client must accept both `application/json` and `text/event-stream` |
 | Client cannot connect (stdio) | Run `npx -y @ethora/mcp-server` in a terminal and check Node 18 or newer |
 | Hosted server not answering | `GET /healthz`; `appJwtReady: false` means the base app JWT bootstrap failed (check `ETHORA_APP_DOMAIN_NAME` and `ETHORA_API_URL`) |
+
+## Feedback
+
+`ethora-feedback-submit` sends a report (`bug`, `unexpected`, `feature`, `docs`, `other`) to the Ethora team from inside a session. The point of doing this over MCP rather than a web form is context: the session's last few tool failures travel with the report - tool name, error code and the API `requestId` - so a report can be joined to the server-side log entry instead of being re-typed from memory. Set `includeRecentErrors: false` when the report is unrelated to a failure.
+
+It works whether or not the session is authenticated, because the reporter we most need to hear from is the one whose sign-up or credential is the thing that broke; an authenticated report is attributed to that account, and an anonymous one may carry an `email` for a reply. It is also exempt from OAuth scope enforcement, so a read-only grant can still report a problem.
+
+Credential-shaped keys in the attached context are redacted before sending. That is key-based, so it cannot catch a credential pasted into the free-text `message`: the tool description tells the model not to put secrets or end-user personal data there.
+
+Delivery is configured on the API side (`FEEDBACK_EMAIL_TO`, `FEEDBACK_SLACK_WEBHOOK_URL`, `FEEDBACK_RETENTION_DAYS`); the MCP server only submits.
+
+## Usage attribution
+
+Outbound API calls carry `X-Ethora-Client: mcp/<version>` and, for the duration of a tool call, `X-Ethora-Tool: <tool-name>`. The API records these on its request log as `client` and `source: mcp:<tool>`, which is how MCP traffic is separated from the web app and counted per tool. The public unauthenticated endpoints (`/ping`, `/apps/get-config`) are left unattributed.
 
 ## Security notes
 

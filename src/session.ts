@@ -30,6 +30,20 @@ export type SessionOAuth = {
   scopes: Set<string>
 }
 
+// A failure the caller just saw, kept so `ethora-feedback-submit` can report
+// with the context still in hand. This is what makes feedback from an agent
+// worth more than a web form: the tool, the code and the API's requestId are
+// already known, so a report joins straight to the server-side log row.
+export type RecentError = {
+  tool: string
+  code?: string
+  message: string
+  requestId?: string
+  ts: number
+}
+
+export const RECENT_ERRORS_KEPT = 5
+
 export type SessionContext = {
   id: string
   tokens: SessionTokens
@@ -50,6 +64,11 @@ export type SessionContext = {
   // (`headerToken` is what was last seen, so a rotated key still takes effect).
   explicitAuthMode?: boolean
   headerToken?: string
+  // Last few tool failures in this session (ring buffer, newest last).
+  recentErrors?: RecentError[]
+  // Tool currently executing, set by the registration wrapper so outbound API
+  // calls can be attributed (X-Ethora-Tool) without every handler passing it.
+  currentTool?: string
 }
 
 export function createSessionContext(id?: string): SessionContext {
@@ -90,6 +109,21 @@ export function getSession(): SessionContext {
 
 export function runWithSession<T>(session: SessionContext, fn: () => T): T {
   return als.run(session, fn)
+}
+
+/**
+ * Record a tool failure on the current session. Best effort and never throws:
+ * a problem here must not turn a handled error into an unhandled one.
+ */
+export function pushRecentError(entry: RecentError) {
+  try {
+    const session = getSession()
+    const list = session.recentErrors || (session.recentErrors = [])
+    list.push(entry)
+    if (list.length > RECENT_ERRORS_KEPT) list.splice(0, list.length - RECENT_ERRORS_KEPT)
+  } catch {
+    /* never let bookkeeping break a tool result */
+  }
 }
 
 let hosted = false

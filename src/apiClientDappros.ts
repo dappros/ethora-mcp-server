@@ -1,5 +1,5 @@
 import axios from "axios"
-import { appConfig, normalizeApiUrl } from "./config.js"
+import { appConfig, normalizeApiUrl, MCP_VERSION } from "./config.js"
 import { getSession, isHostedMode } from "./session.js"
 
 // `httpTokens` / `ethoraContext` keep their historical shape, but every read
@@ -75,9 +75,33 @@ httpClientDappros.interceptors.request.use((config) => {
     return config;
   }
 
-  // Public, unauthenticated endpoints.
+  // Public, unauthenticated endpoints: no credential and no attribution.
   if (config.url === '/ping' || config.url.startsWith('/apps/get-config')) {
     return config;
+  }
+
+  // Usage attribution. The API's request log stores these as `client` and
+  // `source: mcp:<tool>`, which is how MCP traffic is told apart from the web
+  // app and counted per tool. Set after the public-endpoint bail-outs so an
+  // unauthenticated probe stays anonymous.
+  ;(config.headers as any)["X-Ethora-Client"] = `mcp/${MCP_VERSION}`
+  const currentTool = getSession().currentTool
+  if (currentTool) {
+    ;(config.headers as any)["X-Ethora-Tool"] = currentTool
+  }
+
+  // Feedback is credential-optional: attach whatever the session holds so the
+  // report is attributed when possible, but never refuse to send it. The whole
+  // point is to hear from someone whose credential is the thing that is broken.
+  if (config.url === '/v2/feedback') {
+    if (ethoraContext.authMode === "b2b" && httpTokens.b2bToken) {
+      ;(config.headers as any)["x-custom-token"] = httpTokens.b2bToken
+    } else if (ethoraContext.authMode === "app" && httpTokens.appToken) {
+      config.headers.Authorization = httpTokens.appToken
+    } else if (httpTokens.token) {
+      config.headers.Authorization = httpTokens.token
+    }
+    return config
   }
 
   if (
@@ -299,6 +323,13 @@ export function userRegistration(email: string, firstName: string, lastName: str
 }
 
 // User API keys (long-lived, revocable user tokens for agents / headless clients)
+// Feedback reaches the Ethora team. Deliberately usable with no credential at
+// all: someone who cannot even sign up is exactly the reporter we never hear
+// from, so the API allows an anonymous submission (rate limited, spam guarded).
+export function feedbackSubmit(payload: { category: string; message: string; email?: string; context?: any }) {
+  return httpClientDappros.post(`/v2/feedback`, payload)
+}
+
 export function apiKeyCreate(payload?: { name?: string; ttlDays?: number }) {
   return httpClientDappros.post(`/v2/users/me/api-keys`, payload || {})
 }

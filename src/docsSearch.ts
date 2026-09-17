@@ -44,6 +44,29 @@ For your own backend acting as the app (sent as the \`x-custom-token\` header). 
 revoked in the dashboard API tab, so no code has to hold the App Secret.
 `
 
+const FEEDBACK_MD = `
+# Feedback: reporting a problem or a request
+
+Use \`ethora-feedback-submit\` when something does not work, behaves differently from what a
+tool description promised, is missing, or is documented wrongly. It reaches the Ethora team
+directly. Prefer it over silently giving up: a failure nobody reports is a failure nobody fixes.
+
+## What to send
+\`category\` is one of \`bug\`, \`unexpected\`, \`feature\`, \`docs\`, \`other\`, and \`message\` is what
+was attempted, what was expected and what happened instead, in the user's own words where
+possible.
+
+## What is attached for you
+With \`includeRecentErrors\` (the default) the session's last few tool failures travel with the
+report: the tool name, the error code and the API request id. That is why a report from here is
+worth more than a web form, since the team can join it straight to the server-side log entry.
+
+## Rules
+Works signed in or not, so a problem that blocks sign-up can still be reported; when signed in
+the report is attributed to that account. Never put credentials, API keys or end-user personal
+data in \`message\`. Credential-shaped values in the attached context are redacted before sending.
+`
+
 const API_KEYS_MD = `
 ## API keys (hosted MCP server)
 
@@ -114,6 +137,7 @@ function buildCorpus(server: McpServer): Doc[] {
     { id: "doc:hosted-guide", title: "Ethora MCP: getting started (hosted server)", text: HOSTED_INSTRUCTIONS, url: README_URL, kind: "doc", guide: true },
     ...splitMarkdown("api-keys", "API keys", API_KEYS_MD).map((d) => ({ ...d, guide: true })),
     ...splitMarkdown("credentials", "Credentials: which one for what", CREDENTIALS_MD).map((d) => ({ ...d, guide: true })),
+    ...splitMarkdown("feedback", "Feedback: reporting a problem or a request", FEEDBACK_MD).map((d) => ({ ...d, guide: true })),
     ...splitMarkdown("auth-map", "Ethora auth map", AUTH_MAP_MD),
     ...splitMarkdown("chat-component-quickstart", "Chat component quickstart", CHAT_COMPONENT_QUICKSTART_MD),
     ...splitMarkdown("sdk-backend-quickstart", "Backend SDK quickstart", BACKEND_SDK_QUICKSTART_MD),

@@ -10,7 +10,7 @@ export const REDACTED = "[redacted]"
 export const REDACTED_APP_TOKEN = "[redacted - call ethora-app-credentials to reveal appToken]"
 
 // Exact key names (case-insensitive) that always carry a credential.
-const EXACT_KEYS = /^(appSecret|tenantSecret|appToken|password|secret|privateKey|mnemonic|seed|refreshToken|accessToken|jwt|apiKey)$/i
+const EXACT_KEYS = /^(appSecret|tenantSecret|appToken|appJwt|b2bToken|token|authToken|idToken|serverToken|password|secret|privateKey|mnemonic|seed|refreshToken|accessToken|jwt|apiKey|api_key|clientSecret)$/i
 // Suffix match for compound names such as systemChatPassword, sqlSecret, walletPrivateKey.
 const SUFFIX_KEYS = /(secret|password|privateKey|mnemonic)$/i
 
