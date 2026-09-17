@@ -6,7 +6,7 @@ import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js"
 import { appConfig } from "./config.js"
 import { createSessionContext, runWithSession, setHostedMode, SessionContext } from "./session.js"
 import { fetchAppJwtByDomainName, usersMe } from "./apiClientDappros.js"
-import { ALL_SCOPES, hideOAuthTools, parseScopes } from "./scopeGuard.js"
+import { ALL_SCOPES, ADVERTISED_SCOPES, hideOAuthTools, parseScopes } from "./scopeGuard.js"
 
 type Entry = {
   server: McpServer
@@ -158,7 +158,7 @@ export async function startHttpServer(opts: HttpServerOptions) {
     auth: {
       open: "Connect to endpoint and call ethora-user-register or ethora-user-login; both return a revocable API key, sent as Authorization: Bearer <key> or embedded in personalUrl.",
       ...(authIssuer
-        ? { oauth: { authorizationServer: authIssuer, protectedResourceMetadata: prmUrl, scopes: [...ALL_SCOPES] } }
+        ? { oauth: { authorizationServer: authIssuer, protectedResourceMetadata: prmUrl, scopes: [...ADVERTISED_SCOPES] } }
         : {}),
     },
     personalUrl: `${publicBase}/mcp/k/<api-key>`,
@@ -176,7 +176,7 @@ export async function startHttpServer(opts: HttpServerOptions) {
     resource: oauthEndpoint,
     authorization_servers: [authIssuer],
     bearer_methods_supported: ["header"],
-    scopes_supported: [...ALL_SCOPES],
+    scopes_supported: [...ADVERTISED_SCOPES],
     resource_name: opts.name,
     resource_documentation: "https://github.com/dappros/ethora-mcp-server#readme",
   })
