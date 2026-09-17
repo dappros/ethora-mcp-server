@@ -1,21 +1,30 @@
-# Ethora plugin for Claude Code
+# Ethora plugin for Claude
 
-Build and operate [Ethora](https://ethora.com) chat applications and AI agents from Claude Code.
+Build and operate [Ethora](https://ethora.com) chat applications and AI agents from Claude Code and
+Claude Cowork.
 
 Ethora is an open-source chat and messaging platform with a built-in AI agent framework. This plugin
-connects Claude Code to the hosted Ethora MCP server, so you can create applications, provision
-users, open chat rooms, send messages, configure RAG-backed AI agents, script deterministic
-conversation flows and generate an embeddable website chat widget, without leaving the session.
+connects Claude to the hosted Ethora MCP server, so you can create applications, provision users,
+open chat rooms, send messages, configure RAG-backed AI agents, script deterministic conversation
+flows and generate an embeddable website chat widget, without leaving the session.
+
+Everything it ships is portable across surfaces: two skills and one remote MCP server, reached over
+HTTPS. There are no hooks, no sub-agents and no local binaries, so nothing greys out in chat.
 
 ## Install
 
+From this repository, on either surface:
+
 ```
-/plugin marketplace add anthropics/claude-plugins-community
-/plugin install ethora@claude-community
+/plugin marketplace add dappros/ethora-mcp-server
+/plugin install ethora@dappros
 ```
 
-On first use Claude Code opens an Ethora consent page in your browser. Sign in, or create an account
-there, and the connection completes. You never paste a credential into a config file.
+In Cowork, open the Cowork tab first, then Customize, then Plugins.
+
+On first use Claude opens an Ethora consent page in your browser. Sign in, or create an account
+there, and the connection completes. You never paste a credential into a config file. `SETUP.md`
+walks Claude through that and through the usual failure cases.
 
 ## What you get
 
