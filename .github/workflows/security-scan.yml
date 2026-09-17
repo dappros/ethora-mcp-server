@@ -13,15 +13,76 @@ jobs:
     name: gitleaks (secrets)
     runs-on: ubuntu-latest
     continue-on-error: true
+    env:
+      # The gitleaks GitHub Action requires a paid licence key for repositories
+      # owned by an organisation, so every run failed on "missing gitleaks
+      # license" regardless of the diff. The scanner itself is MIT licensed, so
+      # install the release binary and call it directly.
+      GITLEAKS_VERSION: "8.30.1"
     steps:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      - name: Run gitleaks (report-only)
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "true"
-          GITLEAKS_ENABLE_SUMMARY: "true"
+
+      - name: Install gitleaks
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -sSfL \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            -o /tmp/gitleaks.tar.gz
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+          sudo install -m 0755 /tmp/gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+
+      - name: Scan the working tree
+        shell: bash
+        run: |
+          set -uo pipefail
+          # Exits non-zero when a secret is found. The job stays report-only
+          # through continue-on-error above, as it was with the action.
+          gitleaks dir . \
+            --redact \
+            --no-banner \
+            --report-format json \
+            --report-path gitleaks-report.json
+
+      - name: Summarise findings
+        if: always()
+        shell: bash
+        run: |
+          set -uo pipefail
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json, os
+
+          print("## gitleaks (report-only)\n")
+          try:
+              findings = json.load(open("gitleaks-report.json"))
+          except Exception:
+              print("The scan did not produce a report.")
+              raise SystemExit(0)
+
+          if not findings:
+              print("No secrets detected in the working tree.")
+              raise SystemExit(0)
+
+          print(f"**{len(findings)} potential secret(s) detected.** Values are "
+                "redacted here; the full report is attached as an artifact.\n")
+          print("| Rule | File | Line |")
+          print("| --- | --- | --- |")
+          for f in findings[:50]:
+              print(f"| {f.get('RuleID', '')} | `{f.get('File', '')}` | {f.get('StartLine', '')} |")
+          if len(findings) > 50:
+              print(f"\n...and {len(findings) - 50} more.")
+          PY
+
+      - name: Upload the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitleaks-report
+          path: gitleaks-report.json
+          if-no-files-found: ignore
 
   semgrep:
     name: semgrep (sast)
@@ -33,4 +94,3 @@ jobs:
         uses: semgrep/semgrep-action@v1
         with:
           config: "auto"
-
