@@ -2,6 +2,16 @@
 
 All notable changes to this package are documented here. For cross-SDK release notes, see [ethora/RELEASE-NOTES.md](https://github.com/dappros/ethora/blob/main/RELEASE-NOTES.md).
 
+## 26.9.3 - 2026-09-17
+
+### Added
+- The protected-resource metadata and the discovery document advertise the `openid` and `email` identity scopes alongside `read`, `write` and `admin`, matching what the Ethora authorization server offers, so directory validators that compare the two see the same list.
+- Discovery carries `privacyPolicy`, and the server answers `GET /robots.txt`.
+- A Claude Code plugin for the hosted server (`claude-plugin/`, with quickstart and agent-flows skills) and a marketplace manifest so it installs in Cowork.
+
+### Changed
+- CI secret scan runs the open-source gitleaks CLI instead of the licensed action.
+
 ## 26.9.2 - 2026-09-17
 
 ### Added
