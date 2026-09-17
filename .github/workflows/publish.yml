@@ -144,19 +144,25 @@ jobs:
 
       - name: Verify the registry entry
         run: |
-          sleep 5
-          curl -fsS "https://registry.modelcontextprotocol.io/v0/servers?search=io.github.dappros/ethora-mcp-server" \
-            | node -e '
-              let raw = "";
-              process.stdin.on("data", (c) => (raw += c));
-              process.stdin.on("end", () => {
-                const want = process.env.VERSION;
-                const entries = (JSON.parse(raw).servers || []).map((e) => e.server || e);
-                const hit = entries.find((s) => s.version === want);
-                if (!hit) {
-                  console.error(`::error::${want} is not visible in the MCP Registry, found: ${entries.map((s) => s.version).join(", ") || "nothing"}`);
-                  process.exit(1);
-                }
-                console.log(`MCP Registry is serving ${hit.name} ${hit.version}`);
-              });
-            '
+          # The registry indexes a new version a little after publish returns;
+          # 26.9.3 was live within a minute but the first look, 5s in, missed it.
+          for attempt in $(seq 1 12); do
+            found=$(curl -fsS "https://registry.modelcontextprotocol.io/v0/servers?search=io.github.dappros/ethora-mcp-server&version=latest" \
+              | node -e '
+                let raw = "";
+                process.stdin.on("data", (c) => (raw += c));
+                process.stdin.on("end", () => {
+                  const entries = (JSON.parse(raw).servers || []).map((e) => e.server || e);
+                  const hit = entries.find((s) => s.version === process.env.VERSION);
+                  console.log(hit ? `${hit.name} ${hit.version}` : "");
+                });
+              ')
+            if [ -n "$found" ]; then
+              echo "MCP Registry is serving ${found}"
+              exit 0
+            fi
+            echo "attempt ${attempt}/12: ${VERSION} not visible yet, waiting 10s"
+            sleep 10
+          done
+          echo "::error::${VERSION} is not visible in the MCP Registry after 2 minutes"
+          exit 1
