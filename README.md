@@ -13,13 +13,14 @@ The MCP server for **Ethora**, an open-source chat and messaging platform with a
 **Part of the [Ethora SDK ecosystem](https://github.com/dappros/ethora#ecosystem)**. Cross-SDK updates: [Release Notes](https://github.com/dappros/ethora/blob/main/RELEASE-NOTES.md). Package changes: [CHANGELOG.md](./CHANGELOG.md).
 
 - npm: <https://www.npmjs.com/package/@ethora/mcp-server>
+- MCP Registry: `io.github.dappros/ethora-mcp-server` (<https://registry.modelcontextprotocol.io/>)
 - Ethora API (Swagger): <https://api.chat.ethora.com/api-docs/#/>
 
 ## Three ways to use it
 
 | | Where it runs | Best for |
 |---|---|---|
-| **Hosted (Ethora Cloud)** | `https://mcp.chat.ethora.com/mcp` (production rollout in progress; `https://mcp.chat-qa.ethora.com/mcp` is the QA instance) | Claude.ai, ChatGPT, Claude Code, Cursor and agents that talk to Ethora Cloud with no local install |
+| **Hosted (Ethora Cloud)** | `https://mcp.chat.ethora.com/mcp` (production; `https://mcp.chat-qa.ethora.com/mcp` is the QA instance) | Claude.ai, ChatGPT, Claude Code, Cursor and agents that talk to Ethora Cloud with no local install |
 | **Self-hosted** | Ships with the Ethora monoserver deploy; enable `services.mcp.enabled` in `deploy.yml` and it is served at `mcp.<your domain>/mcp` | Dedicated or on-premise Ethora installs; agent traffic never leaves your infrastructure |
 | **stdio CLI** | `npx -y @ethora/mcp-server` on your machine, configured with env vars | Local development, CI, and clients that launch a command |
 
@@ -68,7 +69,7 @@ Then ask your agent to call `ethora-status`, `ethora-user-login` (or `ethora-use
 |---|---|---|
 | `/mcp` | Nobody at connect time. Call `ethora-user-login` or `ethora-user-register` inside the session, or send `Authorization: Bearer <token>` on every request (user API key, app token or B2B token; the server picks the auth mode from the token type) | Agents, Claude Code, Cursor, connectors added as "no auth" |
 | `/mcp/k/<api-key>` | The key in the path, applied like a Bearer header | Claude.ai and ChatGPT custom connectors, which take a URL but no headers |
-| `/mcp/oauth` | An OAuth 2.1 access token obtained through the Ethora authorization server (dynamic client registration, PKCE, scopes `read`, `write`, `admin`) | Connector directories; vendors run the login flow themselves |
+| `/mcp/oauth` | An OAuth 2.1 access token obtained through the Ethora authorization server (dynamic client registration, PKCE, access scopes `read`, `write`, `admin`, plus the identity scopes `openid` and `email` for directories that require them) | Connector directories (Claude, ChatGPT); vendors run the login flow themselves |
 | stdio | Env vars `ETHORA_APP_JWT` (login/register bootstrap) and optional `ETHORA_B2B_TOKEN`, or `ethora-configure` at runtime | Local CLI |
 
 Stay in **user auth mode** on the hosted server (`ethora-status` shows `authMode: user`). App-token and B2B modes exist for server integrations; the agents and rooms routes reject app tokens.
@@ -89,7 +90,11 @@ Set `ETHORA_MCP_AUTH_ISSUER` to the public URL of the Ethora API that hosts the 
 - validates each token against the API once per session (cached five minutes) and enforces the token's `scope` per tool: read-only tools need `read`, destructive tools need `admin`, everything else needs `write`. `search`, `fetch`, `ethora-help`, `ethora-status` and `ethora-doctor` need no scope. Tokens without a scope claim (API keys) get full access;
 - hides the identity tools (`ethora-user-login`, `ethora-user-register`, `ethora-configure`, `ethora-auth-use-app`, `ethora-auth-use-user`, `ethora-api-key-create`, `ethora-api-key-list`, `ethora-api-key-revoke`) because the token already fixes who you are.
 
-The authorization server itself is part of the Ethora backend: `<issuer>/.well-known/oauth-authorization-server`, `/oauth/register`, `/oauth/authorize` (a consent page with sign-in, account creation and Google sign-in), `/oauth/token` and `/oauth/revoke`. Users see and disconnect OAuth grants under Account, AI Assistants, Connected AI apps. When `ETHORA_MCP_AUTH_ISSUER` is unset, both OAuth routes return 404 and discovery omits them.
+The authorization server itself is part of the Ethora backend: `<issuer>/.well-known/oauth-authorization-server`, `/oauth/register`, `/oauth/authorize` (a consent page with sign-in, account creation and Google sign-in), `/oauth/token`, `/oauth/revoke` and `/oauth/userinfo`. Users see and disconnect OAuth grants under Account, AI Assistants, Connected AI apps. When `ETHORA_MCP_AUTH_ISSUER` is unset, both OAuth routes return 404 and discovery omits them.
+
+**Identity scopes.** Some directories (ChatGPT) require the minimal OpenID Connect surface on top of OAuth 2.1: the `openid` and `email` scopes and a `userinfo` endpoint that returns `sub`, `email` and `email_verified`. These scopes grant no access to apps or data; they only let the client see who signed in, and the consent page says so in plain words. There are no ID tokens or JWKS, because nothing consumes them.
+
+**Email confirmation is optional.** Ethora never blocks sign-up or the dashboard on a confirmed address. When a client asks for the identity scopes and the account's address is not yet confirmed, the consent page adds one step: send the confirmation link, continue after confirming, or continue without sharing the address (the identity scopes are dropped from the grant and everything else proceeds). Google sign-ins arrive confirmed and skip the step. The same confirmation can be sent from Account, AI Assistants in the web app.
 
 ## What agents can do
 
@@ -261,6 +266,7 @@ With `ETHORA_B2B_TOKEN` configured, `ethora-auth-use-b2b` switches the session t
 | `BOT_NOT_INITIALIZED` (422) from `ethora-bot-*` | The app has no legacy per-app bot; use the agents tools instead |
 | `AGENT_NOT_FOUND` or `APP_NOT_FOUND` (404) | Wrong id or the app was not selected; `ethora-app-select` first, or pass `appId` |
 | `Not Acceptable` (406) from `/mcp` | The client must accept both `application/json` and `text/event-stream` |
+| Consent page says `Social sign-in failed (auth/...)` | The Firebase code in parentheses names the cause (the browser console has the full error). `auth/popup-blocked`: allow popups for the API host. A message with no code was fixed in the backend on 2026-09-17; update if you self-host |
 | Client cannot connect (stdio) | Run `npx -y @ethora/mcp-server` in a terminal and check Node 18 or newer |
 | Hosted server not answering | `GET /healthz`; `appJwtReady: false` means the base app JWT bootstrap failed (check `ETHORA_APP_DOMAIN_NAME` and `ETHORA_API_URL`) |
 
