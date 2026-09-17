@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "ethora": {
+      "type": "http",
+      "url": "https://mcp.chat.ethora.com/mcp/oauth"
+    }
+  }
+}
