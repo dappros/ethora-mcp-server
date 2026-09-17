@@ -166,6 +166,9 @@ export async function startHttpServer(opts: HttpServerOptions) {
     stdio: { package: "@ethora/mcp-server", command: "npx -y @ethora/mcp-server" },
     vendor: "Dappros Ltd",
     contact: "https://ethora.com/contact/",
+    // Directory reviews and agent crawlers read this document, not the website
+    // copy, so the policy has to be reachable from here too.
+    privacyPolicy: "https://ethora.com/privacy-policy-mcp/",
     // Public API base for humans/agents reading this document; the server itself
     // may talk to the API over loopback, which must not leak here.
     apiUrl: appConfig.publicApiUrl || appConfig.apiUrl,
@@ -190,6 +193,22 @@ export async function startHttpServer(opts: HttpServerOptions) {
   app.get("/", (_req, res) => { res.json(discovery()) })
   app.get("/.well-known/mcp", (_req, res) => { res.json(discovery()) })
   app.get("/healthz", (_req, res) => { res.json({ ok: true, sessions: sessions.size, version: opts.version, appJwtReady: Boolean(appConfig.appJwt), oauth: Boolean(authIssuer) }) })
+  // A missing robots.txt means "allow", but it answers as an HTML 404 page,
+  // which is a poor first impression on a host we want crawled and indexed.
+  // Say allow explicitly and point at the discovery document.
+  app.get("/robots.txt", (_req, res) => {
+    res.type("text/plain").send(
+      [
+        "User-agent: *",
+        "Allow: /",
+        "",
+        "# Ethora MCP Server, Streamable HTTP transport.",
+        `# Discovery: ${publicBase}/.well-known/mcp`,
+        "# Docs: https://ethora.com/ai-sdk/mcp-server/",
+        "",
+      ].join("\n")
+    )
+  })
 
   const prmHandler = (_req: Request, res: Response) => {
     if (!authIssuer) { res.status(404).json({ error: "oauth_not_configured" }); return }
