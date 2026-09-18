@@ -7,11 +7,11 @@
 
 **Add the hosted server in one click.** You sign in through your browser; there is nothing to install and no key to paste.
 
-[![Add to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](cursor://anysphere.cursor-deeplink/mcp/install?name=ethora&config=eyJ1cmwiOiJodHRwczovL21jcC5jaGF0LmV0aG9yYS5jb20vbWNwL29hdXRoIn0=)
-[![Install in VS Code](https://img.shields.io/badge/VS_Code-Add_Ethora-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](vscode:mcp/install?%7B%22name%22%3A%22ethora%22%2C%22type%22%3A%22http%22%2C%22url%22%3A%22https%3A%2F%2Fmcp.chat.ethora.com%2Fmcp%2Foauth%22%7D)
-[![Add to LM Studio](https://files.lmstudio.ai/deeplink/mcp-install-dark.svg)](lmstudio://add_mcp?name=ethora&config=eyJldGhvcmEiOnsidXJsIjoiaHR0cHM6Ly9tY3AuY2hhdC5ldGhvcmEuY29tL21jcC9vYXV0aCJ9fQ==)
+[![Add to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=ethora&config=eyJ1cmwiOiJodHRwczovL21jcC5jaGF0LmV0aG9yYS5jb20vbWNwL29hdXRoIn0%3D)
+[![Install in VS Code](https://img.shields.io/badge/VS_Code-Add_Ethora-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect?url=vscode%3Amcp%2Finstall%3F%257B%2522name%2522%253A%2522ethora%2522%252C%2522type%2522%253A%2522http%2522%252C%2522url%2522%253A%2522https%253A%252F%252Fmcp.chat.ethora.com%252Fmcp%252Foauth%2522%257D)
+[![Install in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-Add_Ethora-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect?url=vscode-insiders%3Amcp%2Finstall%3F%257B%2522name%2522%253A%2522ethora%2522%252C%2522type%2522%253A%2522http%2522%252C%2522url%2522%253A%2522https%253A%252F%252Fmcp.chat.ethora.com%252Fmcp%252Foauth%2522%257D)
 
-For Claude.ai, ChatGPT, Claude Desktop and anything else that takes a connector URL, add
+For Claude.ai, ChatGPT, Claude Desktop, LM Studio and anything else that takes a connector URL, add
 `https://mcp.chat.ethora.com/mcp/oauth` and sign in. Running it yourself instead? See
 [Using with stdio clients](#using-with-stdio-clients).
 
