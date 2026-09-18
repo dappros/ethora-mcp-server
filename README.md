@@ -3,6 +3,7 @@
 [![npm](https://img.shields.io/npm/v/@ethora/mcp-server.svg)](https://www.npmjs.com/package/@ethora/mcp-server)
 [![Node](https://img.shields.io/badge/node-%E2%89%A518.x-blue.svg)](#)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
+[![Glama score](https://glama.ai/mcp/servers/dappros/ethora-mcp-server/badges/score.svg)](https://glama.ai/mcp/servers/dappros/ethora-mcp-server)
 
 [![Add to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=ethora&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBldGhvcmEvbWNwLXNlcnZlciJdfQ%3D%3D)
 [![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_Server-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect?url=vscode%3Amcp%2Finstall%3F%257B%2522name%2522%253A%2522ethora%2522%252C%2522command%2522%253A%2522npx%2522%252C%2522args%2522%253A%255B%2522-y%2522%252C%2522%2540ethora%252Fmcp-server%2522%255D%257D)
@@ -325,6 +326,13 @@ npm run inspector      # MCP Inspector against the stdio build
 - [ethora-monoserver](https://github.com/dappros/ethora-monoserver): deploy automation that ships this server as an optional service
 - [ethora-wp-plugin](https://github.com/dappros/ethora-wp-plugin): WordPress integration
 - [rag_demos](https://github.com/dappros/rag_demos): RAG AI assistant examples
+
+## Quality and maintenance score
+
+Independently inspected by [Glama](https://glama.ai/mcp/servers/dappros/ethora-mcp-server), which
+builds the server, catalogues its tools and rates tool-definition quality and maintenance activity.
+
+[![Ethora MCP Server quality and maintenance score on Glama](https://glama.ai/mcp/servers/dappros/ethora-mcp-server/badges/card.svg)](https://glama.ai/mcp/servers/dappros/ethora-mcp-server)
 
 ## License
 
