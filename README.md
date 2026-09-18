@@ -4,6 +4,7 @@
 [![Node](https://img.shields.io/badge/node-%E2%89%A518.x-blue.svg)](#)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 [![Glama score](https://glama.ai/mcp/servers/dappros/ethora-mcp-server/badges/score.svg)](https://glama.ai/mcp/servers/dappros/ethora-mcp-server)
+[![Wellknown: live](https://wellknown.network/agents/ethora-mcp-cli/badge.svg)](https://wellknown.network/agents/ethora-mcp-cli)
 
 **Add the hosted server in one click.** You sign in through your browser; there is nothing to install and no key to paste.
 
