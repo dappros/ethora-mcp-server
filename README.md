@@ -5,9 +5,15 @@
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 [![Glama score](https://glama.ai/mcp/servers/dappros/ethora-mcp-server/badges/score.svg)](https://glama.ai/mcp/servers/dappros/ethora-mcp-server)
 
-[![Add to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=ethora&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBldGhvcmEvbWNwLXNlcnZlciJdfQ%3D%3D)
-[![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_Server-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect?url=vscode%3Amcp%2Finstall%3F%257B%2522name%2522%253A%2522ethora%2522%252C%2522command%2522%253A%2522npx%2522%252C%2522args%2522%253A%255B%2522-y%2522%252C%2522%2540ethora%252Fmcp-server%2522%255D%257D)
-[![Install in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-Install_Server-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect?url=vscode-insiders%3Amcp%2Finstall%3F%257B%2522name%2522%253A%2522ethora%2522%252C%2522command%2522%253A%2522npx%2522%252C%2522args%2522%253A%255B%2522-y%2522%252C%2522%2540ethora%252Fmcp-server%2522%255D%257D)
+**Add the hosted server in one click.** You sign in through your browser; there is nothing to install and no key to paste.
+
+[![Add to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](cursor://anysphere.cursor-deeplink/mcp/install?name=ethora&config=eyJ1cmwiOiJodHRwczovL21jcC5jaGF0LmV0aG9yYS5jb20vbWNwL29hdXRoIn0=)
+[![Install in VS Code](https://img.shields.io/badge/VS_Code-Add_Ethora-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](vscode:mcp/install?%7B%22name%22%3A%22ethora%22%2C%22type%22%3A%22http%22%2C%22url%22%3A%22https%3A%2F%2Fmcp.chat.ethora.com%2Fmcp%2Foauth%22%7D)
+[![Add to LM Studio](https://files.lmstudio.ai/deeplink/mcp-install-dark.svg)](lmstudio://add_mcp?name=ethora&config=eyJldGhvcmEiOnsidXJsIjoiaHR0cHM6Ly9tY3AuY2hhdC5ldGhvcmEuY29tL21jcC9vYXV0aCJ9fQ==)
+
+For Claude.ai, ChatGPT, Claude Desktop and anything else that takes a connector URL, add
+`https://mcp.chat.ethora.com/mcp/oauth` and sign in. Running it yourself instead? See
+[Using with stdio clients](#using-with-stdio-clients).
 
 The MCP server for **Ethora**, an open-source chat and messaging platform with a built-in AI agent framework. It lets Claude, ChatGPT, Cursor, Claude Code, VS Code and autonomous agents create Ethora apps, chat rooms, users and AI agents, post messages, index RAG sources and produce website chat-widget embeds, all through tool calls.
 
@@ -196,7 +202,12 @@ Every tool returns JSON text in one shape: success `{ ok: true, ts, meta, data }
 
 ## Using with stdio clients
 
-Every stdio client runs `npx -y @ethora/mcp-server`; pass credentials as env vars (preferred) or call `ethora-configure` for a quick local test (its arguments end up in the transcript). One-click buttons exist for Cursor and VS Code at the top of this README. For hosted mode use the URL form shown in the quickstart instead.
+Every stdio client runs `npx -y @ethora/mcp-server`; pass credentials as env vars (preferred) or call `ethora-configure` for a quick local test (its arguments end up in the transcript). For hosted mode use the one-click buttons at the top of this README, or the URL form in the
+quickstart. One-click buttons for the stdio package:
+
+[![Add to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=ethora&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBldGhvcmEvbWNwLXNlcnZlciJdfQ%3D%3D)
+[![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_Server-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect?url=vscode%3Amcp%2Finstall%3F%257B%2522name%2522%253A%2522ethora%2522%252C%2522command%2522%253A%2522npx%2522%252C%2522args%2522%253A%255B%2522-y%2522%252C%2522%2540ethora%252Fmcp-server%2522%255D%257D)
+[![Install in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-Install_Server-24bfa5?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect?url=vscode-insiders%3Amcp%2Finstall%3F%257B%2522name%2522%253A%2522ethora%2522%252C%2522command%2522%253A%2522npx%2522%252C%2522args%2522%253A%255B%2522-y%2522%252C%2522%2540ethora%252Fmcp-server%2522%255D%257D)
 
 ### Cursor
 
@@ -323,7 +334,7 @@ npm run inspector      # MCP Inspector against the stdio build
 ## Related repos
 
 - [ethora-chat-component](https://github.com/dappros/ethora-chat-component): the React chat component used in widgets and stand-alone apps
-- [ethora-monoserver](https://github.com/dappros/ethora-monoserver): deploy automation that ships this server as an optional service
+- ethora-monoserver: deploy automation that ships this server as an optional service (private repository, available to enterprise customers)
 - [ethora-wp-plugin](https://github.com/dappros/ethora-wp-plugin): WordPress integration
 - [rag_demos](https://github.com/dappros/rag_demos): RAG AI assistant examples
 
