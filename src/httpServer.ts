@@ -224,13 +224,24 @@ export async function startHttpServer(opts: HttpServerOptions) {
   app.get("/.well-known/oauth-protected-resource", prmHandler)
   app.get("/.well-known/oauth-protected-resource/mcp/oauth", prmHandler)
 
+  // `name/version` from clientInfo, printable ASCII only and capped, since it
+  // is client-supplied text going into a log line.
+  const clientLabel = (info: unknown): string => {
+    const i = (info && typeof info === "object" ? info : {}) as { name?: unknown; version?: unknown }
+    const clean = (v: unknown) => String(v ?? "").replace(/[^\x20-\x7e]/g, "").trim().slice(0, 60)
+    const name = clean(i.name)
+    if (!name) return "?"
+    const version = clean(i.version)
+    return version ? `${name}/${version}` : name
+  }
+
   const closeEntry = async (sid: string, reason: string) => {
     const entry = sessions.get(sid)
     if (!entry) return
     sessions.delete(sid)
     try { await entry.transport.close() } catch { /* ignore */ }
     try { await entry.server.close() } catch { /* ignore */ }
-    console.error(`[mcp-http] session ${sid} closed (${reason}); active=${sessions.size}`)
+    console.error(`[mcp-http] session ${sid} closed (${reason}) client=${entry.session.client || "?"}; active=${sessions.size}`)
   }
 
   const unauthorized = (res: Response, hadToken: boolean, description?: string) => {
@@ -287,11 +298,12 @@ export async function startHttpServer(opts: HttpServerOptions) {
       if (req.method === "POST" && !sid && isInitializeRequest(req.body)) {
         const session = createSessionContext()
         session.entry = kind
+        session.client = clientLabel((req.body as any)?.params?.clientInfo)
         const transport = new StreamableHTTPServerTransport({
           sessionIdGenerator: () => session.id,
           onsessioninitialized: (id) => {
             sessions.set(id, entry as Entry)
-            console.error(`[mcp-http] session ${id} opened (${kind}) from ${session.clientIp || "?"}; active=${sessions.size}`)
+            console.error(`[mcp-http] session ${id} opened (${kind}) from ${session.clientIp || "?"} client=${session.client}; active=${sessions.size}`)
           },
         })
         transport.onclose = () => { if (sessions.get(session.id) === entry) sessions.delete(session.id) }
