@@ -49,6 +49,10 @@ export type SessionContext = {
   tokens: SessionTokens
   context: SessionCtx
   clientIp: string
+  // `name/version` from the initialize request's clientInfo (e.g. `claude-ai/1.0`,
+  // `cursor-vscode/1.2`), so the session log can tell a directory crawler from
+  // a person's client. Set once at initialize; "?" when the client sent none.
+  client?: string
   createdAt: number
   lastSeenAt: number
   // "open": /mcp and /mcp/k/<key> (no scope enforcement).
