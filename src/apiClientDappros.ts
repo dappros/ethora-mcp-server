@@ -85,9 +85,15 @@ httpClientDappros.interceptors.request.use((config) => {
   // app and counted per tool. Set after the public-endpoint bail-outs so an
   // unauthenticated probe stays anonymous.
   ;(config.headers as any)["X-Ethora-Client"] = `mcp/${MCP_VERSION}`
-  const currentTool = getSession().currentTool
+  const { currentTool, client: agentLabel } = getSession()
   if (currentTool) {
     ;(config.headers as any)["X-Ethora-Tool"] = currentTool
+  }
+  // The MCP client behind this session (`name/version` from initialize), so
+  // the API can record which assistant last used a key or grant. Already
+  // reduced to printable ASCII by the HTTP server; absent over stdio.
+  if (agentLabel && agentLabel !== "?") {
+    ;(config.headers as any)["X-Ethora-Agent"] = agentLabel
   }
 
   // Feedback is credential-optional: attach whatever the session holds so the
