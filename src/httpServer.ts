@@ -7,6 +7,7 @@ import { appConfig } from "./config.js"
 import { createSessionContext, runWithSession, setHostedMode, SessionContext } from "./session.js"
 import { fetchAppJwtByDomainName, usersMe } from "./apiClientDappros.js"
 import { ALL_SCOPES, ADVERTISED_SCOPES, hideOAuthTools, parseScopes } from "./scopeGuard.js"
+import { renderLandingPage } from "./landingPage.js"
 
 type Entry = {
   server: McpServer
@@ -190,7 +191,28 @@ export async function startHttpServer(opts: HttpServerOptions) {
   app.use(cors({ origin: "*", exposedHeaders: ["Mcp-Session-Id", "WWW-Authenticate"], allowedHeaders: ["Content-Type", "Authorization", "Mcp-Session-Id", "Mcp-Protocol-Version", "Last-Event-ID"] }))
   app.use(express.json({ limit: "4mb" }))
 
-  app.get("/", (_req, res) => { res.json(discovery()) })
+  // The root negotiates: a browser (Accept: text/html first) gets a page that
+  // says what this is and how a person connects; everything else, including
+  // curl's */* and MCP clients, gets the discovery JSON exactly as before.
+  // /.well-known/mcp stays JSON-only: it is the machine document by contract.
+  const landing = () =>
+    renderLandingPage({
+      name: opts.name,
+      version: opts.version,
+      endpoint,
+      personalUrl: `${publicBase}/mcp/k/<api-key>`,
+      oauthEndpoint: authIssuer ? oauthEndpoint : undefined,
+      stdioCommand: "npx -y @ethora/mcp-server",
+      docsUrl: "https://ethora.com/ai-sdk/mcp-server/",
+      privacyPolicy: "https://ethora.com/privacy-policy-mcp/",
+      discoveryUrl: `${publicBase}/.well-known/mcp`,
+      hosted: /(^|\.)ethora\.com$/.test(new URL(publicBase).hostname),
+    })
+  const wantsHtml = (req: Request) => req.accepts(["json", "html"]) === "html"
+  app.get("/", (req, res) => {
+    if (wantsHtml(req)) { res.type("html").send(landing()); return }
+    res.json(discovery())
+  })
   app.get("/.well-known/mcp", (_req, res) => { res.json(discovery()) })
   app.get("/healthz", (_req, res) => { res.json({ ok: true, sessions: sessions.size, version: opts.version, appJwtReady: Boolean(appConfig.appJwt), oauth: Boolean(authIssuer) }) })
   // A missing robots.txt means "allow", but it answers as an HTML 404 page,
@@ -367,6 +389,13 @@ export async function startHttpServer(opts: HttpServerOptions) {
     })
   }
 
+  // Directory cards and chat messages link to the endpoint itself, so a
+  // person who clicks lands on a Streamable HTTP GET with no session. Show
+  // them the page; an MCP client never sends text/html first.
+  app.get("/mcp", (req, res, next) => {
+    if (wantsHtml(req) && !req.headers["mcp-session-id"]) { res.type("html").send(landing()); return }
+    next()
+  })
   app.all("/mcp", route("open"))
   app.all("/mcp/k/:key", route("open", (req) => String(req.params.key || "")))
   app.all("/mcp/oauth", route("oauth"))
