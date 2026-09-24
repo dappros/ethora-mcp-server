@@ -5,7 +5,7 @@ description: Write or edit a scripted conversation flow for an Ethora AI agent, 
 # Authoring Ethora agent flows
 
 A flow is a deterministic script an agent follows. Set it with the `flowsYaml` field on
-`ethora-agents-create-v2` or `ethora-agents-update-v2`.
+`ethora-agent-create` or `ethora-agent-update`.
 
 **The server compiles and validates the YAML on save.** An invalid script is rejected with code
 `FLOWS_INVALID` and per-problem details, and nothing is stored, so a bad draft cannot break a live

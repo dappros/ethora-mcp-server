@@ -25,9 +25,9 @@ test("the core group is small and lists one variant per operation", () => {
   assert.ok(core.length <= 25, `core has ${core.length} tools`)
   // Pairs that must never both be in the default list.
   const pairs = [
-    ["ethora-sources-site-crawl-v2", "ethora-sources-site-crawl-v2-wait"],
-    ["ethora-sources-docs-upload", "ethora-sources-docs-upload-v2"],
-    ["ethora-chats-broadcast-v2", "ethora-chats-broadcast-job-v2"],
+    ["ethora-source-site-crawl", "ethora-source-site-crawl-wait"],
+    ["ethora-source-doc-upload-legacy", "ethora-source-doc-upload"],
+    ["ethora-broadcast-send", "ethora-broadcast-job-start"],
   ]
   for (const [a, b] of pairs) assert.ok(!(core.includes(a) && core.includes(b)), `${a} and ${b} both in core`)
   for (const t of core) assert.ok(!t.startsWith("ethora-bot-"), `legacy bot tool ${t} in core`)

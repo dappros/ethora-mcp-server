@@ -31,18 +31,18 @@ Ethora uses multiple token types depending on the caller:
 
 ### 1) **App JWT** (\`appJwt\`)
 - **Where it’s used**: login/register endpoints (user auth bootstrap)
-- **How it’s provided**: env \`ETHORA_APP_JWT\` (or via \`ethora-configure\`)
+- **How it’s provided**: env \`ETHORA_APP_JWT\` (or via \`ethora-session-configure\`)
 - **Typical caller**: local MCP session doing \`ethora-user-login\`
 
 ### 2) **App Token** (\`appToken\`)
 - **Where it’s used**: app-scoped automation after you already know the target app: broadcast, sources ingest, bot management
 - **How it’s obtained**: created per-app (returned from app creation / visible in admin)
-- **How it’s provided**: \`ethora-app-select { appId, appToken }\` then \`ethora-auth-use-app\`
+- **How it’s provided**: \`ethora-app-select { appId, appToken }\` then \`ethora-auth-mode-set\`
 
 ### 3) **B2B Token** (\`b2bToken\`)
 - **Where it’s used**: server-to-server automation where you want to act “as the app owner” without a user session
 - **How it’s sent**: header \`x-custom-token\` (JWT with \`type=server\`)
-- **How it’s provided**: env \`ETHORA_B2B_TOKEN\` (or via \`ethora-configure\`), then \`ethora-auth-use-b2b\`
+- **How it’s provided**: env \`ETHORA_B2B_TOKEN\` (or via \`ethora-session-configure\`), then \`ethora-auth-mode-set\`
 
 ### Rule of thumb
 - First time using Ethora MCP locally → start with **User Auth**
@@ -96,7 +96,7 @@ A flow is a deterministic script an agent follows instead of letting the model c
 Use one for anything with a fixed shape: an opening menu, an appointment request, an intake
 questionnaire, a survey. The model still handles everything outside a flow.
 
-Set it with \`ethora-agents-create-v2\` or \`ethora-agents-update-v2\`, field \`flowsYaml\`.
+Set it with \`ethora-agent-create\` or \`ethora-agent-update\`, field \`flowsYaml\`.
 The server compiles and validates the YAML on save. If it does not compile you get
 \`FLOWS_INVALID\` with per-problem details and **nothing is stored**, so a bad script cannot
 break a live agent. Send an empty string to remove the script.
@@ -155,61 +155,61 @@ export const RECIPES_MD = md`
 ## Common recipes
 
 ### User-auth quickstart
-1) \`ethora-configure\` with \`{ apiUrl, appJwt }\`
-2) \`ethora-auth-use-user\`
+1) \`ethora-session-configure\` with \`{ apiUrl, appJwt }\`
+2) \`ethora-auth-mode-set\`
 3) \`ethora-user-login\`
-4) Use user-auth tools such as \`ethora-files-upload-v2\`
+4) Use user-auth tools such as \`ethora-file-upload\`
 
 ### B2B bootstrap AI
-1) \`ethora-configure\` with \`{ apiUrl, b2bToken }\`
-2) \`ethora-auth-use-b2b\`
+1) \`ethora-session-configure\` with \`{ apiUrl, b2bToken }\`
+2) \`ethora-auth-mode-set\`
 3) \`ethora-b2b-app-bootstrap-ai\` with \`displayName\`, optional \`crawlUrl\` / \`docs[]\`, and optional \`llmProvider\` / \`llmModel\`
-4) If you want app-scoped follow-up actions, call \`ethora-app-select\` with \`{ appId, appToken }\`, then \`ethora-auth-use-app\`
+4) If you want app-scoped follow-up actions, call \`ethora-app-select\` with \`{ appId, appToken }\`, then \`ethora-auth-mode-set\`
 
 ### Broadcast (app-token)
 1) \`ethora-app-select\` with \`{ appId, appToken }\`
-2) \`ethora-auth-use-app\`
-3) \`ethora-chats-broadcast-v2\`
-4) \`ethora-wait-broadcast-job-v2\`
+2) \`ethora-auth-mode-set\`
+3) \`ethora-broadcast-send\`
+4) \`ethora-broadcast-job-wait\`
 
 ### Broadcast (B2B explicit appId)
-1) \`ethora-configure\` with \`{ apiUrl, b2bToken }\`
-2) \`ethora-auth-use-b2b\`
-3) \`ethora-chats-broadcast-v2\` with \`{ appId, ... }\`
-4) \`ethora-wait-broadcast-job-v2\` with \`{ appId, jobId }\`
+1) \`ethora-session-configure\` with \`{ apiUrl, b2bToken }\`
+2) \`ethora-auth-mode-set\`
+3) \`ethora-broadcast-send\` with \`{ appId, ... }\`
+4) \`ethora-broadcast-job-wait\` with \`{ appId, jobId }\`
 
 ### Sources ingest (app-token)
 1) \`ethora-app-select\` with \`{ appId, appToken }\`
-2) \`ethora-auth-use-app\`
-3) \`ethora-sources-site-crawl-v2\` or \`ethora-sources-docs-upload-v2\`
-4) \`ethora-sources-site-list-v2\` / \`ethora-sources-docs-list-v2\`
-5) \`ethora-sources-site-tags-update-v2\` / \`ethora-sources-docs-tags-update-v2\`
+2) \`ethora-auth-mode-set\`
+3) \`ethora-source-site-crawl\` or \`ethora-source-doc-upload\`
+4) \`ethora-source-site-list\` / \`ethora-source-doc-list\`
+5) \`ethora-source-site-tags-update\` / \`ethora-source-doc-tags-update\`
 
 ### AI agent for an app (user auth - the normal path)
 1) \`ethora-app-select\` { appId }
-2) \`ethora-app-create-chat\` { title: "Support", pinned: true } -> note the room \`jid\`
-3) \`ethora-agents-create-v2\` { name: "Helper", prompt: "..." }
-4) \`ethora-agent-invite-to-chat\` { agentIdOrAddress, chatJid: "<jid>" }
-5) \`ethora-chats-message-v2\` { roomJid: "<jid>", text: "hello", waitForReplySec: 45 }
+2) \`ethora-chat-create\` { title: "Support", pinned: true } -> note the room \`jid\`
+3) \`ethora-agent-create\` { name: "Helper", prompt: "..." }
+4) \`ethora-agent-invite\` { agentIdOrAddress, chatJid: "<jid>" }
+5) \`ethora-message-send\` { roomJid: "<jid>", text: "hello", waitForReplySec: 45 }
 
 ### AI chat widget on a website (user auth)
 The embeddable widget answers with the app's ACTIVE bot (App.defaultBotInstanceId). API-created apps have none until an agent is activated:
-1) \`ethora-agents-create-v2 { name, prompt }\`
-2) \`ethora-app-create-chat { appId, title: "Website widget" }\` -> ROOM_JID
-3) \`ethora-agent-invite-to-chat { agentIdOrAddress, chatJid: ROOM_JID }\`
-4) \`ethora-agents-activate-v2 { agentId, chatJid: ROOM_JID }\` (uses the appToken captured from \`ethora-app-create\`; or pass it to \`ethora-app-select\`)
-5) \`ethora-widget-embed-snippet { appId, botName }\` -> paste the \`<script id="chat-content-assistant" ...>\` tag into the site.
+1) \`ethora-agent-create { name, prompt }\`
+2) \`ethora-chat-create { appId, title: "Website widget" }\` -> ROOM_JID
+3) \`ethora-agent-invite { agentIdOrAddress, chatJid: ROOM_JID }\`
+4) \`ethora-agent-activate { agentId, chatJid: ROOM_JID }\` (uses the appToken captured from \`ethora-app-create\`; or pass it to \`ethora-app-select\`)
+5) \`ethora-widget-snippet-get { appId, botName }\` -> paste the \`<script id="chat-content-assistant" ...>\` tag into the site.
 Until step 4 the widget's \`POST /v2/widget/sessions\` returns 422 \`App has no AI bot configured\`.
 
 ### Legacy per-app bot (only apps that already have one)
-API/B2B-created apps have no legacy aiBot (\`ethora-bot-enable-v2\` returns 422 BOT_NOT_INITIALIZED); use the agent recipe above.
+API/B2B-created apps have no legacy aiBot (\`ethora-bot-enable\` returns 422 BOT_NOT_INITIALIZED); use the agent recipe above.
 1) \`ethora-app-select\` { appId }
-2) \`ethora-bot-get-v2\` / \`ethora-bot-update-v2\` (user, B2B or app-token auth)
+2) \`ethora-bot-get\` / \`ethora-bot-update\` (user, B2B or app-token auth)
 
 ### Files upload (user)
-1) \`ethora-auth-use-user\`
+1) \`ethora-auth-mode-set\`
 2) \`ethora-user-login\`
-3) \`ethora-files-upload-v2\`
+3) \`ethora-file-upload\`
 
 ### AI Agents end-to-end (Phase 1)
 Goal: from "no account" to "two AI agents conversing in one chat with you" purely via MCP.
@@ -226,30 +226,30 @@ Pre-req tokens (one of):
    (App-token mode is for server integrations and is rejected by the agents routes.)
 4b) Create a room to host the agents. API/B2B-created apps no longer seed a
     default "Main chat", so create one explicitly and note its \`roomJid\`:
-   \`ethora-app-create-chat\` { title: "Salon", pinned: false } -> note the room JID
+   \`ethora-chat-create\` { title: "Salon", pinned: false } -> note the room JID
 5) Create the first Agent:
-   \`ethora-agents-create-v2\` { name: "Freud", prompt: "You are a digital twin of Sigmund Freud..." }
+   \`ethora-agent-create\` { name: "Freud", prompt: "You are a digital twin of Sigmund Freud..." }
 6) Index Freud's RAG corpus (per-Agent namespace):
-   \`ethora-sources-site-crawl-v2-wait\` { url: "https://en.wikipedia.org/wiki/Sigmund_Freud", followLink: true }
+   \`ethora-source-site-crawl-wait\` { url: "https://en.wikipedia.org/wiki/Sigmund_Freud", followLink: true }
    (the API resolves agentId from App.defaultBotInstanceId; pass agentId explicitly if multiple agents share the App)
 7) Create the second Agent:
-   \`ethora-agents-create-v2\` { name: "Jung", prompt: "You are a digital twin of Carl Jung..." }
+   \`ethora-agent-create\` { name: "Jung", prompt: "You are a digital twin of Carl Jung..." }
 8) Mark one agent public (optional cross-app demo):
-   \`ethora-agent-set-visibility\` { agentIdOrAddress: "<freud-id>", visibility: "public" }
+   \`ethora-agent-visibility-set\` { agentIdOrAddress: "<freud-id>", visibility: "public" }
 9) Invite both agents into the room created in step 4b (use its room JID):
-   \`ethora-agent-invite-to-chat\` { agentIdOrAddress: "<freud-id>", chatJid: "<roomJid>" }
-   \`ethora-agent-invite-to-chat\` { agentIdOrAddress: "<jung-id>", chatJid: "<roomJid>" }
+   \`ethora-agent-invite\` { agentIdOrAddress: "<freud-id>", chatJid: "<roomJid>" }
+   \`ethora-agent-invite\` { agentIdOrAddress: "<jung-id>", chatJid: "<roomJid>" }
 10) Seed a message and wait for the first reply:
-    \`ethora-chats-message-v2\` { roomJid: "<roomJid>", text: "Freud, what would you say to Jung about dreams?", waitForReplySec: 45 }
+    \`ethora-message-send\` { roomJid: "<roomJid>", text: "Freud, what would you say to Jung about dreams?", waitForReplySec: 45 }
     Room ids: a room JID is \`${"${appId}_${chatId}"}\`; every room tool accepts the JID or the bare chatId.
-11) Watch the agents converse (\`ethora-chats-history-v2\` { roomJid }). The smart response gate prevents loops; only the addressed agent replies first.
+11) Watch the agents converse (\`ethora-chat-history\` { roomJid }). The smart response gate prevents loops; only the addressed agent replies first.
 
 ### Controlling turn-taking (multi-agent rooms)
 For free-form chats the default \`responseMode: 'smart'\` works well. For structured
 scenarios with strict turn order (e.g. role-played wargames, debates, interviews
 where you want clean handoffs) use \`responseMode: 'mentioned'\` on every agent:
 
-  \`ethora-agents-create-v2\` {
+  \`ethora-agent-create\` {
     name: "Hannibal",
     prompt: "You are Hannibal Barca... END EVERY MESSAGE by addressing @GameMaster.",
     responseMode: "mentioned",
@@ -414,26 +414,26 @@ You are an AI assistant operating the Ethora MCP server on behalf of a developer
 App named "${appName || "AI Demo App"}" and stand up two AI Agents that will talk to the
 developer in one chat. Strict order:
 
-1) Verify auth via \`ethora-status\`. If \`authMode\` is empty, run \`ethora-auth-use-b2b\` (server)
-   or \`ethora-auth-use-user\` + \`ethora-user-login\` (developer).
+1) Verify auth via \`ethora-status\`. If \`authMode\` is empty, run \`ethora-auth-mode-set\` (server)
+   or \`ethora-auth-mode-set\` + \`ethora-user-login\` (developer).
 2) For the cleanest demo: \`ethora-b2b-app-bootstrap-ai\` { displayName: "${appName || "AI Demo App"}",
    agentDisplayName: "${firstAgentName || "Freud"}", agentPrompt: "...", agentVisibility: "public",
    inviteToDefaultRoom: true }
 3) Repeat \`ethora-b2b-app-bootstrap-ai\` with a SECOND \`agentDisplayName\` AGAINST THE SAME APP --
    pass the same \`displayName\` so it returns the existing app, then it just creates the second
    agent and invites it into the SAME default room.
-   (Alternatively: \`ethora-agents-create-v2\` for the second agent + \`ethora-agent-invite-to-chat\`
+   (Alternatively: \`ethora-agent-create\` for the second agent + \`ethora-agent-invite\`
     with the same chatJid.)
-4) Seed the conversation: \`ethora-chats-message-v2\` { roomJid: "<the default room JID>",
+4) Seed the conversation: \`ethora-message-send\` { roomJid: "<the default room JID>",
    text: "${firstAgentName || "Freud"}, what would you say to ${secondAgentName || "Jung"} about dreams?", waitForReplySec: 45 }
    (Without a B2B token, do the same in user mode: \`ethora-app-create\`, \`ethora-app-select\` { appId },
-   \`ethora-app-create-chat\`, \`ethora-agents-create-v2\` x2, \`ethora-agent-invite-to-chat\` x2. Stay in user auth mode.)
+   \`ethora-chat-create\`, \`ethora-agent-create\` x2, \`ethora-agent-invite\` x2. Stay in user auth mode.)
 5) Observe and report. Both agents now live as XMPP clients inside the ai-service process; thanks
    to the per-bot loop guard and smart response gate they will only reply when relevant.
 
 Useful sanity checks:
-- \`ethora-bot-instances-list\` { appId } -- both agents should be listed with status "on".
-- \`ethora-agents-get-v2\` { agentId } -- inspect persona / RAG / SOUL.MD.
+- \`ethora-bot-instance-list\` { appId } -- both agents should be listed with status "on".
+- \`ethora-agent-get\` { agentId } -- inspect persona / RAG / SOUL.MD.
 - \`ethora-agent-soul-append\` { agentIdOrAddress, append: "..." } -- evolve an agent's identity.
 
 Refer to \`ethora://docs/recipes\` for the full step-by-step.

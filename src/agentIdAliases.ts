@@ -66,7 +66,7 @@ export function applyAgentIdAliases(server: McpServer): string[] {
         // which would surface as a protocol error with no code for the caller.
         const err = Object.assign(
           new Error(
-            `\`${declared}\` is required. Pass the agent's Mongo _id or address as \`${declared}\` (or as \`${missing}\`, which is accepted as an alias). Get one from \`ethora-agents-list-v2\`.`
+            `\`${declared}\` is required. Pass the agent's Mongo _id or address as \`${declared}\` (or as \`${missing}\`, which is accepted as an alias). Get one from \`ethora-agent-list\`.`
           ),
           { code: "VALIDATION_ERROR" }
         )
@@ -74,7 +74,10 @@ export function applyAgentIdAliases(server: McpServer): string[] {
       }
       if (value) {
         next[declared] = value
-        next[missing] = value
+        // Only the declared name goes through: tools that spread their
+        // remaining arguments into the API body would otherwise send the
+        // alias field too, and the API rejects unknown fields.
+        delete next[missing]
       }
       return inner(next, extra)
     }

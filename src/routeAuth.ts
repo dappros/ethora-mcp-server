@@ -31,13 +31,13 @@ import { getClientState } from "./apiClientDappros.js"
 export function ensureTenantActorAuth() {
     const state = getClientState() as any
     if (state.authMode === "app") {
-        throw new Error("This tool does not accept app-token auth: the backend route wants a user token or a B2B token. Call `ethora-auth-use-user` (you are already logged in) or `ethora-auth-use-b2b`.")
+        throw new Error("This tool does not accept app-token auth: the backend route wants a user token or a B2B token. Call `ethora-auth-mode-set` (you are already logged in) or `ethora-auth-mode-set`.")
     }
     if (state.authMode === "user" && !state.hasUserToken) {
         throw new Error("Not logged in. Call `ethora-user-login` or `ethora-user-register` first (or connect with an API key).")
     }
     if (state.authMode === "b2b" && !state.hasB2BToken) {
-        throw new Error("B2B auth is selected but no b2bToken is configured. Set ETHORA_B2B_TOKEN or call `ethora-configure`.")
+        throw new Error("B2B auth is selected but no b2bToken is configured. Set ETHORA_B2B_TOKEN or call `ethora-session-configure`.")
     }
 }
 

@@ -39,7 +39,7 @@ Public identifier of an app (24-char hex). Safe to share; every app-scoped call 
 ## appToken
 App-scoped JWT used by the chat component, the AI chat widget and app-token automation.
 Never included in tool results (they show \`[redacted]\`). Reveal it on purpose with
-\`ethora-app-credentials { appId, confirm: true }\`; rotate it with \`ethora-app-tokens-rotate-v2\`.
+\`ethora-app-credentials-reveal { appId, confirm: true }\`; rotate it with \`ethora-app-token-rotate\`.
 
 ## App Secret and tenant secret
 Signing keys for the app's tokens. Never returned over MCP. Available only to the app owner

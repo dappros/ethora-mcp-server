@@ -22,15 +22,15 @@ Most work follows the same order, and skipping a step is the usual cause of conf
 1. `ethora-status` to see the current auth mode and selected app
 2. `ethora-app-create` to make an application, or `ethora-app-list` to find an existing one
 3. **`ethora-app-select`** to set the working app. Most tools operate on the selected app, and without this you will get "appId is required"
-4. `ethora-app-create-chat` for a room, then `ethora-chats-message-v2` to post into it
-5. `ethora-agents-create-v2` for an AI agent, with `flowsYaml` if it needs a scripted conversation
-6. `ethora-widget-embed-snippet` for a website chat widget
+4. `ethora-chat-create` for a room, then `ethora-message-send` to post into it
+5. `ethora-agent-create` for an AI agent, with `flowsYaml` if it needs a scripted conversation
+6. `ethora-widget-snippet-get` for a website chat widget
 
 ## Things worth knowing
 
-**Auth modes are the most common source of errors.** A session is in user, app-token or B2B mode, and routes disagree about which they accept: agent and room routes want user auth, provisioning routes want B2B. The error tells you which to switch to, and `ethora-auth-use-user` / `-app` / `-b2b` switch. `ethora-status` shows where you are.
+**Auth modes are the most common source of errors.** A session is in user, app-token or B2B mode, and routes disagree about which they accept: agent and room routes want user auth, provisioning routes want B2B. The error tells you which to switch to, and `ethora-auth-mode-set` / `-app` / `-b2b` switch. `ethora-status` shows where you are.
 
-**Session state is per connection.** `ethora-app-select` and any credentials set with `ethora-configure` live in memory for the session. On reconnect they are gone. Most tools take an explicit `appId` if you would rather not depend on it.
+**Session state is per connection.** `ethora-app-select` and any credentials set with `ethora-session-configure` live in memory for the session. On reconnect they are gone. Most tools take an explicit `appId` if you would rather not depend on it.
 
 **Read the error before retrying.** Errors carry a `code`, a `message` naming the thing to fix, and a `hint` with the next step. A retry without changing anything will fail identically.
 
