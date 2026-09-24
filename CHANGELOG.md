@@ -2,6 +2,19 @@
 
 All notable changes to this package are documented here. For cross-SDK release notes, see [ethora/RELEASE-NOTES.md](https://github.com/dappros/ethora/blob/main/RELEASE-NOTES.md).
 
+## 27.1.0 - 2026-09-24
+
+### Added
+- Help goals for the headline jobs: `new-app`, `in-app-chat`, `multi-agent-room` (alongside `widget` and `chat-test`), each with the calls in order and arguments filled in; the same three recipes are in the docs corpus (`doc:recipes#build-a-new-chat-based-app`, `#add-in-app-chat-to-an-existing-app`, `#seed-a-room-with-several-ai-agents`).
+- `created` and `next` on `ethora-app-create`, `ethora-chat-create` and `ethora-agent-create` (uniform: kind, id, name, jid or address, and the next calls to make); `dashboardUrl` on app create.
+- `senderName` and `senderKind` (`human` | `agent` | `app`) on `ethora-message-send` replies and `ethora-chat-history` rows; agents are named, not shown as bot-instance ids.
+- Search intent layer: newcomer phrasings ("add chat to my existing app", "agents talking to each other", "webhook", "push", "branding") lead with the document that answers them. New guide `doc:not-available` says what is not exposed over MCP (webhooks, push setup, moderation, billing, media) and where it lives.
+- Whole documents are fetchable by their bare id (`doc:recipes`, `doc:auth-map`, the two quickstarts, and the guides).
+
+### Fixed
+- Envelope `meta.apiUrl` and `ethora-help` reported the server's loopback API address on the hosted server; they now report the public one.
+- A leftover `ethora-auth-use-*` reference in the session-configure description.
+
 ## 27.0.0 - 2026-09-24
 
 ### Changed

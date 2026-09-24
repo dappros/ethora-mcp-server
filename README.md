@@ -118,6 +118,13 @@ The end-to-end journey a new user typically asks for, with the tools in order:
 
 `ethora-help { goal }` returns this and the other recipes (`user-login`, `broadcast`, `sources-ingest`, `files-upload`, `bot-manage`, `chat-test`, `widget`, `b2b-bootstrap-ai`) with the calls filled in for the current state, and `ethora-recipe-run` executes them.
 
+### First-minute conventions
+
+- **Every create tool answers the same way.** `ethora-app-create`, `ethora-chat-create`, `ethora-agent-create` return the raw API object plus `created` (`kind`, `id`, `name`, and `jid` or `address` where relevant) and `next`, two to four suggested calls with arguments filled in. `ethora-app-create` also returns `dashboardUrl`, the app in the web dashboard.
+- **`ethora-help { goal }` has a recipe for each headline job:** `new-app`, `in-app-chat`, `multi-agent-room`, `widget`, `chat-test`, plus the server-integration goals. Each returns the calls in order with arguments to copy.
+- **Who spoke.** `ethora-message-send` replies and `ethora-chat-history` rows carry `senderName` and `senderKind` (`human`, `agent`, `app`), so a multi-agent room reads as "Freud: ..., Jung: ..." rather than instance ids.
+- **Search understands intent.** `search` maps the phrases people use ("add chat to my React app", "several agents talking to each other", "webhook when a message arrives") to the documents that answer them, and `doc:not-available` says plainly what is not exposed over MCP and where it lives instead. Whole documents are fetchable by their bare id (`doc:recipes`, `doc:chat-component-quickstart`, `doc:sdk-backend-quickstart`, `doc:auth-map`).
+
 ### Documentation inside the server
 
 - **`instructions`** in the initialize result tell the assistant how identity works on the entry point it connected through: the open endpoint explains login and register, personal-URL and Bearer sessions are told they are already authenticated and must never ask for a password or key, OAuth sessions the same plus how to react to `INSUFFICIENT_SCOPE`.

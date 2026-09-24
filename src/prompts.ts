@@ -54,36 +54,103 @@ Ethora uses multiple token types depending on the caller:
 export const CHAT_COMPONENT_QUICKSTART_MD = md`
 ## Vite/Next quickstart with \`@ethora/chat-component\`
 
-The fastest path is:
-1) Create a Vite/Next app
-2) \`npm i @ethora/chat-component\`
-3) Render \`<Chat />\`
+\`@ethora/chat-component\` is the React component that renders Ethora rooms inside your own
+web app: room list, messages, media, reactions, typing, the AI agents in the room. It works
+in Vite, Next.js and Create React App projects. Full README with every prop and pattern:
+https://github.com/dappros/ethora-chat-component. \`ethora-chat-component-app-generate { appId }\`
+(tool group \`b2b\`) writes a ready \`App.tsx\` for one of your apps.
 
-### Important security note
-The chat component repo contains **demo credentials** for quick scaffolding. For production:
-- **Do not** hardcode \`appToken\` or user tokens into your app source.
-- Provide app context via configuration and/or your backend.
+### 1. Install and render
+\`\`\`bash
+npm i @ethora/chat-component
+\`\`\`
+\`\`\`tsx
+import { useMemo } from 'react';
+import { Chat, XmppProvider } from '@ethora/chat-component';
 
-### Recommended production pattern
-- Your backend holds \`appId/appSecret\` and issues user tokens / app tokens as needed
-- Frontend only receives short-lived credentials or uses your own session
+const config = { baseUrl: 'https://api.chat.ethora.com/v1', colors: { primary: '#2f6feb' } };
+
+export default function ChatPage() {
+  const chatConfig = useMemo(() => config, []);
+  return (
+    <XmppProvider config={chatConfig}>
+      <Chat config={chatConfig} />
+    </XmppProvider>
+  );
+}
+\`\`\`
+Pass the same memoised \`config\` object to both \`XmppProvider\` and \`Chat\`.
+
+### 2. Who is the user? Four patterns
+- **Anonymous / demo**: nothing extra; fine for trying it.
+- **Email + password** (\`user={{ email, password }}\`): an Ethora account the person already has.
+- **Injected logged-in user** (\`config.userLogin\`): **the pattern for your own users.** Your backend signs the person into Ethora (see the backend SDK quickstart, \`createChatUserJwtToken\`) and hands the frontend the resulting user object (\`_id\`, \`appId\`, \`token\`, \`refreshToken\`, \`xmppPassword\`, names); the component then connects as that user with no Ethora login screen. Set \`config.userLogin = { enabled: true, user }\` and \`initBeforeLoad\` per the README.
+- **Your own XMPP login**: guard external \`client.login()\` with \`initBeforeLoad\` as the README shows.
+
+### 3. Which room
+Rooms are created over MCP (\`ethora-chat-create\`) or by your backend (\`createChatRoom\`); the component lists the rooms the user has access to (\`grantUserAccessToChatRoom\`) and can be opened on one room via config. Room ids are JIDs: \`<appId>_<chatId>\`.
+
+### Security
+- Never put the app secret, a server token or another user's token in frontend code. The frontend gets one user's token from your backend, behind your session check.
+- The public repo has demo credentials for scaffolding only.
 `
 
 export const BACKEND_SDK_QUICKSTART_MD = md`
 ## Backend integration quickstart with \`@ethora/sdk-backend\`
 
-Use \`@ethora/sdk-backend\` for server-to-server integration patterns:
-- create user
-- create chat room
-- grant access to chat room
-- create client/user JWT tokens
+This is how your own users get into Ethora chat without an Ethora login: your backend
+(Node.js 18+, any framework) holds the app credentials and creates the chat identities,
+rooms and per-user tokens; your frontend only ever receives a token for the signed-in user.
+Full guide with Express, NestJS and error-handling examples:
+https://github.com/dappros/ethora-sdk-backend-integration (README.md and INTEGRATION.md).
 
-Typical env vars:
+### 1. Install and configure
 \`\`\`bash
-ETHORA_CHAT_API_URL=https://api.ethoradev.com
-ETHORA_CHAT_APP_ID=your_app_id
-ETHORA_CHAT_APP_SECRET=your_app_secret
+npm install @ethora/sdk-backend
 \`\`\`
+\`\`\`bash
+ETHORA_CHAT_API_URL=https://api.chat.ethora.com
+ETHORA_CHAT_APP_ID=<appId>          # from ethora-app-create (created.id)
+ETHORA_CHAT_APP_SECRET=<app secret> # web dashboard, app settings, API tab (never returned over MCP)
+\`\`\`
+The SDK signs a B2B server token from these and sends it as \`x-custom-token\` on every call.
+
+### 2. Initialise once
+\`\`\`ts
+import { getEthoraSDKService } from '@ethora/sdk-backend';
+const chat = getEthoraSDKService(); // singleton; reads the env vars above
+\`\`\`
+
+### 3. Mirror your users and rooms
+Call these from the places where your product creates users and workspaces:
+\`\`\`ts
+await chat.createUser(userId, { firstName, lastName, email });        // idempotent per userId
+await chat.createChatRoom(workspaceId, { title: 'Project chat', uuid: workspaceId, type: 'group' });
+await chat.grantUserAccessToChatRoom(workspaceId, userId);
+\`\`\`
+\`userId\` and \`workspaceId\` are your ids; Ethora keys its records by them, so no id mapping table is needed.
+
+### 4. Hand the signed-in user a chat token
+\`\`\`ts
+// GET /api/chat-token, behind your own session check
+const token = chat.createChatUserJwtToken(req.user.id);   // client JWT for this user only
+res.json({ token });
+\`\`\`
+The frontend passes that user into \`@ethora/chat-component\` (see the chat component
+quickstart, pattern "injected logged-in user"). Never ship the app secret or a server
+token to the browser; the client JWT is scoped to one user.
+
+### 5. Managing several apps from one backend
+For a parent app that provisions child apps, the same SDK exposes the explicit tenant-admin
+helpers: \`listApps\`, \`createApp\`, \`createUsersInApp\`, \`createChatRoomInApp\`,
+\`grantUserAccessToChatRoomInApp\`, \`getUserChatsInApp\`, all against \`/v2/apps/{appId}/...\`.
+Over MCP the equivalent tools are in the \`b2b\` and \`users-files\` groups.
+
+### Which token is which
+- App secret: signs everything; dashboard only.
+- B2B server token: your backend to the Ethora API (\`x-custom-token\`); also mintable in the dashboard API tab and usable with \`ethora-auth-mode-set { mode: "b2b" }\`.
+- Client JWT (\`createChatUserJwtToken\`): one user, for the chat client.
+- User API key (MCP): a person's or agent's long-lived login for assistants; not for end users.
 `
 
 // Authoring reference for Agent.flowsYaml. Kept in sync with the compiler at
@@ -243,6 +310,34 @@ Pre-req tokens (one of):
     \`ethora-message-send\` { roomJid: "<roomJid>", text: "Freud, what would you say to Jung about dreams?", waitForReplySec: 45 }
     Room ids: a room JID is \`${"${appId}_${chatId}"}\`; every room tool accepts the JID or the bare chatId.
 11) Watch the agents converse (\`ethora-chat-history\` { roomJid }). The smart response gate prevents loops; only the addressed agent replies first.
+
+### Build a new chat-based app
+One Ethora app is one tenant: its own users, rooms, branding and a hosted web client that needs no code. Add an AI agent afterwards with the widget or multi-agent recipes.
+1) \`ethora-app-create\` { displayName: "My App" } -> \`created.id\`, \`dashboardUrl\`, \`next\`
+2) \`ethora-app-select\` { appId }
+3) \`ethora-app-update\` { appId, appTagline: "Chat for our community", primaryColor: "#2f6feb" } (logo, domain and the rest of the branding: dashboard, app settings, Appearance)
+4) \`ethora-chat-create\` { appId, title: "General", pinned: true } (\`pinned\` auto-joins every new user)
+5) \`ethora-tools-enable\` { group: "users-files" } then \`ethora-user-batch-create\` { appId, usersList: [{ email, firstName, lastName }] }, or let people sign up in the web client
+6) Open \`dashboardUrl\` to see the app, invite teammates and manage users.
+
+### Add in-app chat to an existing app
+Your UI, your users. Ethora holds the rooms and the chat identities; your product never shows an Ethora login.
+1) \`ethora-app-create\` { displayName: "My Product Chat" } and \`ethora-app-select\` { appId }
+2) \`ethora-chat-create\` { appId, title: "Support" } -> keep the \`jid\` for your UI
+3) Web: render rooms with \`@ethora/chat-component\` (React): \`fetch\` { id: "doc:chat-component-quickstart" }; \`ethora-chat-component-app-generate\` { appId } writes a ready \`App.tsx\` (enable the \`b2b\` group)
+4) Sign your own users in from your backend with \`@ethora/sdk-backend\`: \`fetch\` { id: "doc:sdk-backend-quickstart" }. It mints their chat tokens from the app credentials (\`ethora-app-credentials-reveal\` { appId, confirm: true }; the App Secret is in the dashboard API tab)
+5) iOS / Android: the React Native app in the Ethora SDK monorepo (https://github.com/dappros/ethora), or the same REST + XMPP APIs from native code
+6) Optional: an AI agent in those rooms, see the recipes above.
+
+### Seed a room with several AI agents
+Agents in one room answer people and each other. Turn-taking is driven by names.
+1) \`ethora-chat-create\` { appId, title: "Salon" } -> ROOM_JID
+2) \`ethora-agent-create\` { name: "Freud", prompt: "You are Sigmund Freud. Two sentences at most. End every message by addressing @Jung or the person who spoke.", responseMode: "smart" }
+3) \`ethora-agent-create\` { name: "Jung", prompt: "...end every message by addressing @Freud or the person who spoke.", responseMode: "smart" }
+4) \`ethora-agent-invite\` { agentIdOrAddress, chatJid: ROOM_JID } for each agent
+5) \`ethora-message-send\` { roomJid: ROOM_JID, text: "Freud, what would you tell Jung about dreams?", waitForReplySec: 45 } -> \`replies[].senderName\`
+6) \`ethora-chat-history\` { roomJid: ROOM_JID, limit: 20 } to watch it continue (\`results[].senderName\`, \`senderKind\`)
+Rules: single-word display names (the mention matcher is exact); each prompt ends by @-mentioning who speaks next; \`responseMode: "mentioned"\` for strict turn order; \`cooldownSec\` and \`responseProbability\` to throttle. The response gate lets the addressed agent answer first and stops agents from talking over each other. Details in the next section.
 
 ### Controlling turn-taking (multi-agent rooms)
 For free-form chats the default \`responseMode: 'smart'\` works well. For structured
