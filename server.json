@@ -7,12 +7,12 @@
     "url": "https://github.com/dappros/ethora-mcp-server",
     "source": "github"
   },
-  "version": "27.1.0",
+  "version": "26.9.5",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@ethora/mcp-server",
-      "version": "27.1.0",
+      "version": "26.9.5",
       "transport": {
         "type": "stdio"
       },
