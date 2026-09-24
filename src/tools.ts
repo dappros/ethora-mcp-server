@@ -144,7 +144,7 @@ export const REDACTION_EXEMPT_TOOLS = new Set([
     "ethora-app-tokens-rotate-v2",
 ])
 
-function asToolResult(envelope: any): CallToolResult {
+export function asToolResult(envelope: any): CallToolResult {
     const tool = envelope?.meta?.tool
     if (envelope && typeof envelope === "object" && !(tool && REDACTION_EXEMPT_TOOLS.has(String(tool)))) {
         if ("data" in envelope) envelope = { ...envelope, data: redactSecrets(envelope.data) }
@@ -166,7 +166,7 @@ function asToolResult(envelope: any): CallToolResult {
     return { content: [{ type: "text", text: JSON.stringify(envelope) }] }
 }
 
-function getDefaultMeta(tool: string) {
+export function getDefaultMeta(tool: string) {
     const state = getClientState() as any
     return {
         tool,
@@ -2482,7 +2482,7 @@ function agentSetVisibilityTool(server: McpServer) {
     server.registerTool(
         "ethora-agent-set-visibility",
         {
-            description: "Set an Agent's visibility (private | unlisted | public). Public agents can be invited cross-app by anyone who knows the address.\nRequires: an agent id or address from `ethora-agents-list-v2` or `ethora-agents-create-v2`.",
+            description: "Set an Agent's visibility (private | unlisted | public). Public agents can be invited cross-app by anyone who knows the address.\nPass the agent as `agentId` or `agentIdOrAddress` (one of the two is required, the schema marks both optional because either is accepted), from `ethora-agents-list-v2` or `ethora-agents-create-v2`.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 agentIdOrAddress: z.string().min(1),
@@ -2607,8 +2607,8 @@ function botInstanceStatusTool(server: McpServer) {
     server.registerTool(
         "ethora-bot-instance-status",
         {
-            description: "Turn a specific BotInstance on or off. Off detaches it from XMPP; on re-spawns the XMPP client live.\nRequires: a bot instance id from `ethora-bot-instances-list` (instances are created by `ethora-agent-invite-to-chat`).",
-            annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+            description: "Turn a specific BotInstance on or off. Off detaches it from XMPP; on re-spawns the XMPP client live. Setting the state it already has changes nothing.\nRequires: a bot instance id from `ethora-bot-instances-list` (instances are created by `ethora-agent-invite-to-chat`).",
+            annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 botInstanceId: z.string().min(1),
                 status: z.enum(["on", "off"]),
@@ -4075,7 +4075,7 @@ function appTokensRotateV2Tool(server: McpServer) {
         "ethora-app-tokens-rotate-v2",
         {
             description: "Rotate an app token: revoke an existing token and issue a replacement in one step. The old `tokenId` is revoked immediately — anything using it stops working at once. The new secret value is returned exactly once — capture it immediately.\nRequires: a token id from `ethora-app-tokens-list-v2`.\nAuth: B2B mode (`ethora-auth-use-b2b` + a configured `b2bToken`). Errors: 401/403 not in B2B mode; 400 no `appId` and none selected; 404 unknown `appId` or `tokenId`. Related: `ethora-app-tokens-revoke-v2` to revoke without a replacement.",
-            annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
+            annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("24-char hex appId the token belongs to. Optional — defaults to the app set via `ethora-app-select`."),
                 tokenId: z.string().min(1).describe("Id of the token to revoke and replace. Get it from `ethora-app-tokens-list-v2`."),

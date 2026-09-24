@@ -37,11 +37,13 @@ const { applyScopeGuard } = await import("./scopeGuard.js")
 const { applyToolMeta, removeStdioOnlyTools } = await import("./toolTitles.js")
 const { applyAgentIdAliases } = await import("./agentIdAliases.js")
 const { applyToolContext } = await import("./toolContext.js")
+const { registerToolsEnable, applyToolProfile, toolsProfileFromEnv } = await import("./toolGroups.js")
+type ToolsProfile = import("./toolGroups.js").ToolsProfile
 
 const SERVER_NAME = "Ethora MCP Server"
-const SERVER_VERSION = "26.9.3"
+const SERVER_VERSION = "26.9.4"
 
-export function buildServer(profile?: "open" | "authenticated" | "oauth") {
+export function buildServer(profile?: "open" | "authenticated" | "oauth", toolsProfile?: ToolsProfile) {
   // In HTTP mode this runs once per session, after setHostedMode(true); the
   // entry point (open, personal URL / bearer, OAuth) picks the instructions so
   // the model never tries to log in on a connection that is already authenticated.
@@ -50,6 +52,7 @@ export function buildServer(profile?: "open" | "authenticated" | "oauth") {
     { instructions: instructionsFor(isHostedMode() ? (profile || "open") : "stdio") }
   )
   registerTools(server)
+  registerToolsEnable(server)
   registerPromptsAndResources(server)
   registerDocsSearch(server)
   // Hosted surface never offers money/crypto movement (directory review rule);
@@ -63,6 +66,9 @@ export function buildServer(profile?: "open" | "authenticated" | "oauth") {
   // Records the executing tool so outbound API calls carry X-Ethora-Tool.
   applyToolContext(server)
   applyScopeGuard(server)
+  // Last: hides the non-core groups (unless "all"), after every wrapper has
+  // seen the full registry. Runs before connect(), so no list_changed fires.
+  applyToolProfile(server, toolsProfile || toolsProfileFromEnv())
   return server
 }
 

@@ -2,6 +2,16 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp"
 import z from "zod"
 import { AUTH_MAP_MD, CHAT_COMPONENT_QUICKSTART_MD, BACKEND_SDK_QUICKSTART_MD, RECIPES_MD, AGENT_FLOWS_MD } from "./prompts.js"
 import { HOSTED_INSTRUCTIONS } from "./instructions.js"
+import { groupOf, TOOL_GROUPS, CORE_GROUP } from "./toolGroups.js"
+
+// Built from the group table so the doc can never drift from the code.
+const TOOL_GROUPS_MD = [
+  "# Tool groups: what is listed by default and how to enable more",
+  "",
+  "A session lists only the `core` group at first. Every other group is registered but hidden until `ethora-tools-enable { group }` is called (or `{ group: \"all\" }`); the tool list then refreshes on its own. Hidden tools are still described here, each naming its group.",
+  "",
+  ...Object.entries(TOOL_GROUPS).map(([g, def]) => `## ${g}${g === CORE_GROUP ? " (listed by default)" : ""}\n${def.summary}\nTools: ${def.tools.map((t) => `\`${t}\``).join(", ")}`),
+].join("\n")
 
 // `search` + `fetch`: the two-tool convention ChatGPT connectors expect, also
 // useful to any assistant answering "how do I ..." questions about Ethora.
@@ -114,8 +124,17 @@ function toolDocs(server: McpServer): Doc[] {
   const reg: Record<string, any> = (server as any)._registeredTools || {}
   const docs: Doc[] = []
   for (const [name, t] of Object.entries(reg)) {
-    if (!t || t.enabled === false) continue
+    if (!t) continue
+    // Tools hidden by the group profile stay documented (the doc says how to
+    // enable them); tools hidden for another reason (OAuth identity tools) do not.
+    if (t.enabled === false && !t._hiddenByGroup) continue
     const parts: string[] = [String(t.description || "")]
+    const group = groupOf(name)
+    if (group) {
+      parts.push(t._hiddenByGroup
+        ? `Tool group: ${group}. Not in the default tool list on this session; call ethora-tools-enable { group: "${group}" } first, then the tool appears.`
+        : `Tool group: ${group}.`)
+    }
     const shape = t.inputSchema?.shape ?? t.inputSchema?._def?.shape?.()
     if (shape && typeof shape === "object") {
       const fields = Object.entries(shape as Record<string, any>).map(([k, v]) => {
@@ -138,6 +157,7 @@ function buildCorpus(server: McpServer): Doc[] {
     ...splitMarkdown("api-keys", "API keys", API_KEYS_MD).map((d) => ({ ...d, guide: true })),
     ...splitMarkdown("credentials", "Credentials: which one for what", CREDENTIALS_MD).map((d) => ({ ...d, guide: true })),
     ...splitMarkdown("feedback", "Feedback: reporting a problem or a request", FEEDBACK_MD).map((d) => ({ ...d, guide: true })),
+    ...splitMarkdown("tool-groups", "Tool groups: what is listed by default and how to enable more", TOOL_GROUPS_MD).map((d) => ({ ...d, guide: true })),
     ...splitMarkdown("auth-map", "Ethora auth map", AUTH_MAP_MD),
     ...splitMarkdown("chat-component-quickstart", "Chat component quickstart", CHAT_COMPONENT_QUICKSTART_MD),
     ...splitMarkdown("sdk-backend-quickstart", "Backend SDK quickstart", BACKEND_SDK_QUICKSTART_MD),

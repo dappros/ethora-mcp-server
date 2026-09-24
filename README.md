@@ -75,7 +75,7 @@ Then ask your agent to call `ethora-status`, `ethora-user-login` (or `ethora-use
 
 | Entry point | Who supplies identity | Typical client |
 |---|---|---|
-| `/mcp` | Nobody at connect time. Call `ethora-user-login` or `ethora-user-register` inside the session, or send `Authorization: Bearer <token>` on every request (user API key, app token or B2B token; the server picks the auth mode from the token type) | Agents, Claude Code, Cursor, connectors added as "no auth" |
+| `/mcp` (add `?tools=all` to list every tool up front) | Nobody at connect time. Call `ethora-user-login` or `ethora-user-register` inside the session, or send `Authorization: Bearer <token>` on every request (user API key, app token or B2B token; the server picks the auth mode from the token type) | Agents, Claude Code, Cursor, connectors added as "no auth" |
 | `/mcp/k/<api-key>` | The key in the path, applied like a Bearer header | Claude.ai and ChatGPT custom connectors, which take a URL but no headers |
 | `/mcp/oauth` | An OAuth 2.1 access token obtained through the Ethora authorization server (dynamic client registration, PKCE, access scopes `read`, `write`, `admin`, plus the identity scopes `openid` and `email` for directories that require them) | Connector directories (Claude, ChatGPT); vendors run the login flow themselves |
 | stdio | Env vars `ETHORA_APP_JWT` (login/register bootstrap) and optional `ETHORA_B2B_TOKEN`, or `ethora-configure` at runtime | Local CLI |
@@ -126,24 +126,31 @@ The end-to-end journey a new user typically asks for, with the tools in order:
 
 ### Tool groups
 
-91 tools on the hosted server (app deletion and bulk-delete tools are only registered when `ETHORA_MCP_ENABLE_DANGEROUS_TOOLS=true`, which the monoserver deploy sets; the stdio default is off). Every tool carries a human `title` (top-level and in `annotations.title`) and explicit `readOnlyHint`, `destructiveHint` and `openWorldHint` booleans (plus `idempotentHint` where it applies), which is what the Claude and ChatGPT directory reviews require and what lets clients auto-approve reads and confirm the destructive ones.
+A session lists **the `core` group only** at first: 24 tools covering the whole "sign in, create an app, add rooms and messages, create and activate an agent, give it a knowledge base, get the widget" journey, one variant per operation. The other groups are registered but hidden, which keeps `tools/list` around 40 KB instead of 120 KB and gives assistants a short list to choose from.
 
-| Group | Tools |
-|---|---|
-| Session and help | `ethora-status`, `ethora-doctor`, `ethora-help`, `ethora-run-recipe`, `ethora-configure`, `ethora-auth-use-user`, `ethora-auth-use-app`, `ethora-auth-use-b2b`, `ethora-feedback-submit` |
-| Accounts and keys | `ethora-user-register`, `ethora-user-login`, `ethora-api-key-create`, `ethora-api-key-list`, `ethora-api-key-revoke` |
-| Apps | `ethora-app-create`, `ethora-app-list`, `ethora-app-select`, `ethora-app-update`, `ethora-app-delete`, `ethora-app-export-v2`, `ethora-app-import-v2`, `ethora-app-tokens-create-v2`, `ethora-app-tokens-list-v2`, `ethora-app-tokens-rotate-v2`, `ethora-app-tokens-revoke-v2` |
-| Rooms and messages | `ethora-app-create-chat`, `ethora-app-delete-chat`, `ethora-app-get-default-rooms`, `ethora-app-get-default-rooms-with-app-id`, `ethora-chats-message-v2`, `ethora-chats-history-v2`, `ethora-chats-broadcast-v2`, `ethora-chats-broadcast-job-v2`, `ethora-wait-broadcast-job-v2`, `ethora-messages-search-v2`, `ethora-messages-context-v2`, `ethora-unread-counts-v2` |
-| AI agents | `ethora-agents-create-v2`, `ethora-agents-list-v2`, `ethora-agents-get-v2`, `ethora-agents-update-v2`, `ethora-agents-clone-v2`, `ethora-agents-delete-v2`, `ethora-agents-export-v2`, `ethora-agents-import-v2`, `ethora-agents-activate-v2`, `ethora-agent-invite-to-chat`, `ethora-agent-set-visibility`, `ethora-agent-soul-set`, `ethora-agent-soul-append`, `ethora-bot-instances-list`, `ethora-bot-instance-status`, `ethora-bot-instance-diag`, `ethora-bot-instance-test-message`, `ethora-bot-instance-leave-chat` |
-| Website widget | `ethora-widget-embed-snippet`, `ethora-generate-chat-component-app-tsx` |
-| Legacy per-app bot (apps created in the dashboard before the agents framework) | `ethora-bot-get-v2`, `ethora-bot-update-v2`, `ethora-bot-enable-v2`, `ethora-bot-disable-v2`, `ethora-bot-widget-v2`, `ethora-b2b-bot-enable` |
-| RAG sources | `ethora-sources-site-crawl-v2`, `ethora-sources-site-crawl-v2-wait`, `ethora-sources-site-reindex-v2`, `ethora-sources-site-reindex-v2-wait`, `ethora-sources-site-list-v2`, `ethora-sources-site-tags-update-v2`, `ethora-sources-site-delete-url-v2`, `ethora-sources-site-delete-url-v2-batch`, `ethora-sources-docs-upload-v2`, `ethora-sources-docs-list-v2`, `ethora-sources-docs-tags-update-v2`, `ethora-sources-docs-delete-v2`, `ethora-sources-docs-upload`, `ethora-sources-docs-delete` |
-| Users and files | `ethora-users-batch-create-v2`, `ethora-users-batch-job-v2`, `ethora-wait-users-batch-job-v2`, `ethora-files-upload-v2`, `ethora-files-get-v2`, `ethora-files-delete-v2` |
-| B2B provisioning (server integrations with a B2B token) | `ethora-b2b-app-create`, `ethora-b2b-app-provision`, `ethora-b2b-app-bootstrap-ai`, `ethora-generate-b2b-bootstrap-runbook`, `ethora-generate-env-examples` |
-| Wallet (stdio only) | `ethora-wallet-get-balance`, `ethora-wallet-erc20-transfer`. Neither is registered on the hosted server: directory rules forbid connectors that move money or crypto. |
-| Docs | `search`, `fetch` |
+Three ways to get more:
 
-Alias tools (`ethora.b2b.*`, `ethora-bot-message-v2`, `ethora-bot-history-v2`) are off by default (`ETHORA_MCP_ENABLE_ALIASES=true` to expose them); the canonical tools cover the same ground.
+- `ethora-tools-enable { group }` enables a group for the session (or `{ group: "all" }`); the server sends `tools/list_changed` and the client refreshes. With no arguments it returns the catalogue with counts.
+- Calling a hidden tool by name enables its group and runs it, so a name learned from the docs or an earlier session is never refused.
+- `?tools=all` on the endpoint URL (hosted) or `ETHORA_MCP_TOOLS=all` (stdio) lists everything up front.
+
+`search` and `fetch` describe hidden tools too; every tool doc names its group, and `doc:tool-groups` is the catalogue. Legacy and async variants carry a first line naming the preferred sibling.
+
+| Group | What it covers | Tools |
+|---|---|---|
+| `core` (listed by default) | Sign in or register, create an app, add rooms and messages, create and activate an AI agent, give it a knowledge base, get the website widget. Always listed. | `ethora-status`, `ethora-help`, `ethora-feedback-submit`, `ethora-tools-enable`, `search`, `fetch`, `ethora-user-register`, `ethora-user-login`, `ethora-api-key-create`, `ethora-app-create`, `ethora-app-list`, `ethora-app-select`, `ethora-app-update`, `ethora-app-create-chat`, `ethora-chats-message-v2`, `ethora-chats-history-v2`, `ethora-agents-create-v2`, `ethora-agents-list-v2`, `ethora-agents-update-v2`, `ethora-agent-invite-to-chat`, `ethora-agents-activate-v2`, `ethora-sources-site-crawl-v2-wait`, `ethora-sources-docs-upload-v2`, `ethora-widget-embed-snippet` |
+| `keys` | List and revoke API keys, reveal an app's credentials, mint and rotate app tokens. | `ethora-api-key-list`, `ethora-api-key-revoke`, `ethora-app-credentials`, `ethora-app-tokens-create-v2`, `ethora-app-tokens-list-v2`, `ethora-app-tokens-revoke-v2`, `ethora-app-tokens-rotate-v2` |
+| `session` | Diagnostics, recipes and switching the session's auth mode (app token, B2B token) for server integrations. | `ethora-doctor`, `ethora-run-recipe`, `ethora-configure`, `ethora-auth-use-user`, `ethora-auth-use-app`, `ethora-auth-use-b2b` |
+| `apps-admin` | Delete, export and import whole apps; inspect default rooms. | `ethora-app-delete`, `ethora-app-export-v2`, `ethora-app-import-v2`, `ethora-app-get-default-rooms`, `ethora-app-get-default-rooms-with-app-id` |
+| `rooms` | Delete rooms, broadcast to many rooms, search messages, read message context and unread counts. | `ethora-app-delete-chat`, `ethora-chats-broadcast-v2`, `ethora-chats-broadcast-job-v2`, `ethora-wait-broadcast-job-v2`, `ethora-messages-search-v2`, `ethora-messages-context-v2`, `ethora-unread-counts-v2` |
+| `agents-admin` | Inspect, clone, delete, export and import agents; edit an agent's soul and visibility. | `ethora-agents-get-v2`, `ethora-agents-clone-v2`, `ethora-agents-delete-v2`, `ethora-agents-export-v2`, `ethora-agents-import-v2`, `ethora-agent-set-visibility`, `ethora-agent-soul-set`, `ethora-agent-soul-append` |
+| `sources` | Knowledge-base maintenance: async crawl and reindex jobs, list and tag sites and documents, delete URLs and documents. | `ethora-sources-site-crawl-v2`, `ethora-sources-site-reindex-v2`, `ethora-sources-site-reindex-v2-wait`, `ethora-sources-site-list-v2`, `ethora-sources-site-tags-update-v2`, `ethora-sources-site-delete-url-v2`, `ethora-sources-site-delete-url-v2-batch`, `ethora-sources-docs-list-v2`, `ethora-sources-docs-tags-update-v2`, `ethora-sources-docs-delete-v2` |
+| `users-files` | Batch-create users and upload, fetch or delete files. | `ethora-users-batch-create-v2`, `ethora-users-batch-job-v2`, `ethora-wait-users-batch-job-v2`, `ethora-files-upload-v2`, `ethora-files-get-v2`, `ethora-files-delete-v2` |
+| `legacy-bot` | The per-app bot of apps created in the dashboard before the agents framework, and the pre-v2 document tools. Prefer the agents and sources tools for anything new. | `ethora-bot-get-v2`, `ethora-bot-update-v2`, `ethora-bot-enable-v2`, `ethora-bot-disable-v2`, `ethora-bot-widget-v2`, `ethora-bot-history-v2`, `ethora-bot-message-v2`, `ethora-bot-instances-list`, `ethora-bot-instance-status`, `ethora-bot-instance-diag`, `ethora-bot-instance-leave-chat`, `ethora-bot-instance-test-message`, `ethora-b2b-bot-enable`, `ethora-sources-docs-upload`, `ethora-sources-docs-delete` |
+| `b2b` | Server-to-server provisioning with a B2B token, plus code and config generators for integrations. | `ethora-b2b-app-create`, `ethora-b2b-app-provision`, `ethora-b2b-app-bootstrap-ai`, `ethora-generate-b2b-bootstrap-runbook`, `ethora-generate-env-examples`, `ethora-generate-chat-component-app-tsx`, `ethora.b2b.auth.use`, `ethora.b2b.app.create`, `ethora.b2b.bot.enable`, `ethora.b2b.broadcast.wait`, `ethora.b2b.app.bootstrap-ai` |
+| `wallet` | Wallet balance and ERC-20 transfer. Local (stdio) only; never offered on the hosted server. | `ethora-wallet-get-balance`, `ethora-wallet-erc20-transfer` |
+
+App deletion and bulk-delete tools are only registered when `ETHORA_MCP_ENABLE_DANGEROUS_TOOLS=true` (the monoserver deploy sets it; the stdio default is off). Alias tools (`ethora.b2b.*`, `ethora-bot-message-v2`, `ethora-bot-history-v2`) are off by default (`ETHORA_MCP_ENABLE_ALIASES=true` to expose them); the canonical tools cover the same ground.
 
 ## Website widget
 
@@ -167,6 +174,7 @@ The widget answers with the app's active bot (`defaultBotInstanceId`). On an app
 | `ETHORA_APP_JWT` | App JWT used only by login and register (`ETHORA_APP_TOKEN` is a legacy alias) |
 | `ETHORA_APP_DOMAIN_NAME` | Base app `domainName`; when `ETHORA_APP_JWT` is empty the server fetches the app JWT from `GET /v1/apps/get-config?domainName=...` at startup |
 | `ETHORA_B2B_TOKEN` | B2B server token for `x-custom-token` tenant-actor routes |
+| `ETHORA_MCP_TOOLS` | `all` lists every tool from the start instead of the core group (stdio; hosted uses `?tools=all` on the URL) |
 | `ETHORA_MCP_ENABLE_DANGEROUS_TOOLS` | `true` registers app deletion, wallet transfer and bulk-delete tools (default off) |
 | `ETHORA_MCP_OPENAI_APPS_CHALLENGE` | Hosted only. Token issued by the OpenAI apps portal for domain verification; served verbatim at `/.well-known/openai-apps-challenge` (404 when unset) |
 | `ETHORA_MCP_ENABLE_ALIASES` | `true` exposes the dot-namespaced alias tools (default off) |

@@ -2,6 +2,17 @@
 
 All notable changes to this package are documented here. For cross-SDK release notes, see [ethora/RELEASE-NOTES.md](https://github.com/dappros/ethora/blob/main/RELEASE-NOTES.md).
 
+## 26.9.4 - 2026-09-24
+
+### Changed
+- A session now lists the `core` tool group only (24 tools: sign in, apps, rooms, messages, agents, knowledge base, widget, one variant per operation) instead of all ~90. The rest stay registered in groups (`keys`, `session`, `apps-admin`, `rooms`, `agents-admin`, `sources`, `users-files`, `legacy-bot`, `b2b`) and are enabled per session with the new `ethora-tools-enable { group }` tool (or `all`), which triggers `tools/list_changed`; calling a hidden tool by name enables its group and runs it. `?tools=all` on the endpoint URL (hosted) or `ETHORA_MCP_TOOLS=all` (stdio) lists everything up front. `tools/list` drops from ~120 KB to ~40 KB. Hidden tools remain documented through `search` / `fetch`, each doc naming its group, and `doc:tool-groups` is the catalogue.
+- Legacy and async variants (`ethora-sources-docs-upload`, the per-app bot tools, `ethora-sources-site-crawl-v2` vs `-wait`, the dotted `ethora.b2b.*` names) carry a first line naming the preferred sibling.
+- Annotations corrected where they contradicted the description: `ethora-bot-instance-status` is not read-only, `ethora-app-tokens-rotate-v2` is not idempotent; `ethora-agent-set-visibility` says which of `agentId` / `agentIdOrAddress` to pass.
+
+### Added
+- A browser opening `/` or `/mcp` gets a human landing page (what this is, how a person connects, per-client steps, agent and developer entry points), light and dark; curl, MCP clients and `/.well-known/mcp` are unchanged.
+- Outbound API calls carry `X-Ethora-Agent` (the assistant behind the session) so the API can record which client last used a key or grant.
+
 ## 26.9.3 - 2026-09-17
 
 ### Added
