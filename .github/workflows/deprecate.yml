@@ -46,9 +46,11 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           set -euo pipefail
+          # npm answers 422 when a version already carries this deprecation;
+          # that is not a failure, and the registry step below must still run.
           for v in ${{ inputs.versions }}; do
             echo "npm deprecate ${PACKAGE}@${v}"
-            npm deprecate "${PACKAGE}@${v}" "${{ inputs.message }}"
+            npm deprecate "${PACKAGE}@${v}" "${{ inputs.message }}" || echo "::warning::npm deprecate for ${v} returned an error (already deprecated?); continuing"
           done
           npm view "${PACKAGE}" dist-tags.latest deprecated --json || true
 
