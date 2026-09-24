@@ -111,28 +111,28 @@ function humaniseMessage(msg: string): string {
 }
 
 function inferHint(code: string | undefined, httpStatus: number | undefined, msg: string) {
-  if (code === "AUTH_APP_OR_B2B_REQUIRED") return "Call `ethora-auth-use-app` (app token) or `ethora-auth-use-b2b` (B2B token). `ethora-status` shows the active mode."
+  if (code === "AUTH_APP_OR_B2B_REQUIRED") return "Call `ethora-auth-mode-set` (app token) or `ethora-auth-mode-set` (B2B token). `ethora-status` shows the active mode."
   // The API returns this for a token of the wrong kind for the route. Without a
   // hint the caller only sees "Invalid token type" and cannot tell what to switch to.
-  if (code === "INVALID_TOKEN_TYPE") return "The active token is the wrong kind for this route. Agents, rooms and source routes want user auth with an app selected (`ethora-auth-use-user`, then `ethora-app-select`); bot and token-admin routes want app-token or B2B auth (`ethora-auth-use-app` / `ethora-auth-use-b2b`). Check the current mode with `ethora-status`."
+  if (code === "INVALID_TOKEN_TYPE") return "The active token is the wrong kind for this route. Agents, rooms and source routes want user auth with an app selected (`ethora-auth-mode-set`, then `ethora-app-select`); bot and token-admin routes want app-token or B2B auth (`ethora-auth-mode-set` / `ethora-auth-mode-set`). Check the current mode with `ethora-status`."
   if (code === "REFRESH_RECORD_NOT_FOUND") return "The session credential was revoked or expired. Call `ethora-user-login` again, or reconnect with a valid API key."
   if (code === "PRECONDITION_REQUIRED") return "Something this call depends on does not exist yet. Read the message for the missing object and create it first."
-  if (code === "AUTH_USER_OR_B2B_REQUIRED") return "This route rejects app tokens. Call `ethora-auth-use-user` (then `ethora-user-login`) or `ethora-auth-use-b2b`."
+  if (code === "AUTH_USER_OR_B2B_REQUIRED") return "This route rejects app tokens. Call `ethora-auth-mode-set` (then `ethora-user-login`) or `ethora-auth-mode-set`."
   if (code === "UNSUPPORTED_ON_HOSTED") return "This is not available on the hosted server. Run the stdio server locally (`npx -y @ethora/mcp-server`) if you need it."
   if (code === "FLOWS_INVALID") return "The flows YAML did not compile; `details` lists what failed and where. Nothing was saved. Call `fetch` with id `doc:agent-flows` for the authoring format, fix the script and retry."
-  if (code === "CONFIG_REQUIRED") return "The server or session is missing configuration named in the message. Set it via env, or call `ethora-configure` for per-session credentials. `ethora-doctor` lists what is missing."
+  if (code === "CONFIG_REQUIRED") return "The server or session is missing configuration named in the message. Set it via env, or call `ethora-session-configure` for per-session credentials. `ethora-doctor` lists what is missing."
   if (code === "VALIDATION_ERROR") return "The message names the argument to fix. Correct it and call again; `search`/`fetch` have the full input reference for every tool."
   if (code === "APP_NOT_SELECTED") return "Call `ethora-app-select` to set the current appId (and optionally appToken)."
-  if (code === "AUTH_APP_REQUIRED") return "Call `ethora-auth-use-app` and set appToken via `ethora-app-select`."
-  if (code === "AUTH_USER_REQUIRED") return "Call `ethora-auth-use-user` then `ethora-user-login`."
-  if (code === "AUTH_B2B_REQUIRED") return "Call `ethora-auth-use-b2b` and set `ETHORA_B2B_TOKEN` (or `ethora-configure`)."
+  if (code === "AUTH_APP_REQUIRED") return "Call `ethora-auth-mode-set` and set appToken via `ethora-app-select`."
+  if (code === "AUTH_USER_REQUIRED") return "Call `ethora-auth-mode-set` then `ethora-user-login`."
+  if (code === "AUTH_B2B_REQUIRED") return "Call `ethora-auth-mode-set` and set `ETHORA_B2B_TOKEN` (or `ethora-session-configure`)."
   if (code === "APP_NOT_SELECTED") return "Call `ethora-app-select` to set the current appId (and optionally appToken)."
   if (code === "TIMEOUT") return "Retry, or increase the tool timeout/poll interval if supported."
   if (httpStatus === 401) return "Check credentials/token. Use `ethora-status` and `ethora-help` to fix auth."
   if (httpStatus === 403) return "Token is valid but not permitted. Verify app/user permissions."
   if (httpStatus === 422) return "Validate inputs (required fields, ids, URL formats)."
   if (httpStatus === 404) return "Check resource ids/app context; it may already be deleted or not exist."
-  if (String(msg || "").includes("ETHORA_API_URL")) return "Set `ETHORA_API_URL` (or call `ethora-configure`)."
+  if (String(msg || "").includes("ETHORA_API_URL")) return "Set `ETHORA_API_URL` (or call `ethora-session-configure`)."
   return "Run `ethora-help` or `ethora-doctor` for recommended next steps."
 }
 

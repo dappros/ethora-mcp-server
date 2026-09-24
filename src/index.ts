@@ -38,10 +38,11 @@ const { applyToolMeta, removeStdioOnlyTools } = await import("./toolTitles.js")
 const { applyAgentIdAliases } = await import("./agentIdAliases.js")
 const { applyToolContext } = await import("./toolContext.js")
 const { registerToolsEnable, applyToolProfile, toolsProfileFromEnv } = await import("./toolGroups.js")
+const { installToolAliases } = await import("./toolNames.js")
 type ToolsProfile = import("./toolGroups.js").ToolsProfile
 
 const SERVER_NAME = "Ethora MCP Server"
-const SERVER_VERSION = "26.9.4"
+const SERVER_VERSION = "27.0.0"
 
 export function buildServer(profile?: "open" | "authenticated" | "oauth", toolsProfile?: ToolsProfile) {
   // In HTTP mode this runs once per session, after setHostedMode(true); the
@@ -69,6 +70,9 @@ export function buildServer(profile?: "open" | "authenticated" | "oauth", toolsP
   // Last: hides the non-core groups (unless "all"), after every wrapper has
   // seen the full registry. Runs before connect(), so no list_changed fires.
   applyToolProfile(server, toolsProfile || toolsProfileFromEnv())
+  // Outermost on tools/call: an old name is rewritten to its canonical tool
+  // (with any preset argument) before the group auto-enable looks it up.
+  installToolAliases(server)
   return server
 }
 

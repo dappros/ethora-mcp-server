@@ -33,10 +33,10 @@ export const SCOPE_EXEMPT_TOOLS = new Set([
 export const OAUTH_HIDDEN_TOOLS = new Set([
   "ethora-user-login",
   "ethora-user-register",
-  "ethora-configure",
-  "ethora-auth-use-app",
-  "ethora-auth-use-user",
-  "ethora-auth-use-b2b",
+  "ethora-session-configure",
+  "ethora-auth-mode-set",
+  "ethora-auth-mode-set",
+  "ethora-auth-mode-set",
   "ethora-api-key-create",
   "ethora-api-key-list",
   "ethora-api-key-revoke",
@@ -45,7 +45,7 @@ export const OAUTH_HIDDEN_TOOLS = new Set([
 // Per-tool overrides: tools whose annotations understate their sensitivity.
 // Revealing a credential is read-only in API terms but is an admin action.
 export const SCOPE_OVERRIDES: Record<string, Scope> = {
-  "ethora-app-credentials": "admin",
+  "ethora-app-credentials-reveal": "admin",
   // Writes nothing the caller owns and must work on a read-only grant:
   // being unable to report a problem because of scope would be perverse.
   "ethora-feedback-submit": "read",

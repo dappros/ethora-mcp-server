@@ -139,9 +139,9 @@ export const REDACTION_EXEMPT_TOOLS = new Set([
     "ethora-user-login",
     "ethora-user-register",
     "ethora-api-key-create",
-    "ethora-app-credentials",
-    "ethora-app-tokens-create-v2",
-    "ethora-app-tokens-rotate-v2",
+    "ethora-app-credentials-reveal",
+    "ethora-app-token-create",
+    "ethora-app-token-rotate",
 ])
 
 export function asToolResult(envelope: any): CallToolResult {
@@ -251,14 +251,14 @@ function normalizeBase64ToBuffer(input: string) {
 function ensureUserAuthForTool() {
     const state = getClientState() as any
     if (state.authMode !== "user") {
-        throw new Error("This tool requires user auth. Call `ethora-auth-use-user` (and `ethora-user-login`) first.")
+        throw new Error("This tool requires user auth. Call `ethora-auth-mode-set` (and `ethora-user-login`) first.")
     }
 }
 
 function ensureAppAuthForTool() {
     const state = getClientState() as any
     if (state.authMode !== "app") {
-        throw new Error("This tool requires app-token auth. Call `ethora-auth-use-app` (and configure appToken via `ethora-app-select`) first.")
+        throw new Error("This tool requires app-token auth. Call `ethora-auth-mode-set` (and configure appToken via `ethora-app-select`) first.")
     }
 }
 
@@ -285,7 +285,7 @@ function resolveAppScopedV2Context(passedAppId?: string) {
 
     if (state.authMode === "b2b") {
         if (!state.hasB2BToken) {
-            throw new Error("B2B auth is selected but b2bToken is missing. Set env ETHORA_B2B_TOKEN or call `ethora-configure` with b2bToken.")
+            throw new Error("B2B auth is selected but b2bToken is missing. Set env ETHORA_B2B_TOKEN or call `ethora-session-configure` with b2bToken.")
         }
         if (!effectiveAppId) {
             throw new Error(APP_CONTEXT_MISSING_MESSAGE)
@@ -304,7 +304,7 @@ function resolveAppScopedV2Context(passedAppId?: string) {
         return { mode: "user" as const, appId: effectiveAppId || undefined }
     }
 
-    throw new Error("This tool requires user auth, app-token auth or B2B auth. Use `ethora-auth-use-user` (then `ethora-user-login`), `ethora-auth-use-app` or `ethora-auth-use-b2b`.")
+    throw new Error("This tool requires user auth, app-token auth or B2B auth. Use `ethora-auth-mode-set` (then `ethora-user-login`), `ethora-auth-mode-set` or `ethora-auth-mode-set`.")
 }
 
 // Resolve a room reference to the identifiers the v2 routes need. Rooms have
@@ -322,7 +322,7 @@ async function resolveRoom(appIdHint: string | undefined, roomJidOrChatId: strin
         || items.find((c) => String(c.name) === parsed.roomName)
         || items.find((c) => String(c.name || "").endsWith(`_${parsed.chatId}`))
     if (!rec) {
-        throw new Error(`Room not found in app ${parsed.appId}: ${given}. Pass the room JID returned by ethora-app-create-chat (\`${"${appId}_${chatId}"}\`) or a chat _id from the app's chat list.`)
+        throw new Error(`Room not found in app ${parsed.appId}: ${given}. Pass the room JID returned by ethora-chat-create (\`${"${appId}_${chatId}"}\`) or a chat _id from the app's chat list.`)
     }
     const name = String(rec.name || parsed.roomName)
     const suffix = name.startsWith(`${parsed.appId}_`) ? name.slice(parsed.appId.length + 1) : name
@@ -331,23 +331,23 @@ async function resolveRoom(appIdHint: string | undefined, roomJidOrChatId: strin
 
 function configureTool(server: McpServer) {
     server.registerTool(
-        "ethora-configure",
+        "ethora-session-configure",
         {
             description: "Set the Ethora API URL and credentials for this MCP session. Stores values in memory only; each call merges with omitted fields kept. Alternative to env vars (ETHORA_API_URL / ETHORA_APP_JWT / ETHORA_APP_TOKEN / ETHORA_B2B_TOKEN). On a hosted server `apiUrl` is fixed and cannot be changed; credentials are per session.\nAuth: none required — this establishes auth material. Errors: only if a value is structurally invalid. Follow with an `ethora-auth-use-*` tool to pick the active mode.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
             inputSchema: {
                 apiUrl: z.string().optional().describe("Full Ethora API URL including the version path, e.g. `https://api.chat.ethora.com/v1` or `http://localhost:8080/v1`. If you only have the host, set ETHORA_BASE_URL env instead and the server appends `/v1`."),
                 appJwt: z.string().optional().describe("Ethora App JWT, used only to bootstrap login/register in user-auth mode. Usually starts with `JWT `. Secret — never commit it."),
-                appToken: z.string().optional().describe("Per-app appToken for app-scoped flows (broadcast, sources, bot). Setting this makes app-token auth available via `ethora-auth-use-app`. Secret."),
+                appToken: z.string().optional().describe("Per-app appToken for app-scoped flows (broadcast, sources, bot). Setting this makes app-token auth available via `ethora-auth-mode-set`. Secret."),
                 b2bToken: z.string().optional().describe("B2B server token for tenant-actor `x-custom-token` auth (a JWT with `type=server`). Required for B2B provisioning flows. Secret."),
             },
         },
         async function ({ apiUrl, appJwt, appToken, b2bToken }) {
             try {
                 configureClient({ apiUrl, appJwt, appToken, b2bToken })
-                return asToolResult(ok(getClientState(), getDefaultMeta("ethora-configure")))
+                return asToolResult(ok(getClientState(), getDefaultMeta("ethora-session-configure")))
             } catch (error) {
-                return asToolResult(fail(error, getDefaultMeta("ethora-configure")))
+                return asToolResult(fail(error, getDefaultMeta("ethora-session-configure")))
             }
         }
     )
@@ -374,7 +374,7 @@ function helpTool(server: McpServer) {
     server.registerTool(
         "ethora-help",
         {
-            description: "Task-oriented orientation for this MCP server: explains the three Ethora auth modes (user / app-token / B2B) and recommends next tool calls + recipes based on current session state.\nAuth: none required — inspects state, no API calls. Errors: effectively none. Related: pass a recommended recipe id to `ethora-run-recipe`.",
+            description: "Task-oriented orientation for this MCP server: explains the three Ethora auth modes (user / app-token / B2B) and recommends next tool calls + recipes based on current session state.\nAuth: none required — inspects state, no API calls. Errors: effectively none. Related: pass a recommended recipe id to `ethora-recipe-run`.",
             annotations: { readOnlyHint: true, openWorldHint: false },
             inputSchema: {
                 goal: z.enum(["auto", "b2b-bootstrap-ai", "broadcast", "sources-ingest", "files-upload", "bot-manage", "chat-test", "widget", "user-login"]).optional()
@@ -407,19 +407,19 @@ function helpTool(server: McpServer) {
                     user: {
                         bestFor: "Developers, tenant admins, and app owners trying Ethora locally from Cursor or Claude Desktop.",
                         credentials: ["ETHORA_APP_JWT for login/register bootstrap", "user JWT + refresh token returned by ethora-user-login"],
-                        typicalFlow: ["ethora-configure", "ethora-auth-use-user", "ethora-user-login"],
+                        typicalFlow: ["ethora-session-configure", "ethora-auth-mode-set", "ethora-user-login"],
                     },
                     b2b: {
                         bestFor: "Permanent integrations, partner backends, and autonomous agents managing Ethora without a human user session.",
                         credentials: ["ETHORA_B2B_TOKEN for tenant-actor routes", "appToken after app selection for app-scoped automation"],
-                        typicalFlow: ["ethora-configure", "ethora-auth-use-b2b", "ethora-b2b-app-create or ethora-b2b-app-bootstrap-ai", "ethora-app-select", "ethora-auth-use-app"],
+                        typicalFlow: ["ethora-session-configure", "ethora-auth-mode-set", "ethora-b2b-app-create or ethora-b2b-app-bootstrap-ai", "ethora-app-select", "ethora-auth-mode-set"],
                     },
                 }
 
                 // Always-start recommendations
                 if (!checks.hasApiUrl) {
                     nextCalls.push({
-                        tool: "ethora-configure",
+                        tool: "ethora-session-configure",
                         args: { apiUrl: "https://api.ethoradev.com/v1" },
                         why: "Set the Ethora API URL for this MCP session.",
                     })
@@ -431,13 +431,13 @@ function helpTool(server: McpServer) {
                 if (effectiveGoal === "user-login" || effectiveGoal === "files-upload") {
                     if (!checks.hasAppJwt) {
                         nextCalls.push({
-                            tool: "ethora-configure",
+                            tool: "ethora-session-configure",
                             args: { appJwt: "JWT <APP_JWT_FOR_LOGIN_REGISTER>" },
                             why: "User-auth mode needs App JWT only for login/register bootstrap.",
                         })
                     }
                     if (state.authMode !== "user") {
-                        nextCalls.push({ tool: "ethora-auth-use-user", why: "Switch to user-session auth mode." })
+                        nextCalls.push({ tool: "ethora-auth-mode-set", why: "Switch to user-session auth mode." })
                     }
                     if (!checks.hasUserToken) {
                         nextCalls.push({
@@ -452,8 +452,8 @@ function helpTool(server: McpServer) {
                         title: "User login (for user-auth tools like files)",
                         description: "Recommended first-run local flow for developers and admins using the MCP server on their own machine.",
                         steps: [
-                            { tool: "ethora-configure", args: { apiUrl: String(state.apiUrl || "https://api.ethoradev.com/v1"), appJwt: "JWT <APP_JWT_FOR_LOGIN_REGISTER>" } },
-                            { tool: "ethora-auth-use-user" },
+                            { tool: "ethora-session-configure", args: { apiUrl: String(state.apiUrl || "https://api.ethoradev.com/v1"), appJwt: "JWT <APP_JWT_FOR_LOGIN_REGISTER>" } },
+                            { tool: "ethora-auth-mode-set" },
                             { tool: "ethora-user-login", args: { email: "user@example.com", password: "<password>" } },
                         ],
                     })
@@ -463,9 +463,9 @@ function helpTool(server: McpServer) {
                         title: "Upload files (v2)",
                         description: "Use user-auth mode to upload user-owned files after logging in.",
                         steps: [
-                            { tool: "ethora-auth-use-user" },
+                            { tool: "ethora-auth-mode-set" },
                             { tool: "ethora-user-login", args: { email: "user@example.com", password: "<password>" } },
-                            { tool: "ethora-files-upload-v2", args: { files: [{ name: "example.txt", mimeType: "text/plain", base64: "<BASE64_CONTENT>" }] } },
+                            { tool: "ethora-file-upload", args: { files: [{ name: "example.txt", mimeType: "text/plain", base64: "<BASE64_CONTENT>" }] } },
                         ],
                     })
                 }
@@ -473,11 +473,11 @@ function helpTool(server: McpServer) {
                 // Goal: B2B bootstrap AI
                 if (effectiveGoal === "b2b-bootstrap-ai") {
                     if (state.authMode !== "b2b") {
-                        nextCalls.push({ tool: "ethora-auth-use-b2b", why: "Use B2B auth mode (x-custom-token) for server-side provisioning and tenant-actor operations." })
+                        nextCalls.push({ tool: "ethora-auth-mode-set", why: "Use B2B auth mode (x-custom-token) for server-side provisioning and tenant-actor operations." })
                     }
                     if (!checks.hasB2BToken) {
                         nextCalls.push({
-                            tool: "ethora-configure",
+                            tool: "ethora-session-configure",
                             args: { b2bToken: "JWT <B2B_SERVER_TOKEN>" },
                             why: "B2B mode requires a server token sent as x-custom-token.",
                         })
@@ -493,8 +493,8 @@ function helpTool(server: McpServer) {
                         title: "B2B bootstrap: create app → ingest → enable bot",
                         description: "Recommended server-side flow when Ethora is being automated from your own backend or agent runner.",
                         steps: [
-                            { tool: "ethora-configure", args: { apiUrl: String(state.apiUrl || "https://api.ethoradev.com/v1"), b2bToken: "JWT <B2B_SERVER_TOKEN>" } },
-                            { tool: "ethora-auth-use-b2b" },
+                            { tool: "ethora-session-configure", args: { apiUrl: String(state.apiUrl || "https://api.ethoradev.com/v1"), b2bToken: "JWT <B2B_SERVER_TOKEN>" } },
+                            { tool: "ethora-auth-mode-set" },
                             { tool: "ethora-b2b-app-bootstrap-ai", args: { displayName: "Acme AI Demo", crawlUrl: "https://example.com", enableBot: true, llmProvider: "openai", llmModel: "gpt-4o-mini" } },
                         ],
                     })
@@ -504,8 +504,8 @@ function helpTool(server: McpServer) {
                         title: "B2B: create app only",
                         description: "Create an app via B2B token (no sources/bot).",
                         steps: [
-                            { tool: "ethora-configure", args: { apiUrl: String(state.apiUrl || "https://api.ethoradev.com/v1"), b2bToken: "JWT <B2B_SERVER_TOKEN>" } },
-                            { tool: "ethora-auth-use-b2b" },
+                            { tool: "ethora-session-configure", args: { apiUrl: String(state.apiUrl || "https://api.ethoradev.com/v1"), b2bToken: "JWT <B2B_SERVER_TOKEN>" } },
+                            { tool: "ethora-auth-mode-set" },
                             { tool: "ethora-b2b-app-create", args: { displayName: "My App" } },
                         ],
                     })
@@ -531,16 +531,16 @@ function helpTool(server: McpServer) {
                             description: "Select app + appToken, switch to app auth, enqueue broadcast, then poll for completion.",
                             steps: [
                                 { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: "JWT <APP_TOKEN>" } },
-                                { tool: "ethora-auth-use-app" },
-                                { tool: "ethora-chats-broadcast-v2", args: { text: "Hello from MCP!", allRooms: true } },
-                                { tool: "ethora-wait-broadcast-job-v2", args: { jobId: "<JOB_ID_FROM_PREVIOUS_STEP>", timeoutMs: 60000, intervalMs: 2000 } },
+                                { tool: "ethora-auth-mode-set" },
+                                { tool: "ethora-broadcast-send", args: { text: "Hello from MCP!", allRooms: true } },
+                                { tool: "ethora-broadcast-job-wait", args: { jobId: "<JOB_ID_FROM_PREVIOUS_STEP>", timeoutMs: 60000, intervalMs: 2000 } },
                             ],
                         })
                     }
 
                     if (effectiveGoal === "sources-ingest") {
                         nextCalls.push({
-                            tool: "ethora-sources-site-list-v2",
+                            tool: "ethora-source-site-list",
                             why: "Inspect crawled URLs and current tags for this app.",
                         })
 
@@ -550,8 +550,8 @@ function helpTool(server: McpServer) {
                             description: "Crawl a website for RAG ingestion using app-token auth.",
                             steps: [
                                 { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: "JWT <APP_TOKEN>" } },
-                                { tool: "ethora-auth-use-app" },
-                                { tool: "ethora-sources-site-crawl-v2", args: { url: "https://example.com", followLink: true } },
+                                { tool: "ethora-auth-mode-set" },
+                                { tool: "ethora-source-site-crawl", args: { url: "https://example.com", followLink: true } },
                             ],
                         })
 
@@ -561,8 +561,8 @@ function helpTool(server: McpServer) {
                             description: "Upload documents for parsing + embeddings using app-token auth.",
                             steps: [
                                 { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: "JWT <APP_TOKEN>" } },
-                                { tool: "ethora-auth-use-app" },
-                                { tool: "ethora-sources-docs-upload-v2", args: { files: [{ name: "doc.pdf", mimeType: "application/pdf", base64: "<BASE64_CONTENT>" }] } },
+                                { tool: "ethora-auth-mode-set" },
+                                { tool: "ethora-source-doc-upload", args: { files: [{ name: "doc.pdf", mimeType: "application/pdf", base64: "<BASE64_CONTENT>" }] } },
                             ],
                         })
 
@@ -572,52 +572,52 @@ function helpTool(server: McpServer) {
                             description: "List crawled sources, then assign tags used by RAG filtering.",
                             steps: [
                                 { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: "JWT <APP_TOKEN>" } },
-                                { tool: "ethora-auth-use-app" },
-                                { tool: "ethora-sources-site-list-v2", args: {} },
-                                { tool: "ethora-sources-site-tags-update-v2", args: { sourceId: "<SOURCE_ID>", tags: ["support", "faq"] } },
+                                { tool: "ethora-auth-mode-set" },
+                                { tool: "ethora-source-site-list", args: {} },
+                                { tool: "ethora-source-site-tags-update", args: { sourceId: "<SOURCE_ID>", tags: ["support", "faq"] } },
                             ],
                         })
                     }
 
                     if (effectiveGoal === "bot-manage") {
                         nextCalls.push(
-                            { tool: "ethora-agents-list-v2", why: "See the AI agents that already exist for the selected app." },
-                            { tool: "ethora-agents-create-v2", args: { name: "Helper", prompt: "You are a polite support assistant for this app." }, why: "Create an AI agent persona (user auth; lands in the selected app)." },
-                            { tool: "ethora-agent-invite-to-chat", args: { agentIdOrAddress: "<AGENT_ID>", chatJid: "<ROOM_JID>" }, why: "Put the agent into a room so it starts answering there." },
-                            { tool: "ethora-bot-instances-list", args: { appId: String(state.currentAppId || "<APP_ID>") }, why: "Confirm the agent's bot instance is on." },
+                            { tool: "ethora-agent-list", why: "See the AI agents that already exist for the selected app." },
+                            { tool: "ethora-agent-create", args: { name: "Helper", prompt: "You are a polite support assistant for this app." }, why: "Create an AI agent persona (user auth; lands in the selected app)." },
+                            { tool: "ethora-agent-invite", args: { agentIdOrAddress: "<AGENT_ID>", chatJid: "<ROOM_JID>" }, why: "Put the agent into a room so it starts answering there." },
+                            { tool: "ethora-bot-instance-list", args: { appId: String(state.currentAppId || "<APP_ID>") }, why: "Confirm the agent's bot instance is on." },
                         )
                         recipes.push({
                             id: "agent-create-and-invite",
                             title: "Create an AI agent and add it to a room (user auth)",
-                            description: "The standard path for API-created apps: create a room, create an agent, invite it, then talk to it with ethora-chats-message-v2.",
+                            description: "The standard path for API-created apps: create a room, create an agent, invite it, then talk to it with ethora-message-send.",
                             steps: [
                                 { tool: "ethora-app-select", args: { appId: "<APP_ID>" } },
-                                { tool: "ethora-app-create-chat", args: { appId: "<APP_ID>", title: "Support", pinned: true } },
-                                { tool: "ethora-agents-create-v2", args: { name: "Helper", prompt: "You are a polite support assistant for this app." } },
-                                { tool: "ethora-agent-invite-to-chat", args: { agentIdOrAddress: "<AGENT_ID>", chatJid: "<ROOM_JID>" } },
-                                { tool: "ethora-chats-message-v2", args: { roomJid: "<ROOM_JID>", text: "hello, is anyone there?", waitForReplySec: 45 } },
+                                { tool: "ethora-chat-create", args: { appId: "<APP_ID>", title: "Support", pinned: true } },
+                                { tool: "ethora-agent-create", args: { name: "Helper", prompt: "You are a polite support assistant for this app." } },
+                                { tool: "ethora-agent-invite", args: { agentIdOrAddress: "<AGENT_ID>", chatJid: "<ROOM_JID>" } },
+                                { tool: "ethora-message-send", args: { roomJid: "<ROOM_JID>", text: "hello, is anyone there?", waitForReplySec: 45 } },
                             ],
                         })
                         recipes.push({
                             id: "legacy-bot-enable-and-tune",
                             title: "Legacy per-app bot (only for apps that already have one)",
-                            description: "Apps created through the API or B2B have no legacy aiBot (ethora-bot-enable-v2 returns 422 BOT_NOT_INITIALIZED); use the agent recipe above instead.",
+                            description: "Apps created through the API or B2B have no legacy aiBot (ethora-bot-enable returns 422 BOT_NOT_INITIALIZED); use the agent recipe above instead.",
                             steps: [
                                 { tool: "ethora-app-select", args: { appId: "<APP_ID>" } },
-                                { tool: "ethora-bot-enable-v2", args: {} },
-                                { tool: "ethora-bot-update-v2", args: { trigger: "/bot", prompt: "You are a helpful assistant.", greetingMessage: "Hello! Ask me anything." } },
+                                { tool: "ethora-bot-enable", args: {} },
+                                { tool: "ethora-bot-update", args: { trigger: "/bot", prompt: "You are a helpful assistant.", greetingMessage: "Hello! Ask me anything." } },
                             ],
                         })
                     }
                     if (effectiveGoal === "chat-test") {
                         nextCalls.push(
                             {
-                                tool: "ethora-chats-message-v2",
+                                tool: "ethora-message-send",
                                 args: { roomJid: "<ROOM_JID>", text: "hello, is anyone there?", waitForReplySec: 45 },
                                 why: "Post into the room as the app and wait for an invited AI agent to answer; replies come back in the result.",
                             },
                             {
-                                tool: "ethora-chats-history-v2",
+                                tool: "ethora-chat-history",
                                 args: { roomJid: "<ROOM_JID>", limit: 20 },
                                 why: "Read the room's archived messages (yours and the agent's).",
                             }
@@ -629,8 +629,8 @@ function helpTool(server: McpServer) {
                                 description: "Post a message into a room the agent was invited to, wait for the reply, then read the history.",
                                 steps: [
                                     { tool: "ethora-app-select", args: { appId: "<APP_ID>" } },
-                                    { tool: "ethora-chats-message-v2", args: { roomJid: "<ROOM_JID>", text: "What can you help me with?", waitForReplySec: 45 } },
-                                    { tool: "ethora-chats-history-v2", args: { roomJid: "<ROOM_JID>", limit: 20 } },
+                                    { tool: "ethora-message-send", args: { roomJid: "<ROOM_JID>", text: "What can you help me with?", waitForReplySec: 45 } },
+                                    { tool: "ethora-chat-history", args: { roomJid: "<ROOM_JID>", limit: 20 } },
                                 ],
                             },
                             {
@@ -639,11 +639,11 @@ function helpTool(server: McpServer) {
                                 description: "Agent -> room -> invite -> activate (binds the app's default bot instance) -> embed <script>. User auth; the activate step reuses the appToken captured from ethora-app-create.",
                                                                 steps: [
                                     { tool: "ethora-app-select", args: { appId: "<APP_ID>" } },
-                                    { tool: "ethora-agents-create-v2", args: { name: "Helper", prompt: "You are a polite support assistant for this website." } },
-                                    { tool: "ethora-app-create-chat", args: { appId: "<APP_ID>", title: "Website widget" } },
-                                    { tool: "ethora-agent-invite-to-chat", args: { agentIdOrAddress: "<AGENT_ID>", chatJid: "<ROOM_JID>" } },
-                                    { tool: "ethora-agents-activate-v2", args: { agentId: "<AGENT_ID>", chatJid: "<ROOM_JID>" } },
-                                    { tool: "ethora-widget-embed-snippet", args: { appId: "<APP_ID>", botName: "Helper" } },
+                                    { tool: "ethora-agent-create", args: { name: "Helper", prompt: "You are a polite support assistant for this website." } },
+                                    { tool: "ethora-chat-create", args: { appId: "<APP_ID>", title: "Website widget" } },
+                                    { tool: "ethora-agent-invite", args: { agentIdOrAddress: "<AGENT_ID>", chatJid: "<ROOM_JID>" } },
+                                    { tool: "ethora-agent-activate", args: { agentId: "<AGENT_ID>", chatJid: "<ROOM_JID>" } },
+                                    { tool: "ethora-widget-snippet-get", args: { appId: "<APP_ID>", botName: "Helper" } },
                                 ],
                             }
                         )
@@ -651,23 +651,23 @@ function helpTool(server: McpServer) {
                 }
                 if (effectiveGoal === "widget") {
                     nextCalls.push(
-                        { tool: "ethora-agents-create-v2", args: { name: "Helper", prompt: "You are a polite support assistant for this website." }, why: "The widget answers with an agent; create one (user auth)." },
-                        { tool: "ethora-app-create-chat", args: { appId: String(state.currentAppId || "<APP_ID>"), title: "Website widget" }, why: "A room the agent is invited into becomes the widget chat." },
-                        { tool: "ethora-agent-invite-to-chat", args: { agentIdOrAddress: "<AGENT_ID>", chatJid: "<ROOM_JID>" }, why: "Spawns the agent's bot instance for this app." },
-                        { tool: "ethora-agents-activate-v2", args: { agentId: "<AGENT_ID>", chatJid: "<ROOM_JID>" }, why: "Sets the app's default bot instance; without it POST /v2/widget/sessions returns 422 and the widget stays silent. Uses the appToken captured from ethora-app-create." },
-                        { tool: "ethora-widget-embed-snippet", args: { appId: String(state.currentAppId || "<APP_ID>"), botName: "Helper" }, why: "Returns the <script> tag to paste into the website plus prerequisites." },
+                        { tool: "ethora-agent-create", args: { name: "Helper", prompt: "You are a polite support assistant for this website." }, why: "The widget answers with an agent; create one (user auth)." },
+                        { tool: "ethora-chat-create", args: { appId: String(state.currentAppId || "<APP_ID>"), title: "Website widget" }, why: "A room the agent is invited into becomes the widget chat." },
+                        { tool: "ethora-agent-invite", args: { agentIdOrAddress: "<AGENT_ID>", chatJid: "<ROOM_JID>" }, why: "Spawns the agent's bot instance for this app." },
+                        { tool: "ethora-agent-activate", args: { agentId: "<AGENT_ID>", chatJid: "<ROOM_JID>" }, why: "Sets the app's default bot instance; without it POST /v2/widget/sessions returns 422 and the widget stays silent. Uses the appToken captured from ethora-app-create." },
+                        { tool: "ethora-widget-snippet-get", args: { appId: String(state.currentAppId || "<APP_ID>"), botName: "Helper" }, why: "Returns the <script> tag to paste into the website plus prerequisites." },
                     )
                     recipes.push({
                         id: "widget-embed",
                         title: "Embed the AI chat widget on a website (user auth)",
-                        description: "Create an agent, bind it as the app's active widget bot, then generate the embed script. If a config needs the appToken, get it from `ethora-app-credentials { appId, confirm: true }`.",
+                        description: "Create an agent, bind it as the app's active widget bot, then generate the embed script. If a config needs the appToken, get it from `ethora-app-credentials-reveal { appId, confirm: true }`.",
                         steps: [
                             { tool: "ethora-app-select", args: { appId: "<APP_ID>" } },
-                            { tool: "ethora-agents-create-v2", args: { name: "Helper", prompt: "You are a polite support assistant for this website." } },
-                            { tool: "ethora-app-create-chat", args: { appId: "<APP_ID>", title: "Website widget" } },
-                            { tool: "ethora-agent-invite-to-chat", args: { agentIdOrAddress: "<AGENT_ID>", chatJid: "<ROOM_JID>" } },
-                            { tool: "ethora-agents-activate-v2", args: { agentId: "<AGENT_ID>", chatJid: "<ROOM_JID>" } },
-                            { tool: "ethora-widget-embed-snippet", args: { appId: "<APP_ID>", botName: "Helper" } },
+                            { tool: "ethora-agent-create", args: { name: "Helper", prompt: "You are a polite support assistant for this website." } },
+                            { tool: "ethora-chat-create", args: { appId: "<APP_ID>", title: "Website widget" } },
+                            { tool: "ethora-agent-invite", args: { agentIdOrAddress: "<AGENT_ID>", chatJid: "<ROOM_JID>" } },
+                            { tool: "ethora-agent-activate", args: { agentId: "<AGENT_ID>", chatJid: "<ROOM_JID>" } },
+                            { tool: "ethora-widget-snippet-get", args: { appId: "<APP_ID>", botName: "Helper" } },
                         ],
                     })
                 }
@@ -689,7 +689,7 @@ function helpTool(server: McpServer) {
                         })
                     } else if (state.authMode === "b2b" && !checks.hasB2BToken) {
                         nextCalls.push({
-                            tool: "ethora-configure",
+                            tool: "ethora-session-configure",
                             args: { b2bToken: "JWT <B2B_SERVER_TOKEN>" },
                             why: "You are in B2B auth mode but b2bToken is missing.",
                         })
@@ -723,7 +723,7 @@ function helpTool(server: McpServer) {
                         id: "auto-generate-env",
                         title: "Generate .env templates",
                         description: "Get copy/paste .env.example templates for MCP and SDK usage.",
-                        steps: [{ tool: "ethora-generate-env-examples", args: {} }],
+                        steps: [{ tool: "ethora-env-examples-generate", args: {} }],
                     })
                     recipes.push({
                         id: "auto-chat-test-private",
@@ -731,9 +731,9 @@ function helpTool(server: McpServer) {
                         description: "Use the primary chats automation surface to send a test message and read history.",
                         steps: [
                             { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: "JWT <APP_TOKEN>" } },
-                            { tool: "ethora-auth-use-app" },
-                            { tool: "ethora-chats-message-v2", args: { text: "Hello from MCP", mode: "private", nickname: "SDK Tester" } },
-                            { tool: "ethora-chats-history-v2", args: { mode: "private", nickname: "SDK Tester", limit: 10 } },
+                            { tool: "ethora-auth-mode-set" },
+                            { tool: "ethora-message-send", args: { text: "Hello from MCP", mode: "private", nickname: "SDK Tester" } },
+                            { tool: "ethora-chat-history", args: { mode: "private", nickname: "SDK Tester", limit: 10 } },
                         ],
                     })
                 }
@@ -748,7 +748,7 @@ function helpTool(server: McpServer) {
                             "`ethora-user-register` to create an account, log in and receive an API key in one step.",
                         ],
                         notes: [
-                            "apiUrl is fixed per deployment; `ethora-configure` cannot change it here.",
+                            "apiUrl is fixed per deployment; `ethora-session-configure` cannot change it here.",
                             "Sessions are private: nothing from another client's session is visible to you.",
                             "Manage keys with `ethora-api-key-create` / `ethora-api-key-list` / `ethora-api-key-revoke`.",
                         ],
@@ -806,17 +806,17 @@ function resolveRecipeValue(value: any, vars: Record<string, any>, ctx: { lastJo
 async function executeRecipeStep(tool: string, args: any, ctx: { lastJobId?: string }) {
     // NOTE: this executes a small allow-list of tools used by built-in recipes.
     switch (tool) {
-        case "ethora-configure": {
+        case "ethora-session-configure": {
             const { apiUrl, appJwt, b2bToken } = args || {}
             const s = configureClient({ apiUrl, appJwt })
             if (typeof b2bToken === "string") configureB2BToken(b2bToken)
             return s
         }
-        case "ethora-auth-use-user":
+        case "ethora-auth-mode-set":
             return setAuthMode("user")
-        case "ethora-auth-use-app":
+        case "ethora-auth-mode-set":
             return setAuthMode("app")
-        case "ethora-auth-use-b2b":
+        case "ethora-auth-mode-set":
             return setAuthMode("b2b")
         case "ethora-user-login": {
             const { email, password } = args || {}
@@ -848,7 +848,7 @@ async function executeRecipeStep(tool: string, args: any, ctx: { lastJobId?: str
                 savedAgentId,
             } as any)
         }
-        case "ethora-chats-broadcast-v2": {
+        case "ethora-broadcast-send": {
             ensureTenantActorAuth()
             const { text, allRooms, chatIds, chatNames } = args || {}
             const payload: any = { text: String(text || "") }
@@ -860,7 +860,7 @@ async function executeRecipeStep(tool: string, args: any, ctx: { lastJobId?: str
             if (jobId) ctx.lastJobId = jobId
             return res.data
         }
-        case "ethora-wait-broadcast-job-v2": {
+        case "ethora-broadcast-job-wait": {
             ensureTenantActorAuth()
             const { jobId, timeoutMs, intervalMs } = args || {}
             const timeout = timeoutMs ?? 60_000
@@ -876,7 +876,7 @@ async function executeRecipeStep(tool: string, args: any, ctx: { lastJobId?: str
             }
             return { done: false, reason: "timeout", job: last }
         }
-        case "ethora-sources-site-crawl-v2": {
+        case "ethora-source-site-crawl": {
             ensureTenantActorAuth()
             const { url, followLink, knowledgeScope, savedAgentId } = args || {}
             const actx = resolveAppScopedV2Context(undefined)
@@ -885,7 +885,7 @@ async function executeRecipeStep(tool: string, args: any, ctx: { lastJobId?: str
                 : await sourcesSiteCrawlV2({ url: String(url || ""), followLink, knowledgeScope, savedAgentId })
             return res.data
         }
-        case "ethora-sources-docs-upload-v2": {
+        case "ethora-source-doc-upload": {
             ensureTenantActorAuth()
             const { files, knowledgeScope, savedAgentId } = args || {}
             const form = new FormData()
@@ -901,40 +901,40 @@ async function executeRecipeStep(tool: string, args: any, ctx: { lastJobId?: str
             const res = (actx.mode !== "app" && actx.appId) ? await sourcesDocsUploadForAppV2(actx.appId, form, { "Content-Type": "multipart/form-data" }) : await sourcesDocsUploadV2(form, { "Content-Type": "multipart/form-data" })
             return res.data
         }
-        case "ethora-agents-list-v2": {
+        case "ethora-agent-list": {
             ensureTenantActorAuth()
             const res = await agentsListV2(resolveAppScopedV2Context((args as any)?.appId).appId)
             return res.data
         }
-        case "ethora-agents-get-v2": {
+        case "ethora-agent-get": {
             ensureUserAuthForTool()
             const { agentId } = args || {}
             const res = await agentsGetV2(String(agentId || ""))
             return res.data
         }
-        case "ethora-agents-create-v2": {
+        case "ethora-agent-create": {
             ensureTenantActorAuth()
             const { appId: caseAppId, ...caseRest } = (args as any) || {}
             const res = await agentsCreateV2(caseRest as any, resolveAppScopedV2Context(caseAppId).appId)
             return res.data
         }
-        case "ethora-agents-update-v2": {
+        case "ethora-agent-update": {
             ensureUserAuthForTool()
             const { agentId, ...payload } = args || {}
             const res = await agentsUpdateV2(String(agentId || ""), payload as any)
             return res.data
         }
-        case "ethora-agents-clone-v2": {
+        case "ethora-agent-clone": {
             ensureUserAuthForTool()
             const { agentId, ...payload } = args || {}
             const res = await agentsCloneV2(String(agentId || ""), payload as any)
             return res.data
         }
-        case "ethora-agents-activate-v2": {
+        case "ethora-agent-activate": {
             const { agentId, chatJid, appId } = args || {}
             return await activateAgentForApp(String(agentId || ""), chatJid ? String(chatJid) : undefined, appId ? String(appId) : undefined)
         }
-        case "ethora-bot-enable-v2": {
+        case "ethora-bot-enable": {
             ensureTenantActorAuth()
             const { trigger } = args || {}
             const actx = resolveAppScopedV2Context(undefined)
@@ -943,13 +943,13 @@ async function executeRecipeStep(tool: string, args: any, ctx: { lastJobId?: str
                 : await botUpdateV2({ status: "on", trigger } as any)
             return res.data
         }
-        case "ethora-bot-update-v2": {
+        case "ethora-bot-update": {
             ensureTenantActorAuth()
             const actx = resolveAppScopedV2Context(undefined)
             const res = (actx.mode !== "app" && actx.appId) ? await botUpdateForAppV2(actx.appId, args as any) : await botUpdateV2(args as any)
             return res.data
         }
-        case "ethora-files-upload-v2": {
+        case "ethora-file-upload": {
             ensureUserAuthForTool()
             const { files } = args || {}
             const form = new FormData()
@@ -963,13 +963,13 @@ async function executeRecipeStep(tool: string, args: any, ctx: { lastJobId?: str
             return res.data
         }
         default:
-            throw new Error(`ethora-run-recipe does not support step tool '${tool}'`)
+            throw new Error(`ethora-recipe-run does not support step tool '${tool}'`)
     }
 }
 
 function runRecipeTool(server: McpServer) {
     server.registerTool(
-        "ethora-run-recipe",
+        "ethora-recipe-run",
         {
             description: "Execute a built-in recipe — an ordered sequence of this server's own tool calls — by id. Recipes capture common flows (B2B bootstrap, broadcast, sources ingest). Use `dryRun: true` to preview resolved steps. Omit `recipeId` to list runnable recipes for a `goal`.\nRequires: the inputs the chosen recipe lists; call without `recipeId` first to see the recipes and their required inputs.\nAuth: depends on the recipe's steps — configure those first (see `ethora-help`). Errors: stops at the first failing step and returns the partial log; a missing required `vars` entry fails fast before any step runs.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
@@ -982,7 +982,7 @@ function runRecipeTool(server: McpServer) {
             },
         },
         async function ({ recipeId, goal, vars, dryRun }) {
-            const meta = getDefaultMeta("ethora-run-recipe")
+            const meta = getDefaultMeta("ethora-recipe-run")
             try {
                 const state = getClientState() as any
                 const effectiveGoal = goal || "auto"
@@ -1003,8 +1003,8 @@ function runRecipeTool(server: McpServer) {
                                 description: "Best for partner automation and repeatable provisioning.",
                                 requiredVars: ["b2bToken"],
                                 steps: [
-                                    { tool: "ethora-configure", args: { apiUrl, b2bToken: "<B2B_TOKEN>" } },
-                                    { tool: "ethora-auth-use-b2b" },
+                                    { tool: "ethora-session-configure", args: { apiUrl, b2bToken: "<B2B_TOKEN>" } },
+                                    { tool: "ethora-auth-mode-set" },
                                     { tool: "ethora-b2b-app-bootstrap-ai", args: { displayName: "Acme AI Demo", crawlUrl: "https://example.com", enableBot: true, llmProvider: "openai", llmModel: "gpt-4o-mini" } },
                                 ],
                             },
@@ -1014,8 +1014,8 @@ function runRecipeTool(server: McpServer) {
                                 description: "Create an app via B2B token (no sources/bot).",
                                 requiredVars: ["b2bToken"],
                                 steps: [
-                                    { tool: "ethora-configure", args: { apiUrl, b2bToken: "<B2B_TOKEN>" } },
-                                    { tool: "ethora-auth-use-b2b" },
+                                    { tool: "ethora-session-configure", args: { apiUrl, b2bToken: "<B2B_TOKEN>" } },
+                                    { tool: "ethora-auth-mode-set" },
                                     { tool: "ethora-b2b-app-create", args: { displayName: "My App" } },
                                 ],
                             }
@@ -1029,9 +1029,9 @@ function runRecipeTool(server: McpServer) {
                             requiredVars: ["appId", "appToken"],
                             steps: [
                                 { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: "<APP_TOKEN>" } },
-                                { tool: "ethora-auth-use-app" },
-                                { tool: "ethora-chats-broadcast-v2", args: { text: "Hello from MCP!", allRooms: true } },
-                                { tool: "ethora-wait-broadcast-job-v2", args: { jobId: "<JOB_ID_FROM_PREVIOUS_STEP>", timeoutMs: 60000, intervalMs: 2000 } },
+                                { tool: "ethora-auth-mode-set" },
+                                { tool: "ethora-broadcast-send", args: { text: "Hello from MCP!", allRooms: true } },
+                                { tool: "ethora-broadcast-job-wait", args: { jobId: "<JOB_ID_FROM_PREVIOUS_STEP>", timeoutMs: 60000, intervalMs: 2000 } },
                             ],
                         })
                     }
@@ -1044,8 +1044,8 @@ function runRecipeTool(server: McpServer) {
                                 requiredVars: ["appId", "appToken"],
                                 steps: [
                                     { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: "<APP_TOKEN>" } },
-                                    { tool: "ethora-auth-use-app" },
-                                    { tool: "ethora-sources-site-crawl-v2", args: { url: "https://example.com", followLink: true } },
+                                    { tool: "ethora-auth-mode-set" },
+                                    { tool: "ethora-source-site-crawl", args: { url: "https://example.com", followLink: true } },
                                 ],
                             }
                         )
@@ -1057,8 +1057,8 @@ function runRecipeTool(server: McpServer) {
                                 requiredVars: ["appId", "appToken", "base64Content"],
                                 steps: [
                                     { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: "<APP_TOKEN>" } },
-                                    { tool: "ethora-auth-use-app" },
-                                    { tool: "ethora-sources-docs-upload-v2", args: { files: [{ name: "doc.pdf", mimeType: "application/pdf", base64: "<BASE64_CONTENT>" }] } },
+                                    { tool: "ethora-auth-mode-set" },
+                                    { tool: "ethora-source-doc-upload", args: { files: [{ name: "doc.pdf", mimeType: "application/pdf", base64: "<BASE64_CONTENT>" }] } },
                                 ],
                             },
                             {
@@ -1068,9 +1068,9 @@ function runRecipeTool(server: McpServer) {
                                 requiredVars: ["appId", "appToken"],
                                 steps: [
                                     { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: "<APP_TOKEN>" } },
-                                    { tool: "ethora-auth-use-app" },
-                                    { tool: "ethora-sources-site-list-v2", args: {} },
-                                    { tool: "ethora-sources-site-tags-update-v2", args: { sourceId: "<SOURCE_ID>", tags: ["support", "faq"] } },
+                                    { tool: "ethora-auth-mode-set" },
+                                    { tool: "ethora-source-site-list", args: {} },
+                                    { tool: "ethora-source-site-tags-update", args: { sourceId: "<SOURCE_ID>", tags: ["support", "faq"] } },
                                 ],
                             }
                         )
@@ -1083,9 +1083,9 @@ function runRecipeTool(server: McpServer) {
                             requiredVars: ["appId", "appToken"],
                             steps: [
                                 { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: "<APP_TOKEN>" } },
-                                { tool: "ethora-auth-use-app" },
-                                { tool: "ethora-bot-enable-v2", args: {} },
-                                { tool: "ethora-bot-update-v2", args: { trigger: "/bot", prompt: "You are a helpful assistant.", greetingMessage: "Hello! Ask me anything.", llmProvider: "openai", llmModel: "gpt-4o-mini" } },
+                                { tool: "ethora-auth-mode-set" },
+                                { tool: "ethora-bot-enable", args: {} },
+                                { tool: "ethora-bot-update", args: { trigger: "/bot", prompt: "You are a helpful assistant.", greetingMessage: "Hello! Ask me anything.", llmProvider: "openai", llmModel: "gpt-4o-mini" } },
                             ],
                         })
                     }
@@ -1098,9 +1098,9 @@ function runRecipeTool(server: McpServer) {
                                 requiredVars: ["appId", "appToken"],
                                 steps: [
                                     { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: "<APP_TOKEN>" } },
-                                    { tool: "ethora-auth-use-app" },
-                                    { tool: "ethora-chats-message-v2", args: { text: "Summarize the indexed FAQ in 3 bullets.", mode: "private", nickname: "SDK Tester" } },
-                                    { tool: "ethora-chats-history-v2", args: { mode: "private", nickname: "SDK Tester", limit: 10 } },
+                                    { tool: "ethora-auth-mode-set" },
+                                    { tool: "ethora-message-send", args: { text: "Summarize the indexed FAQ in 3 bullets.", mode: "private", nickname: "SDK Tester" } },
+                                    { tool: "ethora-chat-history", args: { mode: "private", nickname: "SDK Tester", limit: 10 } },
                                 ],
                             },
                             {
@@ -1110,9 +1110,9 @@ function runRecipeTool(server: McpServer) {
                                 requiredVars: ["appId", "appToken", "roomJid"],
                                 steps: [
                                     { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: "<APP_TOKEN>" } },
-                                    { tool: "ethora-auth-use-app" },
-                                    { tool: "ethora-chats-message-v2", args: { text: "What sources are currently indexed for this app?", mode: "group", roomJid: "<ROOM_JID>" } },
-                                    { tool: "ethora-chats-history-v2", args: { mode: "group", roomJid: "<ROOM_JID>", limit: 10 } },
+                                    { tool: "ethora-auth-mode-set" },
+                                    { tool: "ethora-message-send", args: { text: "What sources are currently indexed for this app?", mode: "group", roomJid: "<ROOM_JID>" } },
+                                    { tool: "ethora-chat-history", args: { mode: "group", roomJid: "<ROOM_JID>", limit: 10 } },
                                 ],
                             },
                             {
@@ -1122,11 +1122,11 @@ function runRecipeTool(server: McpServer) {
                                 requiredVars: ["appId"],
                                 steps: [
                                     { tool: "ethora-app-select", args: { appId: "<APP_ID>" } },
-                                    { tool: "ethora-agents-create-v2", args: { name: "Helper", prompt: "You are a polite support assistant for this website." } },
-                                    { tool: "ethora-app-create-chat", args: { appId: "<APP_ID>", title: "Website widget" } },
-                                    { tool: "ethora-agent-invite-to-chat", args: { agentIdOrAddress: "<AGENT_ID>", chatJid: "<ROOM_JID>" } },
-                                    { tool: "ethora-agents-activate-v2", args: { agentId: "<AGENT_ID>", chatJid: "<ROOM_JID>" } },
-                                    { tool: "ethora-widget-embed-snippet", args: { appId: "<APP_ID>", botName: "Helper" } },
+                                    { tool: "ethora-agent-create", args: { name: "Helper", prompt: "You are a polite support assistant for this website." } },
+                                    { tool: "ethora-chat-create", args: { appId: "<APP_ID>", title: "Website widget" } },
+                                    { tool: "ethora-agent-invite", args: { agentIdOrAddress: "<AGENT_ID>", chatJid: "<ROOM_JID>" } },
+                                    { tool: "ethora-agent-activate", args: { agentId: "<AGENT_ID>", chatJid: "<ROOM_JID>" } },
+                                    { tool: "ethora-widget-snippet-get", args: { appId: "<APP_ID>", botName: "Helper" } },
                                 ],
                             }
                         )
@@ -1139,8 +1139,8 @@ function runRecipeTool(server: McpServer) {
                                 description: "Configure appJwt (if needed), switch to user auth, and login.",
                                 requiredVars: ["appJwt", "email", "password"],
                                 steps: [
-                                    { tool: "ethora-configure", args: { apiUrl, appJwt: "<APP_JWT>" } },
-                                    { tool: "ethora-auth-use-user" },
+                                    { tool: "ethora-session-configure", args: { apiUrl, appJwt: "<APP_JWT>" } },
+                                    { tool: "ethora-auth-mode-set" },
                                     { tool: "ethora-user-login", args: { email: "<EMAIL>", password: "<PASSWORD>" } },
                                 ],
                             },
@@ -1150,9 +1150,9 @@ function runRecipeTool(server: McpServer) {
                                 description: "Login a user, then call the v2 files upload tool.",
                                 requiredVars: ["email", "password", "base64Content"],
                                 steps: [
-                                    { tool: "ethora-auth-use-user" },
+                                    { tool: "ethora-auth-mode-set" },
                                     { tool: "ethora-user-login", args: { email: "<EMAIL>", password: "<PASSWORD>" } },
-                                    { tool: "ethora-files-upload-v2", args: { files: [{ name: "example.txt", mimeType: "text/plain", base64: "<BASE64_CONTENT>" }] } },
+                                    { tool: "ethora-file-upload", args: { files: [{ name: "example.txt", mimeType: "text/plain", base64: "<BASE64_CONTENT>" }] } },
                                 ],
                             }
                         )
@@ -1167,7 +1167,7 @@ function runRecipeTool(server: McpServer) {
 
                 const recipe = (helpRes?.recipes || []).find((r: any) => r.id === String(recipeId))
                 if (!recipe) {
-                    return asToolResult(fail(new Error(`Unknown recipeId '${recipeId}' for goal '${effectiveGoal}'. Call ethora-run-recipe without recipeId to list available recipes.`), meta))
+                    return asToolResult(fail(new Error(`Unknown recipeId '${recipeId}' for goal '${effectiveGoal}'. Call ethora-recipe-run without recipeId to list available recipes.`), meta))
                 }
 
                 const v = (vars && typeof vars === "object") ? (vars as any) : {}
@@ -1229,7 +1229,7 @@ function doctorTool(server: McpServer) {
                     suggestions.push({
                         severity: "warn",
                         message: "ETHORA API URL is not configured.",
-                        action: "Set env ETHORA_API_URL (or ETHORA_BASE_URL) or call `ethora-configure` with apiUrl.",
+                        action: "Set env ETHORA_API_URL (or ETHORA_BASE_URL) or call `ethora-session-configure` with apiUrl.",
                     })
                 }
 
@@ -1238,7 +1238,7 @@ function doctorTool(server: McpServer) {
                     suggestions.push({
                         severity: "info",
                         message: "App JWT is missing (needed only for user-auth login/register bootstrap).",
-                        action: "Set env ETHORA_APP_JWT or call `ethora-configure` with appJwt.",
+                        action: "Set env ETHORA_APP_JWT or call `ethora-session-configure` with appJwt.",
                     })
                 }
 
@@ -1246,7 +1246,7 @@ function doctorTool(server: McpServer) {
                     suggestions.push({
                         severity: "warn",
                         message: "Auth mode is app-token but appToken is not configured.",
-                        action: "Call `ethora-app-select` with { appId, appToken } or switch to user auth via `ethora-auth-use-user`.",
+                        action: "Call `ethora-app-select` with { appId, appToken } or switch to user auth via `ethora-auth-mode-set`.",
                     })
                 }
 
@@ -1254,7 +1254,7 @@ function doctorTool(server: McpServer) {
                     suggestions.push({
                         severity: "warn",
                         message: "Auth mode is B2B but b2bToken is not configured.",
-                        action: "Set env ETHORA_B2B_TOKEN or call `ethora-configure` with b2bToken, or switch auth mode.",
+                        action: "Set env ETHORA_B2B_TOKEN or call `ethora-session-configure` with b2bToken, or switch auth mode.",
                     })
                 }
 
@@ -1310,64 +1310,32 @@ function doctorTool(server: McpServer) {
     )
 }
 
-function authUseAppTool(server: McpServer) {
+function authModeSetTool(server: McpServer) {
     server.registerTool(
-        "ethora-auth-use-app",
+        "ethora-auth-mode-set",
         {
-            description: "Switch this session's active auth mode to app-token, so subsequent app-scoped calls authenticate with the configured `appToken`.\nAuth: requires an `appToken` to already be configured (via `ethora-configure`, ETHORA_APP_TOKEN env, or `ethora-app-select`). Errors: returns an error if no `appToken` is configured. Related: use after `ethora-app-select`.",
+            description: "Switch this session's active auth mode: `user` (a logged-in Ethora user, the normal mode and the only one the hosted agents/rooms routes accept), `app` (the configured `appToken`, for app-scoped automation such as broadcast, sources and the legacy bot) or `b2b` (a tenant actor via the `x-custom-token` header, for server integrations). The switch itself needs nothing; downstream tools return 401 until the matching credential is present (`ethora-user-login` for user, `ethora-session-configure` for the app and B2B tokens).\nErrors: none on the switch. Related: `ethora-status` shows the active mode; on the hosted server stay in `user` mode.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+            inputSchema: {
+                mode: z.enum(["user", "app", "b2b"]).describe("Auth mode to activate: `user`, `app` or `b2b`."),
+            },
         },
-        async function () {
+        async function ({ mode }) {
             try {
-                return asToolResult(ok(setAuthMode("app"), getDefaultMeta("ethora-auth-use-app")))
+                return asToolResult(ok(setAuthMode(mode), getDefaultMeta("ethora-auth-mode-set")))
             } catch (error) {
-                return asToolResult(fail(error, getDefaultMeta("ethora-auth-use-app")))
+                return asToolResult(fail(error, getDefaultMeta("ethora-auth-mode-set")))
             }
         }
     )
 }
-
-function authUseUserTool(server: McpServer) {
-    server.registerTool(
-        "ethora-auth-use-user",
-        {
-            description: "Switch this session's active auth mode to user-session, so subsequent calls authenticate as a logged-in Ethora user.\nAuth: the switch needs nothing, but user-auth tools only work once `ethora-user-login` stores a user token (login also needs a configured `appJwt`). Errors: none on the switch; downstream tools return 401 until login succeeds. Related: follow with `ethora-user-login`.",
-            annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-        },
-        async function () {
-            try {
-                return asToolResult(ok(setAuthMode("user"), getDefaultMeta("ethora-auth-use-user")))
-            } catch (error) {
-                return asToolResult(fail(error, getDefaultMeta("ethora-auth-use-user")))
-            }
-        }
-    )
-}
-
-function authUseB2BTool(server: McpServer) {
-    server.registerTool(
-        "ethora-auth-use-b2b",
-        {
-            description: "Switch this session's active auth mode to B2B, so subsequent calls authenticate as a tenant actor via the `x-custom-token` header.\nAuth: requires a `b2bToken` (JWT with `type=server`) to already be configured (via `ethora-configure` or ETHORA_B2B_TOKEN env). Errors: returns an error if no `b2bToken` is configured. Related: server-side automation — pairs with `ethora-b2b-app-create`, `ethora-users-batch-create-v2`, `ethora-app-tokens-*-v2`.",
-            annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-        },
-        async function () {
-            try {
-                return asToolResult(ok(setAuthMode("b2b"), getDefaultMeta("ethora-auth-use-b2b")))
-            } catch (error) {
-                return asToolResult(fail(error, getDefaultMeta("ethora-auth-use-b2b")))
-            }
-        }
-    )
-}
-
 function ensureB2BAuthForTool() {
     const state = getClientState() as any
     if (state.authMode !== "b2b") {
-        throw new Error("This tool requires B2B auth. Call `ethora-auth-use-b2b` (and configure b2bToken via `ethora-configure`) first.")
+        throw new Error("This tool requires B2B auth. Call `ethora-auth-mode-set` (and configure b2bToken via `ethora-session-configure`) first.")
     }
     if (!state.hasB2BToken) {
-        throw new Error("B2B auth mode selected, but b2bToken is missing. Provide it via env ETHORA_B2B_TOKEN or `ethora-configure`.")
+        throw new Error("B2B auth mode selected, but b2bToken is missing. Provide it via env ETHORA_B2B_TOKEN or `ethora-session-configure`.")
     }
 }
 
@@ -1375,7 +1343,7 @@ function appSelectTool(server: McpServer) {
     server.registerTool(
         "ethora-app-select",
         {
-            description: "Set the current app context for this session so app-scoped tools can omit their `appId` argument. Stores `currentAppId` and, if given, `appToken` (which defaults the auth mode to app-token unless `authMode` overrides).\nAuth: none required to set the context. Errors: effectively none — a non-existent `appId` is not validated here; the first app-scoped API call surfaces the 404. Related: pairs with `ethora-auth-use-app`.",
+            description: "Set the current app context for this session so app-scoped tools can omit their `appId` argument. Stores `currentAppId` and, if given, `appToken` (which defaults the auth mode to app-token unless `authMode` overrides).\nAuth: none required to set the context. Errors: effectively none — a non-existent `appId` is not validated here; the first app-scoped API call surfaces the 404. Related: pairs with `ethora-auth-mode-set`.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
             inputSchema: {
                 appId: z.string().describe("24-char hex Ethora appId to set as the current context. Get it from `ethora-app-list`, `ethora-app-create`, or a B2B create/provision response."),
@@ -1397,10 +1365,10 @@ function agentSelectTool(server: McpServer) {
     server.registerTool(
         "ethora-agent-select",
         {
-            description: "Set the current saved-agent context for this session, so agent-scoped tools can omit their `agentId` argument. Stores `currentAgentId` in session state.\nRequires: an agent id or address from `ethora-agents-list-v2` or `ethora-agents-create-v2`.\nAuth: none required. Errors: effectively none — the `agentId` is not validated here; a bad id surfaces on the first agent-scoped API call. Related: use before repeated `ethora-agents-*-v2` calls.",
+            description: "Set the current saved-agent context for this session, so agent-scoped tools can omit their `agentId` argument. Stores `currentAgentId` in session state.\nRequires: an agent id or address from `ethora-agent-list` or `ethora-agent-create`.\nAuth: none required. Errors: effectively none — the `agentId` is not validated here; a bad id surfaces on the first agent-scoped API call. Related: use before repeated `ethora-agents-*-v2` calls.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
             inputSchema: {
-                agentId: z.string().min(1).describe("Id of a saved agent owned by the current app. Get it from `ethora-agents-list-v2` or the response of `ethora-agents-create-v2`."),
+                agentId: z.string().min(1).describe("Id of a saved agent owned by the current app. Get it from `ethora-agent-list` or the response of `ethora-agent-create`."),
             },
         },
         async function ({ agentId }) {
@@ -1415,9 +1383,9 @@ function agentSelectTool(server: McpServer) {
 
 function chatsBroadcastTool(server: McpServer) {
     server.registerTool(
-        "ethora-chats-broadcast-v2",
+        "ethora-broadcast-send",
         {
-            description: "Enqueue an asynchronous broadcast job posting a message to one or more chat rooms of an app — returns a `jobId`; messages are not sent synchronously. Targeting is exclusive: `allRooms`, `chatIds`, or `chatNames`, not a mix.\nRequires: a selected app with at least one room (`ethora-app-create-chat`).\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth; 400 no target or conflicting targets; 404 unknown `appId` or room. Related: track with `ethora-wait-broadcast-job-v2`.",
+            description: "Enqueue an asynchronous broadcast job posting a message to one or more chat rooms of an app — returns a `jobId`; messages are not sent synchronously. Targeting is exclusive: `allRooms`, `chatIds`, or `chatNames`, not a mix.\nRequires: a selected app with at least one room (`ethora-chat-create`).\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth; 400 no target or conflicting targets; 404 unknown `appId` or room. Related: track with `ethora-broadcast-job-wait`.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("24-char hex appId to broadcast in. Required in B2B mode unless already set via `ethora-app-select`; ignored in app-token mode (the token determines the app)."),
@@ -1438,9 +1406,9 @@ function chatsBroadcastTool(server: McpServer) {
                 const res = useAppScopedRoute(ctx)
                     ? await chatsBroadcastForAppV2(ctx.appId!, payload)
                     : await chatsBroadcastV2(payload)
-                return asToolResult(ok(res.data, getDefaultMeta("ethora-chats-broadcast-v2")))
+                return asToolResult(ok(res.data, getDefaultMeta("ethora-broadcast-send")))
             } catch (error) {
-                return asToolResult(fail(error, getDefaultMeta("ethora-chats-broadcast-v2")))
+                return asToolResult(fail(error, getDefaultMeta("ethora-broadcast-send")))
             }
         }
     )
@@ -1448,13 +1416,13 @@ function chatsBroadcastTool(server: McpServer) {
 
 function chatsBroadcastJobTool(server: McpServer) {
     server.registerTool(
-        "ethora-chats-broadcast-job-v2",
+        "ethora-broadcast-job-start",
         {
-            description: "Fetch the current status and per-room results of a broadcast job by `jobId` (one-shot, no polling). Returns the job object with its `state` (pending/running/completed/failed).\nRequires: a selected app with at least one room (`ethora-app-create-chat`).\nAuth: app-token mode OR B2B mode with an explicit `appId` — must match the auth used to enqueue the job. Errors: 401/403 wrong auth; 404 unknown `jobId`. Related: `ethora-wait-broadcast-job-v2` for a blocking wait.",
+            description: "Fetch the current status and per-room results of a broadcast job by `jobId` (one-shot, no polling). Returns the job object with its `state` (pending/running/completed/failed).\nRequires: a selected app with at least one room (`ethora-chat-create`).\nAuth: app-token mode OR B2B mode with an explicit `appId` — must match the auth used to enqueue the job. Errors: 401/403 wrong auth; 404 unknown `jobId`. Related: `ethora-broadcast-job-wait` for a blocking wait.",
             annotations: { readOnlyHint: true, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("24-char hex appId the job belongs to. Required in B2B mode unless already set via `ethora-app-select`; ignored in app-token mode."),
-                jobId: z.string().describe("Job id returned by `ethora-chats-broadcast-v2`."),
+                jobId: z.string().describe("Job id returned by `ethora-broadcast-send`."),
             },
         },
         async function ({ appId, jobId }) {
@@ -1463,9 +1431,9 @@ function chatsBroadcastJobTool(server: McpServer) {
                 const res = useAppScopedRoute(ctx)
                     ? await chatsBroadcastJobForAppV2(ctx.appId!, jobId)
                     : await chatsBroadcastJobV2(jobId)
-                return asToolResult(ok(res.data, getDefaultMeta("ethora-chats-broadcast-job-v2")))
+                return asToolResult(ok(res.data, getDefaultMeta("ethora-broadcast-job-start")))
             } catch (error) {
-                return asToolResult(fail(error, getDefaultMeta("ethora-chats-broadcast-job-v2")))
+                return asToolResult(fail(error, getDefaultMeta("ethora-broadcast-job-start")))
             }
         }
     )
@@ -1477,19 +1445,19 @@ function sleep(ms: number) {
 
 function waitBroadcastJobTool(server: McpServer) {
     server.registerTool(
-        "ethora-wait-broadcast-job-v2",
+        "ethora-broadcast-job-wait",
         {
-            description: "Block until a broadcast job reaches a terminal state (`completed` or `failed`) or until `timeoutMs` — read-only polling wrapper around `ethora-chats-broadcast-job-v2`. Returns `{ done, state, job }`, or `{ done: false, reason: \"timeout\" }` on timeout.\nRequires: a `jobId` returned by `ethora-chats-broadcast-job-v2`.\nAuth: app-token mode OR B2B mode with an explicit `appId` — must match the auth used to enqueue the job. Errors: 401/403 wrong auth; 404 unknown `jobId`.",
+            description: "Block until a broadcast job reaches a terminal state (`completed` or `failed`) or until `timeoutMs` — read-only polling wrapper around `ethora-broadcast-job-start`. Returns `{ done, state, job }`, or `{ done: false, reason: \"timeout\" }` on timeout.\nRequires: a `jobId` returned by `ethora-broadcast-job-start`.\nAuth: app-token mode OR B2B mode with an explicit `appId` — must match the auth used to enqueue the job. Errors: 401/403 wrong auth; 404 unknown `jobId`.",
             annotations: { readOnlyHint: true, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("24-char hex appId the job belongs to. Required in B2B mode unless already set via `ethora-app-select`; ignored in app-token mode."),
-                jobId: z.string().min(1).describe("Job id returned by `ethora-chats-broadcast-v2`."),
+                jobId: z.string().min(1).describe("Job id returned by `ethora-broadcast-send`."),
                 timeoutMs: z.number().int().min(1000).max(300000).optional().describe("Maximum time to wait, in milliseconds. Default 60000. Caps at 300000 (5 min)."),
                 intervalMs: z.number().int().min(250).max(10000).optional().describe("Delay between status checks, in milliseconds. Default 1000. Lower = more responsive but more API calls."),
             },
         },
         async function ({ appId, jobId, timeoutMs, intervalMs }) {
-            const meta = getDefaultMeta("ethora-wait-broadcast-job-v2")
+            const meta = getDefaultMeta("ethora-broadcast-job-wait")
             try {
                 const ctx = resolveAppScopedV2Context(appId)
                 const timeout = timeoutMs ?? 60_000
@@ -1517,9 +1485,9 @@ function waitBroadcastJobTool(server: McpServer) {
 
 function filesUploadV2Tool(server: McpServer) {
     server.registerTool(
-        "ethora-files-upload-v2",
+        "ethora-file-upload",
         {
-            description: "Upload 1–5 files to the authenticated user's Ethora file storage (`POST /v2/files`). Each upload is a new record (no overwrite-by-name); files passed as base64, 50MB max each.\nAuth: user-auth mode with an active user session (`ethora-user-login` first). Errors: 401 not logged in; 413 size limit exceeded; 422 unsupported mime type. Related: manage with `ethora-files-get-v2` / `ethora-files-delete-v2`.",
+            description: "Upload 1–5 files to the authenticated user's Ethora file storage (`POST /v2/files`). Each upload is a new record (no overwrite-by-name); files passed as base64, 50MB max each.\nAuth: user-auth mode with an active user session (`ethora-user-login` first). Errors: 401 not logged in; 413 size limit exceeded; 422 unsupported mime type. Related: manage with `ethora-file-get` / `ethora-file-delete`.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
             inputSchema: {
                 files: z.array(z.object({
@@ -1543,9 +1511,9 @@ function filesUploadV2Tool(server: McpServer) {
                     form.append("files", blob, f.name)
                 }
                 const res = await filesUploadV2(form, { "Content-Type": "multipart/form-data" })
-                return asToolResult(ok(res.data, getDefaultMeta("ethora-files-upload-v2")))
+                return asToolResult(ok(res.data, getDefaultMeta("ethora-file-upload")))
             } catch (error) {
-                return asToolResult(fail(error, getDefaultMeta("ethora-files-upload-v2")))
+                return asToolResult(fail(error, getDefaultMeta("ethora-file-upload")))
             }
         }
     )
@@ -1553,9 +1521,9 @@ function filesUploadV2Tool(server: McpServer) {
 
 function filesGetV2Tool(server: McpServer) {
     server.registerTool(
-        "ethora-files-get-v2",
+        "ethora-file-get",
         {
-            description: "List the authenticated user's files, or fetch one file's metadata by id (`GET /v2/files`). Returns an array when `id` is omitted, a single record when given.\nRequires: a file id from `ethora-files-upload-v2`.\nAuth: user-auth mode with an active user session. Errors: 401 not logged in; 404 unknown `id` or not owned by the user.",
+            description: "List the authenticated user's files, or fetch one file's metadata by id (`GET /v2/files`). Returns an array when `id` is omitted, a single record when given.\nRequires: a file id from `ethora-file-upload`.\nAuth: user-auth mode with an active user session. Errors: 401 not logged in; 404 unknown `id` or not owned by the user.",
             annotations: { readOnlyHint: true, openWorldHint: true },
             inputSchema: {
                 id: z.string().optional().describe("File id to fetch a single record. Omit to list all files owned by the logged-in user."),
@@ -1565,9 +1533,9 @@ function filesGetV2Tool(server: McpServer) {
             try {
                 ensureUserAuthForTool()
                 const res = await filesGetV2(id)
-                return asToolResult(ok(res.data, getDefaultMeta("ethora-files-get-v2")))
+                return asToolResult(ok(res.data, getDefaultMeta("ethora-file-get")))
             } catch (error) {
-                return asToolResult(fail(error, getDefaultMeta("ethora-files-get-v2")))
+                return asToolResult(fail(error, getDefaultMeta("ethora-file-get")))
             }
         }
     )
@@ -1575,19 +1543,19 @@ function filesGetV2Tool(server: McpServer) {
 
 function filesDeleteV2Tool(server: McpServer) {
     server.registerTool(
-        "ethora-files-delete-v2",
+        "ethora-file-delete",
         {
-            description: "Permanently delete one of the authenticated user's files by id (`DELETE /v2/files/:id`). Removes the record and its stored content; not reversible.\nRequires: a file id from `ethora-files-upload-v2`.\nAuth: user-auth mode with an active user session. Errors: 401 not logged in; 403 not owned by the user; 404 unknown `id`. Related: get ids from `ethora-files-get-v2`.",
+            description: "Permanently delete one of the authenticated user's files by id (`DELETE /v2/files/:id`). Removes the record and its stored content; not reversible.\nRequires: a file id from `ethora-file-upload`.\nAuth: user-auth mode with an active user session. Errors: 401 not logged in; 403 not owned by the user; 404 unknown `id`. Related: get ids from `ethora-file-get`.",
             annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
-            inputSchema: { id: z.string().min(1).describe("Id of the file to delete. Get it from `ethora-files-get-v2`.") },
+            inputSchema: { id: z.string().min(1).describe("Id of the file to delete. Get it from `ethora-file-get`.") },
         },
         async function ({ id }) {
             try {
                 ensureUserAuthForTool()
                 const res = await filesDeleteV2(id)
-                return asToolResult(ok(res.data, getDefaultMeta("ethora-files-delete-v2")))
+                return asToolResult(ok(res.data, getDefaultMeta("ethora-file-delete")))
             } catch (error) {
-                return asToolResult(fail(error, getDefaultMeta("ethora-files-delete-v2")))
+                return asToolResult(fail(error, getDefaultMeta("ethora-file-delete")))
             }
         }
     )
@@ -1595,9 +1563,9 @@ function filesDeleteV2Tool(server: McpServer) {
 
 function sourcesDocsUploadTool(server: McpServer) {
     server.registerTool(
-        "ethora-sources-docs-upload",
+        "ethora-source-doc-upload-legacy",
         {
-            description: "Upload documents (1–5; PDF, text, etc.) into an app's RAG sources (legacy user-auth route). Async — content becomes queryable once indexing finishes; files passed as base64, 50MB max each.\nRequires: a selected app (`ethora-app-select`) or an explicit `appId`.\nAuth: user-auth mode, active session; the user must own the app. Errors: 401 not logged in; 403 not owner; 413 too large; 422 unsupported document type. Related: app-token/B2B flows use `ethora-sources-docs-upload-v2`.",
+            description: "Upload documents (1–5; PDF, text, etc.) into an app's RAG sources (legacy user-auth route). Async — content becomes queryable once indexing finishes; files passed as base64, 50MB max each.\nRequires: a selected app (`ethora-app-select`) or an explicit `appId`.\nAuth: user-auth mode, active session; the user must own the app. Errors: 401 not logged in; 403 not owner; 413 too large; 422 unsupported document type. Related: app-token/B2B flows use `ethora-source-doc-upload`.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("24-char hex appId to ingest into. Optional — defaults to the app set via `ethora-app-select`."),
@@ -1622,9 +1590,9 @@ function sourcesDocsUploadTool(server: McpServer) {
                     form.append("files", blob, f.name)
                 }
                 const res = await sourcesDocsUpload(effectiveAppId, form, { "Content-Type": "multipart/form-data" })
-                return asToolResult(ok(res.data, getDefaultMeta("ethora-sources-docs-upload")))
+                return asToolResult(ok(res.data, getDefaultMeta("ethora-source-doc-upload-legacy")))
             } catch (error) {
-                return asToolResult(fail(error, getDefaultMeta("ethora-sources-docs-upload")))
+                return asToolResult(fail(error, getDefaultMeta("ethora-source-doc-upload-legacy")))
             }
         }
     )
@@ -1632,13 +1600,13 @@ function sourcesDocsUploadTool(server: McpServer) {
 
 function sourcesDocsDeleteTool(server: McpServer) {
     server.registerTool(
-        "ethora-sources-docs-delete",
+        "ethora-source-doc-delete-legacy",
         {
-            description: "Remove a previously ingested document from an app's RAG sources by `docId` (legacy user-auth route). Deletes the document record and its embeddings; not reversible.\nRequires: a document id from `ethora-sources-docs-list-v2`.\nAuth: user-auth mode, active session; the user must own the app. Errors: 401 not logged in; 403 not owner; 404 unknown `docId`. Related: get `docId` from `ethora-sources-docs-list-v2`; app-token/B2B uses `ethora-sources-docs-delete-v2`.",
+            description: "Remove a previously ingested document from an app's RAG sources by `docId` (legacy user-auth route). Deletes the document record and its embeddings; not reversible.\nRequires: a document id from `ethora-source-doc-list`.\nAuth: user-auth mode, active session; the user must own the app. Errors: 401 not logged in; 403 not owner; 404 unknown `docId`. Related: get `docId` from `ethora-source-doc-list`; app-token/B2B uses `ethora-source-doc-delete`.",
             annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("24-char hex appId the document belongs to. Optional — defaults to the app set via `ethora-app-select`."),
-                docId: z.string().min(1).describe("Id of the ingested document to delete. Get it from `ethora-sources-docs-list-v2`."),
+                docId: z.string().min(1).describe("Id of the ingested document to delete. Get it from `ethora-source-doc-list`."),
             },
         },
         async function ({ appId, docId }) {
@@ -1646,9 +1614,9 @@ function sourcesDocsDeleteTool(server: McpServer) {
                 ensureUserAuthForTool()
                 const effectiveAppId = appId || requireCurrentAppId()
                 const res = await sourcesDocsDelete(effectiveAppId, docId)
-                return asToolResult(ok(res.data, getDefaultMeta("ethora-sources-docs-delete")))
+                return asToolResult(ok(res.data, getDefaultMeta("ethora-source-doc-delete-legacy")))
             } catch (error) {
-                return asToolResult(fail(error, getDefaultMeta("ethora-sources-docs-delete")))
+                return asToolResult(fail(error, getDefaultMeta("ethora-source-doc-delete-legacy")))
             }
         }
     )
@@ -1658,7 +1626,7 @@ function userLoginWithEmailTool(server: McpServer) {
     server.registerTool(
         'ethora-user-login',
         {
-            description: "Authenticate as an existing Ethora user with email + password. Stores the user session token in this MCP session and unlocks user-auth tools (`ethora-app-list`, `ethora-files-*`, `ethora-wallet-*`).\nAuth: user-auth mode (`ethora-auth-use-user` first) and a configured `appJwt`. Errors: 401/403 bad credentials; 404 email not registered; 429 per-IP rate limit — retry with backoff.",
+            description: "Authenticate as an existing Ethora user with email + password. Stores the user session token in this MCP session and unlocks user-auth tools (`ethora-app-list`, `ethora-files-*`, `ethora-wallet-*`).\nAuth: user-auth mode (`ethora-auth-mode-set` first) and a configured `appJwt`. Errors: 401/403 bad credentials; 404 email not registered; 429 per-IP rate limit — retry with backoff.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 email: z.string().email().describe("User's registered email address (RFC 5322). Must match an account created via `ethora-user-register`."),
@@ -1694,7 +1662,7 @@ function userRegisterWithEmailTool(server: McpServer) {
         'ethora-user-register',
         {
             title: 'Ethora registration',
-            description: "Create a new Ethora user account by email + first/last name, then log in and bind the session. A password is generated when omitted and returned once. By default also mints a long-lived API key so an agent can reconnect later with `Authorization: Bearer <key>` (no human step needed).\nAuth: user-auth mode and a configured `appJwt` (on a hosted server this is preset). Errors: 401 no `appJwt`; 422 email already registered or password shorter than 6 chars; 429 rate limited. Related: bulk provisioning uses `ethora-users-batch-create-v2`.",
+            description: "Create a new Ethora user account by email + first/last name, then log in and bind the session. A password is generated when omitted and returned once. By default also mints a long-lived API key so an agent can reconnect later with `Authorization: Bearer <key>` (no human step needed).\nAuth: user-auth mode and a configured `appJwt` (on a hosted server this is preset). Errors: 401 no `appJwt`; 422 email already registered or password shorter than 6 chars; 429 rate limited. Related: bulk provisioning uses `ethora-user-batch-create`.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
             inputSchema: {
                 email: z.string().email().describe("Email address for the new user. Must be RFC-5322 valid and not already registered within this app. No confirmation click is required to log in; the address is used for password reset."),
@@ -1813,7 +1781,7 @@ function feedbackSubmitTool(server: McpServer) {
 
 function appCredentialsTool(server: McpServer) {
     server.registerTool(
-        "ethora-app-credentials",
+        "ethora-app-credentials-reveal",
         {
             title: "Reveal App Token",
             description: "Reveal the appToken of an app the caller owns, for a chat-component snippet or a widget config. Every other tool redacts appToken, appSecret and tenantSecret from its results because tool output enters the model's context and client logs; this tool returns exactly { appId, appToken, note } and nothing else. The App Secret is never returned over MCP: it is shown only in the web dashboard (app settings, API tab), and backend integrations should use revocable server tokens from that tab instead of the secret.\nRequires: an app you own (`ethora-app-create` or `ethora-app-list`) and `confirm: true`.\nAuth: user auth (app owner). Errors: 401 not logged in; 403 not the owner; 404 unknown `appId`; validation error unless `confirm` is `true`.",
@@ -1824,7 +1792,7 @@ function appCredentialsTool(server: McpServer) {
             },
         },
         async function ({ appId, confirm }) {
-            const meta = getDefaultMeta("ethora-app-credentials")
+            const meta = getDefaultMeta("ethora-app-credentials-reveal")
             try {
                 if (confirm !== true) throw new Error("Pass `confirm: true` to reveal the app token.")
                 const id = String(appId || (getClientState() as any).currentAppId || "").trim()
@@ -1838,7 +1806,7 @@ function appCredentialsTool(server: McpServer) {
                 return asToolResult(ok({
                     appId: id,
                     appToken: String(token),
-                    note: "Credential: use it as the appToken in chat-component or widget configs and keep it out of repositories. Rotate it with `ethora-app-tokens-rotate-v2` if it leaks. The App Secret is only shown in the web dashboard API tab.",
+                    note: "Credential: use it as the appToken in chat-component or widget configs and keep it out of repositories. Rotate it with `ethora-app-token-rotate` if it leaks. The App Secret is only shown in the web dashboard API tab.",
                 }, meta))
             } catch (error) {
                 return asToolResult(fail(error, meta))
@@ -1913,7 +1881,7 @@ function appListTool(server: McpServer) {
     server.registerTool(
         'ethora-app-list',
         {
-            description: "List all Ethora apps (tenants) owned by the currently logged-in user. Returns an array with `appId` (24-char hex), `displayName`, `domainName`, ownership and bot-status metadata. Credential fields (appSecret, tenantSecret, appToken, passwords) are redacted in the result; call `ethora-app-credentials { appId, confirm: true }` to reveal an app's appToken.\nAuth: user-auth mode, active session (`ethora-user-login` first). Errors: 401 not logged in; empty list if the user owns no apps. Related: feed `appId` into `ethora-app-update` / `ethora-app-select`.",
+            description: "List all Ethora apps (tenants) owned by the currently logged-in user. Returns an array with `appId` (24-char hex), `displayName`, `domainName`, ownership and bot-status metadata. Credential fields (appSecret, tenantSecret, appToken, passwords) are redacted in the result; call `ethora-app-credentials-reveal { appId, confirm: true }` to reveal an app's appToken.\nAuth: user-auth mode, active session (`ethora-user-login` first). Errors: 401 not logged in; empty list if the user owns no apps. Related: feed `appId` into `ethora-app-update` / `ethora-app-select`.",
             annotations: { readOnlyHint: true, openWorldHint: true },
         },
         async function () {
@@ -1931,7 +1899,7 @@ function appCreateTool(server: McpServer) {
     server.registerTool(
         'ethora-app-create',
         {
-            description: "Create a new Ethora app (tenant) owned by the currently logged-in user. Allocates a fresh 24-char hex `appId` and sets the caller as owner; counts against the owner's plan limit. Returns the new app object including `appId`. The returned app has its credential fields redacted; call `ethora-app-credentials { appId, confirm: true }` when a snippet needs the appToken.\nAuth: user-auth mode, active session (`ethora-user-login` first). Errors: 401 not logged in; 402/403 plan limit reached; 422 invalid `displayName`. Related: server-side provisioning uses `ethora-b2b-app-create`.",
+            description: "Create a new Ethora app (tenant) owned by the currently logged-in user. Allocates a fresh 24-char hex `appId` and sets the caller as owner; counts against the owner's plan limit. Returns the new app object including `appId`. The returned app has its credential fields redacted; call `ethora-app-credentials-reveal { appId, confirm: true }` when a snippet needs the appToken.\nAuth: user-auth mode, active session (`ethora-user-login` first). Errors: 401 not logged in; 402/403 plan limit reached; 422 invalid `displayName`. Related: server-side provisioning uses `ethora-b2b-app-create`.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
             inputSchema: {
                 displayName: z.string().describe("Human-readable app name shown to users in the app picker and on the public landing page. Not required to be unique across accounts.")
@@ -1989,7 +1957,7 @@ function appUpdateTool(server: McpServer) {
                 appTagline: z.string().optional().describe("Short tagline shown on the public app landing page."),
                 appDescription: z.string().optional().describe("Deprecated alias for `appTagline`, kept so older callers keep working. Prefer `appTagline`."),
                 primaryColor: z.string().optional().describe("Primary brand color in hex `#RRGGBB` format (e.g. `#F54927`). Used throughout the app UI."),
-                botStatus: z.enum(["on", "off"]).optional().describe("`on` enables the AI bot for new conversations (requires a configured prompt — see `ethora-bot-update-v2`); `off` disables it. Does not change the bot's configured prompt or sources.")
+                botStatus: z.enum(["on", "off"]).optional().describe("`on` enables the AI bot for new conversations (requires a configured prompt — see `ethora-bot-update`); `off` disables it. Does not change the bot's configured prompt or sources.")
             }
         },
         async function ({ appId, displayName, domainName, appTagline, appDescription, primaryColor, botStatus }) {
@@ -2028,27 +1996,9 @@ function appUpdateTool(server: McpServer) {
     )
 }
 
-function appGetDefaultRoomsTool(server: McpServer) {
-    server.registerTool(
-        'ethora-app-get-default-rooms',
-        {
-            description: "List the default chat rooms (MUC rooms) of the currently selected Ethora app — every new user auto-joins these. Returns rooms with their JIDs and titles.\nAuth: user-auth mode, active session; operates against the app set via `ethora-app-select`. Errors: 400 no app currently selected; 401 not logged in. Related: `ethora-app-get-default-rooms-with-app-id` to pass `appId` explicitly.",
-            annotations: { readOnlyHint: true, openWorldHint: true },
-        },
-        async function () {
-            try {
-                let result = await appGetDefaultRooms()
-                return asToolResult(ok(result.data, getDefaultMeta("ethora-app-get-default-rooms")))
-            } catch (error) {
-                return asToolResult(fail(error, getDefaultMeta("ethora-app-get-default-rooms")))
-            }
-        }
-    )
-}
-
 function getDefaultRoomsWithAppIdTool(server: McpServer) {
     server.registerTool(
-        'ethora-app-get-default-rooms-with-app-id',
+        'ethora-app-rooms-list',
         {
             description: "List the default chat rooms of a specific Ethora app, passed via `appId` (or the currently selected app). Returns rooms with their JIDs and titles.\nRequires: an `appId` from `ethora-app-list` or `ethora-app-create`.\nAuth: user-auth mode, active session; the caller needs read access (ownership or room membership). Errors: 400 no `appId` and none selected; 401 not logged in; 403 no read access; 404 unknown `appId`.",
             annotations: { readOnlyHint: true, openWorldHint: true },
@@ -2064,9 +2014,9 @@ function getDefaultRoomsWithAppIdTool(server: McpServer) {
                     throw new Error(APP_CONTEXT_MISSING_MESSAGE)
                 }
                 let result = await appGetDefaultRoomsWithAppId(effectiveAppId)
-                return asToolResult(ok(result.data, getDefaultMeta("ethora-app-get-default-rooms-with-app-id")))
+                return asToolResult(ok(result.data, getDefaultMeta("ethora-app-rooms-list")))
             } catch (error) {
-                return asToolResult(fail(error, getDefaultMeta("ethora-app-get-default-rooms-with-app-id")))
+                return asToolResult(fail(error, getDefaultMeta("ethora-app-rooms-list")))
             }
         }
     )
@@ -2074,7 +2024,7 @@ function getDefaultRoomsWithAppIdTool(server: McpServer) {
 
 function craeteAppChatTool(server: McpServer) {
     server.registerTool(
-        'ethora-app-create-chat',
+        'ethora-chat-create',
         {
             description: "Create a new chat room (MUC room) inside an app the caller owns. Every room created this way is listed in the app's rooms (`defaultRooms`); `pinned: true` additionally makes new users auto-join it (existing users are not added), `pinned: false` (default) keeps it opt-in. Returns the new room object including its JID.\nRequires: a selected app (`ethora-app-select`) or an explicit `appId`.\nAuth: user-auth mode, active session; the caller must own the app. Errors: 401 not logged in; 403 not owner; 404 unknown `appId`; 422 invalid `title`.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
@@ -2092,9 +2042,9 @@ function craeteAppChatTool(server: McpServer) {
                     throw new Error(APP_CONTEXT_MISSING_MESSAGE)
                 }
                 let result = await appCreateChat(effectiveAppId, title, pinned)
-                return asToolResult(ok(result.data, getDefaultMeta("ethora-app-create-chat")))
+                return asToolResult(ok(result.data, getDefaultMeta("ethora-chat-create")))
             } catch (error) {
-                return asToolResult(fail(error, getDefaultMeta("ethora-app-create-chat")))
+                return asToolResult(fail(error, getDefaultMeta("ethora-chat-create")))
             }
         }
     )
@@ -2102,13 +2052,13 @@ function craeteAppChatTool(server: McpServer) {
 
 function appDeleteChatTool(server: McpServer) {
     server.registerTool(
-        'ethora-app-delete-chat',
+        'ethora-chat-delete',
         {
-            description: "Permanently delete a chat room from an app the caller owns — removes the MUC room, its message archive, and all member affiliations. Irreversible; gated behind ETHORA_MCP_ENABLE_DANGEROUS_TOOLS=true.\nRequires: a room from `ethora-app-get-default-rooms` or `ethora-app-create-chat`.\nAuth: user-auth mode, active session; the caller must own the app. Errors: 401 not logged in; 403 not owner; 404 `chatJid` not a room in the app.",
+            description: "Permanently delete a chat room from an app the caller owns — removes the MUC room, its message archive, and all member affiliations. Irreversible; gated behind ETHORA_MCP_ENABLE_DANGEROUS_TOOLS=true.\nRequires: a room from `ethora-app-rooms-list` or `ethora-chat-create`.\nAuth: user-auth mode, active session; the caller must own the app. Errors: 401 not logged in; 403 not owner; 404 `chatJid` not a room in the app.",
             annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("24-char hex ObjectId of the app the chat room belongs to. Optional — defaults to the app most recently passed to `ethora-app-select`."),
-                chatJid: z.string().describe("Room JID (XMPP address) of the chat to delete, e.g. `<roomId>@conference.<host>`. Obtain from `ethora-app-get-default-rooms` or the response of `ethora-app-create-chat`."),
+                chatJid: z.string().describe("Room JID (XMPP address) of the chat to delete, e.g. `<roomId>@conference.<host>`. Obtain from `ethora-app-rooms-list` or the response of `ethora-chat-create`."),
             }
         },
         async function ({ appId, chatJid }) {
@@ -2119,9 +2069,9 @@ function appDeleteChatTool(server: McpServer) {
                     throw new Error(APP_CONTEXT_MISSING_MESSAGE)
                 }
                 let result = await appDeleteChat(effectiveAppId, chatJid)
-                return asToolResult(ok(result.data, getDefaultMeta("ethora-app-delete-chat")))
+                return asToolResult(ok(result.data, getDefaultMeta("ethora-chat-delete")))
             } catch (error) {
-                return asToolResult(fail(error, getDefaultMeta("ethora-app-delete-chat")))
+                return asToolResult(fail(error, getDefaultMeta("ethora-chat-delete")))
             }
         }
     )
@@ -2129,7 +2079,7 @@ function appDeleteChatTool(server: McpServer) {
 
 function walletGetBalanceTool(server: McpServer) {  
     server.registerTool(
-        'ethora-wallet-get-balance',
+        'ethora-wallet-balance-get',
         {
             description: "Read the authenticated user's on-chain ERC-20 wallet balance(s). Auth: user-auth (log in first). Errors: 401 not logged in; 503 wallet RPC unreachable — retry with backoff.",
             annotations: { readOnlyHint: true, openWorldHint: true },
@@ -2137,9 +2087,9 @@ function walletGetBalanceTool(server: McpServer) {
         async function () {
             try {
                 let result = await walletGetBalance()
-                return asToolResult(ok(result.data, getDefaultMeta("ethora-wallet-get-balance")))
+                return asToolResult(ok(result.data, getDefaultMeta("ethora-wallet-balance-get")))
             } catch (error) {
-                return asToolResult(fail(error, getDefaultMeta("ethora-wallet-get-balance")))
+                return asToolResult(fail(error, getDefaultMeta("ethora-wallet-balance-get")))
             }
         }
     )
@@ -2153,7 +2103,7 @@ function walletERC20TransferTool(server: McpServer) {
             annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
             inputSchema: {
                 toWallet: z.string().describe("Recipient wallet address. Must be a valid 0x-prefixed 40-character hex string. Double-check before calling — transfers cannot be reversed."),
-                amount: z.number().describe("Amount to transfer, in the same units returned by `ethora-wallet-get-balance` (typically whole-token integers — confirm with your deployment)."),
+                amount: z.number().describe("Amount to transfer, in the same units returned by `ethora-wallet-balance-get` (typically whole-token integers — confirm with your deployment)."),
             }
         },
         async function ({ toWallet, amount }) {
@@ -2171,7 +2121,7 @@ function b2bAppCreateTool(server: McpServer) {
     server.registerTool(
         "ethora-b2b-app-create",
         {
-            description: "Create a new Ethora app (tenant) server-side using B2B auth — the partner/integrator equivalent of `ethora-app-create`. Allocates a fresh 24-char hex `appId`; does not create tokens, rooms, or a bot. Returns the new app object including `appId`.\nAuth: B2B mode (`ethora-auth-use-b2b` + a configured `b2bToken`). Errors: 401/403 not in B2B mode or invalid `b2bToken`; 422 invalid `displayName`. Related: all-in-one path is `ethora-b2b-app-bootstrap-ai` / `ethora-b2b-app-provision`.",
+            description: "Create a new Ethora app (tenant) server-side using B2B auth — the partner/integrator equivalent of `ethora-app-create`. Allocates a fresh 24-char hex `appId`; does not create tokens, rooms, or a bot. Returns the new app object including `appId`.\nAuth: B2B mode (`ethora-auth-mode-set` + a configured `b2bToken`). Errors: 401/403 not in B2B mode or invalid `b2bToken`; 422 invalid `displayName`. Related: all-in-one path is `ethora-b2b-app-bootstrap-ai` / `ethora-b2b-app-provision`.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
             inputSchema: {
                 displayName: z.string().min(1).describe("Human-readable app name shown to users in the app picker and on the public landing page."),
@@ -2191,9 +2141,9 @@ function b2bAppCreateTool(server: McpServer) {
 
 function b2bBotEnableTool(server: McpServer) {
     server.registerTool(
-        "ethora-b2b-bot-enable",
+        "ethora-bot-enable-b2b",
         {
-            description: "Enable the LEGACY per-app aiBot (B2B auth). NOTE: apps created via the API/B2B no longer auto-provision a legacy aiBot, so this returns 422 BOT_NOT_INITIALIZED on a clean app. The forward path for B2B AI is the Agents API — use `ethora-b2b-app-bootstrap-ai` or `ethora-agents-create-v2` + `ethora-agent-invite-to-chat`. This tool remains valid for apps that already have a legacy aiBot (e.g. admin-panel apps created with a default chat).\nRequires: an app with a legacy per-app aiBot (dashboard-created). API-created apps have none: use `ethora-agents-create-v2` -> `ethora-agent-invite-to-chat` -> `ethora-agents-activate-v2` instead.",
+            description: "Enable the LEGACY per-app aiBot (B2B auth). NOTE: apps created via the API/B2B no longer auto-provision a legacy aiBot, so this returns 422 BOT_NOT_INITIALIZED on a clean app. The forward path for B2B AI is the Agents API — use `ethora-b2b-app-bootstrap-ai` or `ethora-agent-create` + `ethora-agent-invite`. This tool remains valid for apps that already have a legacy aiBot (e.g. admin-panel apps created with a default chat).\nRequires: an app with a legacy per-app aiBot (dashboard-created). API-created apps have none: use `ethora-agent-create` -> `ethora-agent-invite` -> `ethora-agent-activate` instead.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("24-char hex appId whose bot to enable. Optional — defaults to the app set via `ethora-app-select`."),
@@ -2211,9 +2161,9 @@ function b2bBotEnableTool(server: McpServer) {
                 const changes: any = { botStatus: "on" }
                 if (botTrigger) changes.botTrigger = botTrigger
                 const res = await appUpdate(effectiveAppId, changes)
-                return asToolResult(ok(res.data, getDefaultMeta("ethora-b2b-bot-enable")))
+                return asToolResult(ok(res.data, getDefaultMeta("ethora-bot-enable-b2b")))
             } catch (error) {
-                return asToolResult(fail(error, getDefaultMeta("ethora-b2b-bot-enable")))
+                return asToolResult(fail(error, getDefaultMeta("ethora-bot-enable-b2b")))
             }
         }
     )
@@ -2221,16 +2171,16 @@ function b2bBotEnableTool(server: McpServer) {
 
 function botGetV2Tool(server: McpServer) {
     server.registerTool(
-        "ethora-bot-get-v2",
+        "ethora-bot-get",
         {
-            description: "Read the current AI bot configuration for an app: status, trigger, prompt, greeting, LLM provider/model, RAG settings, widget config.\nRequires: an app with a legacy per-app aiBot (dashboard-created). API-created apps have none: use `ethora-agents-create-v2` -> `ethora-agent-invite-to-chat` -> `ethora-agents-activate-v2` instead.\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth; 404 unknown `appId`. Related: change config with `ethora-bot-update-v2`.",
+            description: "Read the current AI bot configuration for an app: status, trigger, prompt, greeting, LLM provider/model, RAG settings, widget config.\nRequires: an app with a legacy per-app aiBot (dashboard-created). API-created apps have none: use `ethora-agent-create` -> `ethora-agent-invite` -> `ethora-agent-activate` instead.\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth; 404 unknown `appId`. Related: change config with `ethora-bot-update`.",
             annotations: { readOnlyHint: true, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("24-char hex appId. Required in B2B mode unless already set via `ethora-app-select`; ignored in app-token mode (the token determines the app)."),
             },
         },
         async function ({ appId }) {
-            const meta = getDefaultMeta("ethora-bot-get-v2")
+            const meta = getDefaultMeta("ethora-bot-get")
             try {
                 const ctx = resolveAppScopedV2Context(appId)
                 const res = useAppScopedRoute(ctx)
@@ -2246,9 +2196,9 @@ function botGetV2Tool(server: McpServer) {
 
 function botUpdateV2Tool(server: McpServer) {
     server.registerTool(
-        "ethora-bot-update-v2",
+        "ethora-bot-update",
         {
-            description: "Configure the AI bot for an app — prompt, LLM, trigger, greeting, RAG behavior, identity, and public widget settings. Partial update — omitted fields are left unchanged. `status: \"on\"` activates the bot (best-effort; needs a prompt + LLM and a backend AI service).\nRequires: an app with a legacy per-app aiBot (dashboard-created). API-created apps have none: use `ethora-agents-create-v2` -> `ethora-agent-invite-to-chat` -> `ethora-agents-activate-v2` instead.\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth; 404 unknown `appId`; 422 validation (e.g. an `llmProvider`/`llmModel` not enabled). Related: `ethora-bot-get-v2`, `ethora-agents-activate-v2`.",
+            description: "Configure the AI bot for an app — prompt, LLM, trigger, greeting, RAG behavior, identity, and public widget settings. Partial update — omitted fields are left unchanged. `status: \"on\"` activates the bot (best-effort; needs a prompt + LLM and a backend AI service).\nRequires: an app with a legacy per-app aiBot (dashboard-created). API-created apps have none: use `ethora-agent-create` -> `ethora-agent-invite` -> `ethora-agent-activate` instead.\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth; 404 unknown `appId`; 422 validation (e.g. an `llmProvider`/`llmModel` not enabled). Related: `ethora-bot-get`, `ethora-agent-activate`.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("24-char hex appId. Required in B2B mode unless already set via `ethora-app-select`; ignored in app-token mode."),
@@ -2263,15 +2213,15 @@ function botUpdateV2Tool(server: McpServer) {
                 botLastName: z.string().optional().describe("Bot's last name in its user profile."),
                 botDisplayName: z.string().optional().describe("Bot's display name shown in chat."),
                 botAvatarUrl: z.string().optional().describe("Public URL of the bot's avatar image."),
-                ragTags: z.array(z.string().min(1)).optional().describe("Restrict RAG retrieval to sources tagged with these tags (see `ethora-sources-site-tags-update-v2` / `ethora-sources-docs-tags-update-v2`)."),
+                ragTags: z.array(z.string().min(1)).optional().describe("Restrict RAG retrieval to sources tagged with these tags (see `ethora-source-site-tags-update` / `ethora-source-doc-tags-update`)."),
                 llmProvider: z.string().optional().describe("LLM provider, e.g. `openai` or `openai-compatible`. Must be enabled in your Ethora backend's AI service config."),
                 llmModel: z.string().optional().describe("LLM model id, e.g. `gpt-4o-mini`. Must be available for the chosen `llmProvider`."),
                 widgetPublicEnabled: z.boolean().optional().describe("If true, expose the bot through a public embeddable chat widget."),
-                widgetPublicUrl: z.string().optional().describe("Public URL for the embeddable widget. Usually read via `ethora-bot-widget-v2` rather than set here."),
+                widgetPublicUrl: z.string().optional().describe("Public URL for the embeddable widget. Usually read via `ethora-bot-widget-get` rather than set here."),
             },
         },
         async function ({ appId, ...payload }) {
-            const meta = getDefaultMeta("ethora-bot-update-v2")
+            const meta = getDefaultMeta("ethora-bot-update")
             try {
                 const ctx = resolveAppScopedV2Context(appId)
                 const res = useAppScopedRoute(ctx)
@@ -2287,16 +2237,16 @@ function botUpdateV2Tool(server: McpServer) {
 
 function agentsListV2Tool(server: McpServer) {
     server.registerTool(
-        "ethora-agents-list-v2",
+        "ethora-agent-list",
         {
-            description: "List the reusable saved agents of an app (`GET /v2/apps/:appId/agents`, or `GET /v2/agents` for the token's own app) — a saved agent is a reusable bot definition. Returns an array of agents with ids, names, and config.\nAuth: app-token mode (after `ethora-app-select` + `ethora-auth-use-app`). Errors: 401/403 not in app-token mode or invalid appToken; empty list if the app has no saved agents.",
+            description: "List the reusable saved agents of an app (`GET /v2/apps/:appId/agents`, or `GET /v2/agents` for the token's own app) — a saved agent is a reusable bot definition. Returns an array of agents with ids, names, and config.\nAuth: app-token mode (after `ethora-app-select` + `ethora-auth-mode-set`). Errors: 401/403 not in app-token mode or invalid appToken; empty list if the app has no saved agents.",
             annotations: { readOnlyHint: true, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("24-char hex appId whose agents to list (`GET /v2/apps/:appId/agents`). Defaults to the app selected with `ethora-app-select`; without either, lists the agents of the token's own app."),
             },
         },
         async function ({ appId }) {
-            const meta = getDefaultMeta("ethora-agents-list-v2")
+            const meta = getDefaultMeta("ethora-agent-list")
             try {
                 ensureTenantActorAuth()
                 const ctx = resolveAppScopedV2Context(appId)
@@ -2311,16 +2261,16 @@ function agentsListV2Tool(server: McpServer) {
 
 function agentsGetV2Tool(server: McpServer) {
     server.registerTool(
-        "ethora-agents-get-v2",
+        "ethora-agent-get",
         {
-            description: "Fetch one reusable saved agent's full config by id (`GET /v2/agents/:agentId`) — prompt, LLM, RAG settings, visibility. Also sets this agent as the session's current agent context (no server-side change).\nRequires: an agent id or address from `ethora-agents-list-v2` or `ethora-agents-create-v2`.\nAuth: app-token mode (after `ethora-app-select` + `ethora-auth-use-app`). Errors: 401/403 wrong auth; 404 `agentId` not an agent of the current app. Related: get ids from `ethora-agents-list-v2`.",
+            description: "Fetch one reusable saved agent's full config by id (`GET /v2/agents/:agentId`) — prompt, LLM, RAG settings, visibility. Also sets this agent as the session's current agent context (no server-side change).\nRequires: an agent id or address from `ethora-agent-list` or `ethora-agent-create`.\nAuth: app-token mode (after `ethora-app-select` + `ethora-auth-mode-set`). Errors: 401/403 wrong auth; 404 `agentId` not an agent of the current app. Related: get ids from `ethora-agent-list`.",
             annotations: { readOnlyHint: true, openWorldHint: true },
             inputSchema: {
-                agentId: z.string().min(1).describe("Id of the saved agent to fetch. Get it from `ethora-agents-list-v2`."),
+                agentId: z.string().min(1).describe("Id of the saved agent to fetch. Get it from `ethora-agent-list`."),
             },
         },
         async function ({ agentId }) {
-            const meta = getDefaultMeta("ethora-agents-get-v2")
+            const meta = getDefaultMeta("ethora-agent-get")
             try {
                 ensureUserAuthForTool()
                 const res = await agentsGetV2(agentId)
@@ -2335,9 +2285,9 @@ function agentsGetV2Tool(server: McpServer) {
 
 function agentsCreateV2Tool(server: McpServer) {
     server.registerTool(
-        "ethora-agents-create-v2",
+        "ethora-agent-create",
         {
-            description: "Create a reusable AI agent (POST /v2/apps/:appId/agents). Works in user auth mode (the normal hosted mode) or B2B mode; app-token mode is not accepted by the backend. Each agent is a persona — name, avatar, system prompt, LLM config, plus response-gate settings (responseMode, cooldownSec) that control when it speaks in a room. For multi-agent scenarios (two or more personas conversing in one chat) create each one separately, then `ethora-agent-invite-to-chat` them into the same room. See the `ethora-agents-quickstart` prompt for the end-to-end recipe.\nRequires: a selected app (`ethora-app-select`) or an explicit `appId`; the agent is owned by that app.",
+            description: "Create a reusable AI agent (POST /v2/apps/:appId/agents). Works in user auth mode (the normal hosted mode) or B2B mode; app-token mode is not accepted by the backend. Each agent is a persona — name, avatar, system prompt, LLM config, plus response-gate settings (responseMode, cooldownSec) that control when it speaks in a room. For multi-agent scenarios (two or more personas conversing in one chat) create each one separately, then `ethora-agent-invite` them into the same room. See the `ethora-agents-quickstart` prompt for the end-to-end recipe.\nRequires: a selected app (`ethora-app-select`) or an explicit `appId`; the agent is owned by that app.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("24-char hex appId the agent belongs to (`POST /v2/apps/:appId/agents`). Defaults to the app selected with `ethora-app-select`. Pass it when you just created an app so the agent lands there rather than in the token's own app."),
@@ -2363,7 +2313,7 @@ function agentsCreateV2Tool(server: McpServer) {
             },
         },
         async function (payload) {
-            const meta = getDefaultMeta("ethora-agents-create-v2")
+            const meta = getDefaultMeta("ethora-agent-create")
             try {
                 ensureTenantActorAuth()
                 const { appId, ...rest } = payload as any
@@ -2381,9 +2331,9 @@ function agentsCreateV2Tool(server: McpServer) {
 
 function agentsUpdateV2Tool(server: McpServer) {
     server.registerTool(
-        "ethora-agents-update-v2",
+        "ethora-agent-update",
         {
-            description: "Update a saved AI agent (PUT /v2/agents/:agentId). All fields are optional — only what you pass is updated. Common uses: tune the system `prompt` after a test run, switch `responseMode` to control turn-taking in multi-agent rooms, or adjust `cooldownSec`. See `ethora-agents-quickstart` prompt for the end-to-end recipe.\nRequires: an agent id or address from `ethora-agents-list-v2` or `ethora-agents-create-v2`.",
+            description: "Update a saved AI agent (PUT /v2/agents/:agentId). All fields are optional — only what you pass is updated. Common uses: tune the system `prompt` after a test run, switch `responseMode` to control turn-taking in multi-agent rooms, or adjust `cooldownSec`. See `ethora-agents-quickstart` prompt for the end-to-end recipe.\nRequires: an agent id or address from `ethora-agent-list` or `ethora-agent-create`.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 agentId: z.string().min(1).describe("Mongo _id (24 hex chars) of the agent to update."),
@@ -2409,7 +2359,7 @@ function agentsUpdateV2Tool(server: McpServer) {
             },
         },
         async function ({ agentId, ...payload }) {
-            const meta = getDefaultMeta("ethora-agents-update-v2")
+            const meta = getDefaultMeta("ethora-agent-update")
             try {
                 ensureUserAuthForTool()
                 const res = await agentsUpdateV2(agentId, payload as any)
@@ -2424,19 +2374,19 @@ function agentsUpdateV2Tool(server: McpServer) {
 
 function agentsCloneV2Tool(server: McpServer) {
     server.registerTool(
-        "ethora-agents-clone-v2",
+        "ethora-agent-clone",
         {
-            description: "Duplicate an existing saved agent into a new agent, optionally overriding its name/slug/summary (`POST /v2/agents/:agentId/clone`). The source agent is unchanged; the new clone becomes the session's current agent context.\nRequires: an agent id or address from `ethora-agents-list-v2` or `ethora-agents-create-v2`.\nAuth: app-token mode (after `ethora-app-select` + `ethora-auth-use-app`). Errors: 401/403 wrong auth; 404 source `agentId` not found; 422 overridden `slug` collides.",
+            description: "Duplicate an existing saved agent into a new agent, optionally overriding its name/slug/summary (`POST /v2/agents/:agentId/clone`). The source agent is unchanged; the new clone becomes the session's current agent context.\nRequires: an agent id or address from `ethora-agent-list` or `ethora-agent-create`.\nAuth: app-token mode (after `ethora-app-select` + `ethora-auth-mode-set`). Errors: 401/403 wrong auth; 404 source `agentId` not found; 422 overridden `slug` collides.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
             inputSchema: {
-                agentId: z.string().min(1).describe("Id of the source agent to clone. Get it from `ethora-agents-list-v2`."),
+                agentId: z.string().min(1).describe("Id of the source agent to clone. Get it from `ethora-agent-list`."),
                 name: z.string().optional().describe("Name for the clone. Omit to inherit the source agent's name."),
                 slug: z.string().optional().describe("URL-safe unique slug for the clone. Omit to let the server derive one; must not collide with an existing agent."),
                 summary: z.string().optional().describe("Summary for the clone. Omit to inherit the source agent's summary."),
             },
         },
         async function ({ agentId, ...payload }) {
-            const meta = getDefaultMeta("ethora-agents-clone-v2")
+            const meta = getDefaultMeta("ethora-agent-clone")
             try {
                 ensureUserAuthForTool()
                 const res = await agentsCloneV2(agentId, payload as any)
@@ -2452,21 +2402,21 @@ function agentsCloneV2Tool(server: McpServer) {
 
 function agentsActivateV2Tool(server: McpServer) {
     server.registerTool(
-        "ethora-agents-activate-v2",
+        "ethora-agent-activate",
         {
-            description: "Make an agent the app's ACTIVE widget bot: sets `App.defaultBotInstanceId` (and `botStatus: on`), which is what `POST /v2/widget/sessions` uses to decide who answers website visitors. Required before an embedded widget can answer on an API-created app. Preconditions: the agent was invited into a room of this app with `ethora-agent-invite-to-chat` (that creates its bot instance). Works in user auth (app update route); falls back to the app-token `/v2/agents/:id/activate` route when an appToken is stored.\nRequires: an agent already invited into a room of the selected app (`ethora-agents-create-v2` -> `ethora-app-create-chat` -> `ethora-agent-invite-to-chat`); the invite creates the bot instance this tool binds as the app's default responder.\nAuth: user session (owner of the app). Errors: 404 no bot instance for this agent in the app (invite first); 403 not the app owner. Related: `ethora-widget-embed-snippet` next, `ethora-bot-instances-list` to inspect.",
+            description: "Make an agent the app's ACTIVE widget bot: sets `App.defaultBotInstanceId` (and `botStatus: on`), which is what `POST /v2/widget/sessions` uses to decide who answers website visitors. Required before an embedded widget can answer on an API-created app. Preconditions: the agent was invited into a room of this app with `ethora-agent-invite` (that creates its bot instance). Works in user auth (app update route); falls back to the app-token `/v2/agents/:id/activate` route when an appToken is stored.\nRequires: an agent already invited into a room of the selected app (`ethora-agent-create` -> `ethora-chat-create` -> `ethora-agent-invite`); the invite creates the bot instance this tool binds as the app's default responder.\nAuth: user session (owner of the app). Errors: 404 no bot instance for this agent in the app (invite first); 403 not the app owner. Related: `ethora-widget-snippet-get` next, `ethora-bot-instance-list` to inspect.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
             inputSchema: {
-                agentId: z.string().min(1).describe("Id (or address) of the agent to activate. Get it from `ethora-agents-list-v2` / `ethora-agents-create-v2`."),
+                agentId: z.string().min(1).describe("Id (or address) of the agent to activate. Get it from `ethora-agent-list` / `ethora-agent-create`."),
                 chatJid: z.string().optional().describe("Room JID `${appId}_${chatId}` (with or without `@conference...`) that becomes the widget chat. Required for API-created apps; omit only for dashboard-created apps that already have an AI Widget chat bound."),
                 appId: z.string().optional().describe("App to activate the agent for. Defaults to the app from `ethora-app-select`."),
             },
         },
         async function ({ agentId, chatJid, appId }) {
-            const meta = getDefaultMeta("ethora-agents-activate-v2")
+            const meta = getDefaultMeta("ethora-agent-activate")
             try {
                 const result = await activateAgentForApp(agentId, chatJid, appId)
-                return asToolResult(ok({ ...result, next: "The agent now answers the app's widget. Call `ethora-widget-embed-snippet` for the <script> tag to paste into a website." }, meta))
+                return asToolResult(ok({ ...result, next: "The agent now answers the app's widget. Call `ethora-widget-snippet-get` for the <script> tag to paste into a website." }, meta))
             } catch (error) {
                 return asToolResult(fail(error, meta))
             }
@@ -2480,9 +2430,9 @@ function agentsActivateV2Tool(server: McpServer) {
 
 function agentSetVisibilityTool(server: McpServer) {
     server.registerTool(
-        "ethora-agent-set-visibility",
+        "ethora-agent-visibility-set",
         {
-            description: "Set an Agent's visibility (private | unlisted | public). Public agents can be invited cross-app by anyone who knows the address.\nPass the agent as `agentId` or `agentIdOrAddress` (one of the two is required, the schema marks both optional because either is accepted), from `ethora-agents-list-v2` or `ethora-agents-create-v2`.",
+            description: "Set an Agent's visibility (private | unlisted | public). Public agents can be invited cross-app by anyone who knows the address.\nPass the agent as `agentId` or `agentIdOrAddress` (one of the two is required, the schema marks both optional because either is accepted), from `ethora-agent-list` or `ethora-agent-create`.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 agentIdOrAddress: z.string().min(1),
@@ -2490,7 +2440,7 @@ function agentSetVisibilityTool(server: McpServer) {
             },
         },
         async function ({ agentIdOrAddress, visibility }) {
-            const meta = getDefaultMeta("ethora-agent-set-visibility")
+            const meta = getDefaultMeta("ethora-agent-visibility-set")
             try {
                 ensureUserAuthForTool()
                 const res = await agentsSetVisibilityV2(agentIdOrAddress, visibility)
@@ -2504,19 +2454,19 @@ function agentSetVisibilityTool(server: McpServer) {
 
 function agentInviteToChatTool(server: McpServer) {
     server.registerTool(
-        "ethora-agent-invite-to-chat",
+        "ethora-agent-invite",
         {
-            description: "Invite an Agent into a chat room. Multiple agents can coexist in the same room — call this tool once per agent and they will all appear as members able to converse. Lazily creates a per-App BotInstance (an Ethora user with isBot:true) if one does not already exist for (agent, app). Spawns the XMPP client live; no ai-service restart required. For the full multi-agent recipe see the `ethora-agents-quickstart` prompt.\nRequires: an agent (`ethora-agents-create-v2`) and a room (`ethora-app-create-chat`) in the selected app.",
+            description: "Invite an Agent into a chat room. Multiple agents can coexist in the same room — call this tool once per agent and they will all appear as members able to converse. Lazily creates a per-App BotInstance (an Ethora user with isBot:true) if one does not already exist for (agent, app). Spawns the XMPP client live; no ai-service restart required. For the full multi-agent recipe see the `ethora-agents-quickstart` prompt.\nRequires: an agent (`ethora-agent-create`) and a room (`ethora-chat-create`) in the selected app.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
             inputSchema: {
                 agentIdOrAddress: z.string().min(1).describe("Either Mongo _id (24 hex chars) or EOA-style address."),
                 appId: z.string().optional().describe("Required in B2B mode unless already selected via ethora-app-select."),
                 chatId: z.string().optional().describe("Mongo Chat _id (preferred when invoking from admin)."),
-                chatJid: z.string().optional().describe("Room JID `${appId}_${chatId}` (optionally with `@conference.<host>`), exactly the `jid` returned by `ethora-app-create-chat`. Preferred over `chatId`."),
+                chatJid: z.string().optional().describe("Room JID `${appId}_${chatId}` (optionally with `@conference.<host>`), exactly the `jid` returned by `ethora-chat-create`. Preferred over `chatId`."),
             },
         },
         async function ({ agentIdOrAddress, appId, chatId, chatJid }) {
-            const meta = getDefaultMeta("ethora-agent-invite-to-chat")
+            const meta = getDefaultMeta("ethora-agent-invite")
             try {
                 ensureTenantActorAuth()
                 const ctx = resolveAppScopedV2Context(appId)
@@ -2535,7 +2485,7 @@ function agentSoulAppendTool(server: McpServer) {
     server.registerTool(
         "ethora-agent-soul-append",
         {
-            description: "Append a fragment to an Agent's SOUL.MD (its evolving identity / private notes). Operator-driven; the Agent itself can also self-edit via the same endpoint when called by ai-service.\nRequires: an agent id or address from `ethora-agents-list-v2` or `ethora-agents-create-v2`.",
+            description: "Append a fragment to an Agent's SOUL.MD (its evolving identity / private notes). Operator-driven; the Agent itself can also self-edit via the same endpoint when called by ai-service.\nRequires: an agent id or address from `ethora-agent-list` or `ethora-agent-create`.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
             inputSchema: {
                 agentIdOrAddress: z.string().min(1),
@@ -2559,7 +2509,7 @@ function agentSoulSetTool(server: McpServer) {
     server.registerTool(
         "ethora-agent-soul-set",
         {
-            description: "Replace an Agent's SOUL.MD with the provided markdown. Operator-driven; alternative to -append.\nRequires: an agent id or address from `ethora-agents-list-v2` or `ethora-agents-create-v2`.",
+            description: "Replace an Agent's SOUL.MD with the provided markdown. Operator-driven; alternative to -append.\nRequires: an agent id or address from `ethora-agent-list` or `ethora-agent-create`.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 agentIdOrAddress: z.string().min(1),
@@ -2581,9 +2531,9 @@ function agentSoulSetTool(server: McpServer) {
 
 function botInstancesListTool(server: McpServer) {
     server.registerTool(
-        "ethora-bot-instances-list",
+        "ethora-bot-instance-list",
         {
-            description: "List BotInstances. Filter by appId (caller's App by default) and/or agentId.\nRequires: at least one invited agent in the app (`ethora-agent-invite-to-chat`); otherwise the list is empty.",
+            description: "List BotInstances. Filter by appId (caller's App by default) and/or agentId.\nRequires: at least one invited agent in the app (`ethora-agent-invite`); otherwise the list is empty.",
             annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional(),
@@ -2591,7 +2541,7 @@ function botInstancesListTool(server: McpServer) {
             },
         },
         async function ({ appId, agentId }) {
-            const meta = getDefaultMeta("ethora-bot-instances-list")
+            const meta = getDefaultMeta("ethora-bot-instance-list")
             try {
                 ensureUserAuthForTool()
                 const res = await botInstancesListV2({ appId, agentId })
@@ -2605,9 +2555,9 @@ function botInstancesListTool(server: McpServer) {
 
 function botInstanceStatusTool(server: McpServer) {
     server.registerTool(
-        "ethora-bot-instance-status",
+        "ethora-bot-instance-status-set",
         {
-            description: "Turn a specific BotInstance on or off. Off detaches it from XMPP; on re-spawns the XMPP client live. Setting the state it already has changes nothing.\nRequires: a bot instance id from `ethora-bot-instances-list` (instances are created by `ethora-agent-invite-to-chat`).",
+            description: "Turn a specific BotInstance on or off. Off detaches it from XMPP; on re-spawns the XMPP client live. Setting the state it already has changes nothing.\nRequires: a bot instance id from `ethora-bot-instance-list` (instances are created by `ethora-agent-invite`).",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 botInstanceId: z.string().min(1),
@@ -2615,7 +2565,7 @@ function botInstanceStatusTool(server: McpServer) {
             },
         },
         async function ({ botInstanceId, status }) {
-            const meta = getDefaultMeta("ethora-bot-instance-status")
+            const meta = getDefaultMeta("ethora-bot-instance-status-set")
             try {
                 ensureUserAuthForTool()
                 const res = await botInstanceStatusV2(botInstanceId, status)
@@ -2633,16 +2583,16 @@ function botInstanceStatusTool(server: McpServer) {
 
 function agentsDeleteV2Tool(server: McpServer) {
     server.registerTool(
-        "ethora-agents-delete-v2",
+        "ethora-agent-delete",
         {
-            description: "Delete an Agent (DELETE /v2/agents/:idOrAddress). Destructive — removes the saved Agent and its BotInstances. Gated behind ETHORA_MCP_ENABLE_DANGEROUS_TOOLS.\nRequires: an agent id or address from `ethora-agents-list-v2` or `ethora-agents-create-v2`.",
+            description: "Delete an Agent (DELETE /v2/agents/:idOrAddress). Destructive — removes the saved Agent and its BotInstances. Gated behind ETHORA_MCP_ENABLE_DANGEROUS_TOOLS.\nRequires: an agent id or address from `ethora-agent-list` or `ethora-agent-create`.",
             annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 agentIdOrAddress: z.string().min(1).describe("Mongo _id (24 hex chars) or EOA-style address."),
             },
         },
         async function ({ agentIdOrAddress }) {
-            const meta = getDefaultMeta("ethora-agents-delete-v2")
+            const meta = getDefaultMeta("ethora-agent-delete")
             try {
                 ensureUserAuthForTool()
                 const res = await agentsDeleteV2(agentIdOrAddress)
@@ -2656,9 +2606,9 @@ function agentsDeleteV2Tool(server: McpServer) {
 
 function agentsExportV2Tool(server: McpServer) {
     server.registerTool(
-        "ethora-agents-export-v2",
+        "ethora-agent-export",
         {
-            description: "Export an Agent as a portable bundle (GET /v2/agents/:idOrAddress/export). format=json returns the bundle object directly; feed it back to `ethora-agents-import-v2` to recreate the Agent in another App/tenant.\nRequires: an agent id or address from `ethora-agents-list-v2` or `ethora-agents-create-v2`.",
+            description: "Export an Agent as a portable bundle (GET /v2/agents/:idOrAddress/export). format=json returns the bundle object directly; feed it back to `ethora-agent-import` to recreate the Agent in another App/tenant.\nRequires: an agent id or address from `ethora-agent-list` or `ethora-agent-create`.",
             annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 agentIdOrAddress: z.string().min(1),
@@ -2666,7 +2616,7 @@ function agentsExportV2Tool(server: McpServer) {
             },
         },
         async function ({ agentIdOrAddress, format }) {
-            const meta = getDefaultMeta("ethora-agents-export-v2")
+            const meta = getDefaultMeta("ethora-agent-export")
             try {
                 ensureUserAuthForTool()
                 const res = await agentsExportV2(agentIdOrAddress, format || "json")
@@ -2680,15 +2630,15 @@ function agentsExportV2Tool(server: McpServer) {
 
 function agentsImportV2Tool(server: McpServer) {
     server.registerTool(
-        "ethora-agents-import-v2",
+        "ethora-agent-import",
         {
-            description: "Import an Agent from a bundle produced by `ethora-agents-export-v2` (POST /v2/agents/import, application/json body IS the bundle). Optionally scope the new Agent to an owning App via ownerAppId.\nRequires: a bundle produced by `ethora-agents-export-v2` with format json.",
+            description: "Import an Agent from a bundle produced by `ethora-agent-export` (POST /v2/agents/import, application/json body IS the bundle). Optionally scope the new Agent to an owning App via ownerAppId.\nRequires: a bundle produced by `ethora-agent-export` with format json.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
             inputSchema: {
                 // Typed rather than z.any(). z.any() is optional in Zod, so the tool
                 // advertised no required arguments, an agent could call it empty, and
                 // the API answered with an opaque schemaVersion error. The shape below
-                // matches a real `ethora-agents-export-v2` bundle; passthrough keeps it
+                // matches a real `ethora-agent-export` bundle; passthrough keeps it
                 // forward compatible with fields added to the bundle later.
                 bundle: z
                     .object({
@@ -2697,12 +2647,12 @@ function agentsImportV2Tool(server: McpServer) {
                         agent: z.record(z.any()).describe("The agent definition carried by the bundle: displayName, prompt, llmProvider, llmModel and so on."),
                     })
                     .passthrough()
-                    .describe("The bundle object returned by `ethora-agents-export-v2` with format=json. Pass it through unchanged."),
+                    .describe("The bundle object returned by `ethora-agent-export` with format=json. Pass it through unchanged."),
                 ownerAppId: z.string().optional().describe("Owning App for the imported Agent (defaults server-side)."),
             },
         },
         async function ({ bundle, ownerAppId }) {
-            const meta = getDefaultMeta("ethora-agents-import-v2")
+            const meta = getDefaultMeta("ethora-agent-import")
             try {
                 ensureUserAuthForTool()
                 const res = await agentsImportV2(bundle, ownerAppId)
@@ -2716,9 +2666,9 @@ function agentsImportV2Tool(server: McpServer) {
 
 function agentBotInstanceDiagTool(server: McpServer) {
     server.registerTool(
-        "ethora-bot-instance-diag",
+        "ethora-bot-instance-diagnose",
         {
-            description: "Diagnose a specific BotInstance for an Agent (GET /v2/agents/:idOrAddress/bot-instances/:botInstanceId/diag). Returns live XMPP/ai-service status and recent activity for troubleshooting.\nRequires: a bot instance id from `ethora-bot-instances-list` (instances are created by `ethora-agent-invite-to-chat`).",
+            description: "Diagnose a specific BotInstance for an Agent (GET /v2/agents/:idOrAddress/bot-instances/:botInstanceId/diag). Returns live XMPP/ai-service status and recent activity for troubleshooting.\nRequires: a bot instance id from `ethora-bot-instance-list` (instances are created by `ethora-agent-invite`).",
             annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 agentIdOrAddress: z.string().min(1),
@@ -2726,7 +2676,7 @@ function agentBotInstanceDiagTool(server: McpServer) {
             },
         },
         async function ({ agentIdOrAddress, botInstanceId }) {
-            const meta = getDefaultMeta("ethora-bot-instance-diag")
+            const meta = getDefaultMeta("ethora-bot-instance-diagnose")
             try {
                 ensureUserAuthForTool()
                 const res = await agentBotInstanceDiagV2(agentIdOrAddress, botInstanceId)
@@ -2740,9 +2690,9 @@ function agentBotInstanceDiagTool(server: McpServer) {
 
 function agentBotInstanceTestMessageTool(server: McpServer) {
     server.registerTool(
-        "ethora-bot-instance-test-message",
+        "ethora-bot-instance-test",
         {
-            description: "Send a test message from a BotInstance (POST /v2/agents/:idOrAddress/bot-instances/:botInstanceId/test-message). Omit roomJid to fan out to every room the BotInstance is in. Requires the ai-service to be running.\nRequires: a bot instance id from `ethora-bot-instances-list` (instances are created by `ethora-agent-invite-to-chat`).",
+            description: "Send a test message from a BotInstance (POST /v2/agents/:idOrAddress/bot-instances/:botInstanceId/test-message). Omit roomJid to fan out to every room the BotInstance is in. Requires the ai-service to be running.\nRequires: a bot instance id from `ethora-bot-instance-list` (instances are created by `ethora-agent-invite`).",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
             inputSchema: {
                 agentIdOrAddress: z.string().min(1),
@@ -2752,7 +2702,7 @@ function agentBotInstanceTestMessageTool(server: McpServer) {
             },
         },
         async function ({ agentIdOrAddress, botInstanceId, text, roomJid }) {
-            const meta = getDefaultMeta("ethora-bot-instance-test-message")
+            const meta = getDefaultMeta("ethora-bot-instance-test")
             try {
                 ensureUserAuthForTool()
                 const res = await agentBotInstanceTestMessageV2(agentIdOrAddress, botInstanceId, { text, roomJid })
@@ -2766,9 +2716,9 @@ function agentBotInstanceTestMessageTool(server: McpServer) {
 
 function agentBotInstanceLeaveChatTool(server: McpServer) {
     server.registerTool(
-        "ethora-bot-instance-leave-chat",
+        "ethora-bot-instance-leave",
         {
-            description: "Remove a BotInstance from a chat room (POST /v2/agents/:idOrAddress/bot-instances/:botInstanceId/leave-chat). The inverse of `ethora-agent-invite-to-chat`.\nRequires: a bot instance id from `ethora-bot-instances-list` (instances are created by `ethora-agent-invite-to-chat`).",
+            description: "Remove a BotInstance from a chat room (POST /v2/agents/:idOrAddress/bot-instances/:botInstanceId/leave-chat). The inverse of `ethora-agent-invite`.\nRequires: a bot instance id from `ethora-bot-instance-list` (instances are created by `ethora-agent-invite`).",
             annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 agentIdOrAddress: z.string().min(1),
@@ -2777,7 +2727,7 @@ function agentBotInstanceLeaveChatTool(server: McpServer) {
             },
         },
         async function ({ agentIdOrAddress, botInstanceId, chatJid }) {
-            const meta = getDefaultMeta("ethora-bot-instance-leave-chat")
+            const meta = getDefaultMeta("ethora-bot-instance-leave")
             try {
                 ensureUserAuthForTool()
                 const res = await agentBotInstanceLeaveChatV2(agentIdOrAddress, botInstanceId, { chatJid })
@@ -2791,7 +2741,7 @@ function agentBotInstanceLeaveChatTool(server: McpServer) {
 
 function messagesSearchV2Tool(server: McpServer) {
     server.registerTool(
-        "ethora-messages-search-v2",
+        "ethora-message-search",
         {
             description: "Search an App's chat messages (GET /v2/apps/:appId/messages/search). B2B / tenant-actor auth. Filter by room (chatId), author (fromUserId), and time window.\nRequires: a selected app (`ethora-app-select`) or an explicit `appId`.",
             annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
@@ -2809,7 +2759,7 @@ function messagesSearchV2Tool(server: McpServer) {
             },
         },
         async function ({ q, appId, mode, chatId, fromUserId, since, until, sort, limit, offset }) {
-            const meta = getDefaultMeta("ethora-messages-search-v2")
+            const meta = getDefaultMeta("ethora-message-search")
             try {
                 const ctx = resolveAppScopedV2Context(appId)
                 if (!ctx.appId) throw new Error(APP_CONTEXT_MISSING_MESSAGE)
@@ -2824,9 +2774,9 @@ function messagesSearchV2Tool(server: McpServer) {
 
 function messagesContextV2Tool(server: McpServer) {
     server.registerTool(
-        "ethora-messages-context-v2",
+        "ethora-message-context",
         {
-            description: "Fetch the messages surrounding a target message (GET /v2/apps/:appId/chats/:chatId/messages/context). Provide either aroundStanzaId or aroundMessageId; radius controls how many messages before/after.\nRequires: a message id from `ethora-messages-search-v2` or `ethora-chats-history-v2`.",
+            description: "Fetch the messages surrounding a target message (GET /v2/apps/:appId/chats/:chatId/messages/context). Provide either aroundStanzaId or aroundMessageId; radius controls how many messages before/after.\nRequires: a message id from `ethora-message-search` or `ethora-chat-history`.",
             annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 chatId: z.string().min(1),
@@ -2837,7 +2787,7 @@ function messagesContextV2Tool(server: McpServer) {
             },
         },
         async function ({ chatId, appId, aroundStanzaId, aroundMessageId, radius }) {
-            const meta = getDefaultMeta("ethora-messages-context-v2")
+            const meta = getDefaultMeta("ethora-message-context")
             try {
                 if (!aroundStanzaId && !aroundMessageId) {
                     throw new Error("Provide either aroundStanzaId or aroundMessageId.")
@@ -2855,7 +2805,7 @@ function messagesContextV2Tool(server: McpServer) {
 
 function unreadCountsV2Tool(server: McpServer) {
     server.registerTool(
-        "ethora-unread-counts-v2",
+        "ethora-chat-unread-counts",
         {
             description: "Batch per-room unread message counts for a set of users (POST /v2/apps/:appId/users/unread-counts). mode=count returns numbers (capped); mode=flag returns booleans. Requires Mongo message archiving enabled on the deployment.\nRequires: a selected app (`ethora-app-select`) or an explicit `appId`.",
             annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
@@ -2868,7 +2818,7 @@ function unreadCountsV2Tool(server: McpServer) {
             },
         },
         async function ({ userIds, appId, mode, cap, concurrency }) {
-            const meta = getDefaultMeta("ethora-unread-counts-v2")
+            const meta = getDefaultMeta("ethora-chat-unread-counts")
             try {
                 const ctx = resolveAppScopedV2Context(appId)
                 if (!ctx.appId) throw new Error(APP_CONTEXT_MISSING_MESSAGE)
@@ -2883,9 +2833,9 @@ function unreadCountsV2Tool(server: McpServer) {
 
 function appExportV2Tool(server: McpServer) {
     server.registerTool(
-        "ethora-app-export-v2",
+        "ethora-app-export",
         {
-            description: "Export an App as a portable bundle (GET /v2/apps/:appId/export). format=json returns the bundle object directly. Use `include` to select sections (e.g. 'chats,users,sources,botInstances'). Feed the result to `ethora-app-import-v2`.\nRequires: a selected app (`ethora-app-select`) or an explicit `appId`.",
+            description: "Export an App as a portable bundle (GET /v2/apps/:appId/export). format=json returns the bundle object directly. Use `include` to select sections (e.g. 'chats,users,sources,botInstances'). Feed the result to `ethora-app-import`.\nRequires: a selected app (`ethora-app-select`) or an explicit `appId`.",
             annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("Required in B2B mode unless already selected via ethora-app-select."),
@@ -2894,7 +2844,7 @@ function appExportV2Tool(server: McpServer) {
             },
         },
         async function ({ appId, format, include }) {
-            const meta = getDefaultMeta("ethora-app-export-v2")
+            const meta = getDefaultMeta("ethora-app-export")
             try {
                 const ctx = resolveAppScopedV2Context(appId)
                 if (!ctx.appId) throw new Error(APP_CONTEXT_MISSING_MESSAGE)
@@ -2909,9 +2859,9 @@ function appExportV2Tool(server: McpServer) {
 
 function appImportV2Tool(server: McpServer) {
     server.registerTool(
-        "ethora-app-import-v2",
+        "ethora-app-import",
         {
-            description: "Import an App from a bundle produced by `ethora-app-export-v2` (POST /v2/apps/import, application/json body IS the bundle). B2B / tenant-actor auth. domainNameOverride renames the imported App's domain.\nRequires: a bundle produced by `ethora-app-export-v2`.",
+            description: "Import an App from a bundle produced by `ethora-app-export` (POST /v2/apps/import, application/json body IS the bundle). B2B / tenant-actor auth. domainNameOverride renames the imported App's domain.\nRequires: a bundle produced by `ethora-app-export`.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
             inputSchema: {
                 bundle: z.any().describe("The exported bundle object (the json export output)."),
@@ -2919,14 +2869,14 @@ function appImportV2Tool(server: McpServer) {
             },
         },
         async function ({ bundle, domainNameOverride }) {
-            const meta = getDefaultMeta("ethora-app-import-v2")
+            const meta = getDefaultMeta("ethora-app-import")
             try {
                 // App import is tenant-actor auth and takes no appId in the path,
                 // so accept either app-token or B2B auth without demanding a
                 // current appId.
                 const state = getClientState() as any
                 if (state.authMode !== "app" && state.authMode !== "b2b") {
-                    throw new Error("This tool requires app-token or B2B auth. Use `ethora-auth-use-app` or `ethora-auth-use-b2b` first.")
+                    throw new Error("This tool requires app-token or B2B auth. Use `ethora-auth-mode-set` or `ethora-auth-mode-set` first.")
                 }
                 const res = await appImportV2(bundle, domainNameOverride)
                 return asToolResult(ok(res.data, meta))
@@ -2939,9 +2889,9 @@ function appImportV2Tool(server: McpServer) {
 
 function botEnableV2Tool(server: McpServer) {
     server.registerTool(
-        "ethora-bot-enable-v2",
+        "ethora-bot-enable",
         {
-            description: "Enable the LEGACY per-app aiBot using app-token or B2B auth. NOTE: clean API/B2B-created apps have no legacy aiBot, so this returns 422 BOT_NOT_INITIALIZED there — use the Agents API (`ethora-agents-create-v2` + `ethora-agent-invite-to-chat`, or `ethora-b2b-app-bootstrap-ai`) for B2B AI. Valid for apps that already have a legacy aiBot.\nRequires: an app with a legacy per-app aiBot (dashboard-created). API-created apps have none: use `ethora-agents-create-v2` -> `ethora-agent-invite-to-chat` -> `ethora-agents-activate-v2` instead.",
+            description: "Enable the LEGACY per-app aiBot using app-token or B2B auth. NOTE: clean API/B2B-created apps have no legacy aiBot, so this returns 422 BOT_NOT_INITIALIZED there — use the Agents API (`ethora-agent-create` + `ethora-agent-invite`, or `ethora-b2b-app-bootstrap-ai`) for B2B AI. Valid for apps that already have a legacy aiBot.\nRequires: an app with a legacy per-app aiBot (dashboard-created). API-created apps have none: use `ethora-agent-create` -> `ethora-agent-invite` -> `ethora-agent-activate` instead.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("24-char hex appId. Required in B2B mode unless already set via `ethora-app-select`; ignored in app-token mode."),
@@ -2949,7 +2899,7 @@ function botEnableV2Tool(server: McpServer) {
             },
         },
         async function ({ appId, trigger }) {
-            const meta = getDefaultMeta("ethora-bot-enable-v2")
+            const meta = getDefaultMeta("ethora-bot-enable")
             try {
                 const ctx = resolveAppScopedV2Context(appId)
                 const res = useAppScopedRoute(ctx)
@@ -2965,16 +2915,16 @@ function botEnableV2Tool(server: McpServer) {
 
 function botDisableV2Tool(server: McpServer) {
     server.registerTool(
-        "ethora-bot-disable-v2",
+        "ethora-bot-disable",
         {
-            description: "Turn the AI bot off for an app (sets bot `status: \"off\"`) — it stops responding. The configured prompt/LLM/RAG and any activated agent are preserved, so re-enabling restores the same behavior.\nRequires: an app with a legacy per-app aiBot (dashboard-created). API-created apps have none: use `ethora-agents-create-v2` -> `ethora-agent-invite-to-chat` -> `ethora-agents-activate-v2` instead.\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth; 404 unknown `appId`. Related: `ethora-bot-enable-v2` to turn back on.",
+            description: "Turn the AI bot off for an app (sets bot `status: \"off\"`) — it stops responding. The configured prompt/LLM/RAG and any activated agent are preserved, so re-enabling restores the same behavior.\nRequires: an app with a legacy per-app aiBot (dashboard-created). API-created apps have none: use `ethora-agent-create` -> `ethora-agent-invite` -> `ethora-agent-activate` instead.\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth; 404 unknown `appId`. Related: `ethora-bot-enable` to turn back on.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("24-char hex appId. Required in B2B mode unless already set via `ethora-app-select`; ignored in app-token mode."),
             },
         },
         async function ({ appId }) {
-            const meta = getDefaultMeta("ethora-bot-disable-v2")
+            const meta = getDefaultMeta("ethora-bot-disable")
             try {
                 const ctx = resolveAppScopedV2Context(appId)
                 const res = useAppScopedRoute(ctx)
@@ -2990,13 +2940,13 @@ function botDisableV2Tool(server: McpServer) {
 
 function botWidgetGetV2Tool(server: McpServer) {
     server.registerTool(
-        "ethora-bot-widget-v2",
+        "ethora-bot-widget-get",
         {
-            description: "LEGACY: read the per-app bot widget config (`GET /v2/bot/widget`); only apps that already have a legacy aiBot have one, API-created apps get 422. For the embeddable AI chat widget use `ethora-widget-embed-snippet` instead — the widget config and public widget URL metadata needed to embed the bot on a website.\nRequires: an app with a legacy per-app aiBot (dashboard-created). API-created apps have none: use `ethora-agents-create-v2` -> `ethora-agent-invite-to-chat` -> `ethora-agents-activate-v2` instead.\nAuth: app-token mode (after `ethora-app-select` + `ethora-auth-use-app`). Errors: 401/403 not in app-token mode or invalid appToken. Related: enable/disable via `widgetPublicEnabled` in `ethora-bot-update-v2`.",
+            description: "LEGACY: read the per-app bot widget config (`GET /v2/bot/widget`); only apps that already have a legacy aiBot have one, API-created apps get 422. For the embeddable AI chat widget use `ethora-widget-snippet-get` instead — the widget config and public widget URL metadata needed to embed the bot on a website.\nRequires: an app with a legacy per-app aiBot (dashboard-created). API-created apps have none: use `ethora-agent-create` -> `ethora-agent-invite` -> `ethora-agent-activate` instead.\nAuth: app-token mode (after `ethora-app-select` + `ethora-auth-mode-set`). Errors: 401/403 not in app-token mode or invalid appToken. Related: enable/disable via `widgetPublicEnabled` in `ethora-bot-update`.",
             annotations: { readOnlyHint: true, openWorldHint: true },
         },
         async function () {
-            const meta = getDefaultMeta("ethora-bot-widget-v2")
+            const meta = getDefaultMeta("ethora-bot-widget-get")
             try {
                 ensureAppAuthForTool()
                 const res = await botWidgetGetV2()
@@ -3007,7 +2957,7 @@ function botWidgetGetV2Tool(server: McpServer) {
                 const status = (error as any)?.response?.status
                 if (status === 404 || status === 422) {
                     return asToolResult(fail(Object.assign(new Error(
-                        "This app has no legacy per-app widget, which is normal for an app created through the API or B2B. Build the embed with `ethora-widget-embed-snippet` after `ethora-agents-create-v2` -> `ethora-agent-invite-to-chat` -> `ethora-agents-activate-v2`."
+                        "This app has no legacy per-app widget, which is normal for an app created through the API or B2B. Build the embed with `ethora-widget-snippet-get` after `ethora-agent-create` -> `ethora-agent-invite` -> `ethora-agent-activate`."
                     ), { code: "LEGACY_WIDGET_NOT_CONFIGURED" }), meta))
                 }
                 return asToolResult(fail(error, meta))
@@ -3018,13 +2968,13 @@ function botWidgetGetV2Tool(server: McpServer) {
 
 function chatsMessageCreateV2Tool(server: McpServer) {
     server.registerTool(
-        "ethora-chats-message-v2",
+        "ethora-message-send",
         {
-            description: "Post a message into a chat room of an app (POST /v2/apps/:appId/chats/broadcast targeting one room). The message is attributed to the app's broadcast sender (override the shown name with `senderName`). Use it to seed or test a conversation, e.g. right after `ethora-agent-invite-to-chat`, and set `waitForReplySec` (up to 60) to wait for an AI agent's answer; replies are returned in `replies`. Identify the room by `roomJid` (`${appId}_${chatId}`, exactly what `ethora-app-create-chat` returns as `jid`) or by the bare `chatId` plus the selected app.\nRequires: a room in the selected app (`ethora-app-create-chat`); for `replies`, an agent invited into it (`ethora-agent-invite-to-chat`).\nAuth: user auth (the default on the hosted server) or B2B; app-token mode is not accepted by this route. Errors: 401 not logged in; 403 not the app owner; 404 unknown app/room; 422 empty text. Reply detection needs the message archive (MAM) on the deployment; when it is unavailable `replies` is null and `historyUnavailable` is true.",
+            description: "Post a message into a chat room of an app (POST /v2/apps/:appId/chats/broadcast targeting one room). The message is attributed to the app's broadcast sender (override the shown name with `senderName`). Use it to seed or test a conversation, e.g. right after `ethora-agent-invite`, and set `waitForReplySec` (up to 60) to wait for an AI agent's answer; replies are returned in `replies`. Identify the room by `roomJid` (`${appId}_${chatId}`, exactly what `ethora-chat-create` returns as `jid`) or by the bare `chatId` plus the selected app.\nRequires: a room in the selected app (`ethora-chat-create`); for `replies`, an agent invited into it (`ethora-agent-invite`).\nAuth: user auth (the default on the hosted server) or B2B; app-token mode is not accepted by this route. Errors: 401 not logged in; 403 not the app owner; 404 unknown app/room; 422 empty text. Reply detection needs the message archive (MAM) on the deployment; when it is unavailable `replies` is null and `historyUnavailable` is true.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
             inputSchema: {
                 text: z.string().min(1).max(4000).describe("Message body to post (1-4000 chars)."),
-                roomJid: z.string().optional().describe("Room JID `${appId}_${chatId}` (optionally with `@conference.<host>`), as returned by `ethora-app-create-chat`. Either this or `chatId` is required."),
+                roomJid: z.string().optional().describe("Room JID `${appId}_${chatId}` (optionally with `@conference.<host>`), as returned by `ethora-chat-create`. Either this or `chatId` is required."),
                 chatId: z.string().optional().describe("Chat id: either the Mongo chat `_id` (as listed by the app's chat list) or the suffix after `${appId}_` in the room JID. Needs an app: pass `appId` or select one with `ethora-app-select`."),
                 appId: z.string().optional().describe("24-char hex appId. Optional when `roomJid` carries it or an app is selected."),
                 senderName: z.string().max(60).optional().describe("Display name shown as the message sender (defaults to the app's broadcast sender / app name)."),
@@ -3032,7 +2982,7 @@ function chatsMessageCreateV2Tool(server: McpServer) {
             },
         },
         async function ({ text, roomJid, chatId, appId, senderName, waitForReplySec }) {
-            const meta = getDefaultMeta("ethora-chats-message-v2")
+            const meta = getDefaultMeta("ethora-message-send")
             try {
                 ensureTenantActorAuth()
                 const ctx = resolveAppScopedV2Context(appId)
@@ -3090,7 +3040,7 @@ function chatsMessageCreateV2Tool(server: McpServer) {
                     out.replies = replies.map((r) => ({ from: r.nick || r.from, text: r.body, ts: r.ts }))
                     if (!replies.length) out.note = historyUnavailable
                         ? "Message archive unavailable on this deployment; cannot observe replies."
-                        : `No reply from another participant within ${wait}s. Agents reply only if invited into this room (ethora-agent-invite-to-chat) and their response gate allows it; check ethora-bot-instances-list.`
+                        : `No reply from another participant within ${wait}s. Agents reply only if invited into this room (ethora-agent-invite) and their response gate allows it; check ethora-bot-instance-list.`
                 }
                 return asToolResult(ok(out, meta))
             } catch (error) {
@@ -3101,9 +3051,9 @@ function chatsMessageCreateV2Tool(server: McpServer) {
 }
 function chatsHistoryGetV2Tool(server: McpServer) {
     server.registerTool(
-        "ethora-chats-history-v2",
+        "ethora-chat-history",
         {
-            description: "Read the archived messages of a chat room (GET /v2/apps/:appId/chats/:chatId/messages, newest last). Returns `results` with `from`, `nick`, `body`, `ts` (ms) plus a `nextBefore` cursor for older pages. Identify the room by `roomJid` (`${appId}_${chatId}`) or bare `chatId` plus the selected app.\nRequires: a room in the selected app (`ethora-app-create-chat`).\nAuth: user auth (default on the hosted server) or B2B; app-token mode is not accepted. Errors: 401 not logged in; 403 not the app owner; 404 unknown app/room; 502 MAM_READ_FAILED or `mamUnavailable: true` when the deployment has no message archive.",
+            description: "Read the archived messages of a chat room (GET /v2/apps/:appId/chats/:chatId/messages, newest last). Returns `results` with `from`, `nick`, `body`, `ts` (ms) plus a `nextBefore` cursor for older pages. Identify the room by `roomJid` (`${appId}_${chatId}`) or bare `chatId` plus the selected app.\nRequires: a room in the selected app (`ethora-chat-create`).\nAuth: user auth (default on the hosted server) or B2B; app-token mode is not accepted. Errors: 401 not logged in; 403 not the app owner; 404 unknown app/room; 502 MAM_READ_FAILED or `mamUnavailable: true` when the deployment has no message archive.",
             annotations: { readOnlyHint: true, openWorldHint: true },
             inputSchema: {
                 roomJid: z.string().optional().describe("Room JID `${appId}_${chatId}` (optionally with `@conference.<host>`). Either this or `chatId` is required."),
@@ -3114,7 +3064,7 @@ function chatsHistoryGetV2Tool(server: McpServer) {
             },
         },
         async function ({ roomJid, chatId, appId, limit, before }) {
-            const meta = getDefaultMeta("ethora-chats-history-v2")
+            const meta = getDefaultMeta("ethora-chat-history")
             try {
                 ensureTenantActorAuth()
                 const ctx = resolveAppScopedV2Context(appId)
@@ -3129,9 +3079,9 @@ function chatsHistoryGetV2Tool(server: McpServer) {
 }
 function botMessageCreateV2Tool(server: McpServer) {
     server.registerTool(
-        "ethora-bot-message-v2",
+        "ethora-bot-message-send",
         {
-            description: "DEPRECATED alias of `ethora-chats-message-v2` (the old /v2/chats/messages automation route no longer exists). Posts a message into a room by `roomJid` or `chatId`; prefer `ethora-chats-message-v2`, which also supports `waitForReplySec`.\nRequires: an app with a legacy per-app aiBot (dashboard-created). API-created apps have none: use `ethora-agents-create-v2` -> `ethora-agent-invite-to-chat` -> `ethora-agents-activate-v2` instead.",
+            description: "DEPRECATED alias of `ethora-message-send` (the old /v2/chats/messages automation route no longer exists). Posts a message into a room by `roomJid` or `chatId`; prefer `ethora-message-send`, which also supports `waitForReplySec`.\nRequires: an app with a legacy per-app aiBot (dashboard-created). API-created apps have none: use `ethora-agent-create` -> `ethora-agent-invite` -> `ethora-agent-activate` instead.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
             inputSchema: {
                 text: z.string().min(1).max(4000).describe("Message body to post."),
@@ -3141,13 +3091,13 @@ function botMessageCreateV2Tool(server: McpServer) {
             },
         },
         async function ({ text, roomJid, chatId, appId }) {
-            const meta = getDefaultMeta("ethora-bot-message-v2")
+            const meta = getDefaultMeta("ethora-bot-message-send")
             try {
                 ensureTenantActorAuth()
                 const ctx = resolveAppScopedV2Context(appId)
                 const room = await resolveRoom(ctx.appId, roomJid || chatId)
                 const res = await chatsBroadcastForAppV2(room.appId, { text, chatNames: [room.roomName] })
-                return asToolResult(ok({ posted: true, roomJid: room.roomJid, job: res.data?.data ?? res.data, deprecated: "use ethora-chats-message-v2" }, meta))
+                return asToolResult(ok({ posted: true, roomJid: room.roomJid, job: res.data?.data ?? res.data, deprecated: "use ethora-message-send" }, meta))
             } catch (error) {
                 return asToolResult(fail(error, meta))
             }
@@ -3156,9 +3106,9 @@ function botMessageCreateV2Tool(server: McpServer) {
 }
 function botHistoryGetV2Tool(server: McpServer) {
     server.registerTool(
-        "ethora-bot-history-v2",
+        "ethora-bot-history",
         {
-            description: "DEPRECATED alias of `ethora-chats-history-v2` (the old /v2/chats/history automation route no longer exists). Reads a room's archived messages by `roomJid` or `chatId`.\nRequires: an app with a legacy per-app aiBot (dashboard-created). API-created apps have none: use `ethora-agents-create-v2` -> `ethora-agent-invite-to-chat` -> `ethora-agents-activate-v2` instead.",
+            description: "DEPRECATED alias of `ethora-chat-history` (the old /v2/chats/history automation route no longer exists). Reads a room's archived messages by `roomJid` or `chatId`.\nRequires: an app with a legacy per-app aiBot (dashboard-created). API-created apps have none: use `ethora-agent-create` -> `ethora-agent-invite` -> `ethora-agent-activate` instead.",
             annotations: { readOnlyHint: true, openWorldHint: true },
             inputSchema: {
                 roomJid: z.string().optional().describe("Room JID `${appId}_${chatId}`."),
@@ -3168,13 +3118,13 @@ function botHistoryGetV2Tool(server: McpServer) {
             },
         },
         async function ({ roomJid, chatId, appId, limit }) {
-            const meta = getDefaultMeta("ethora-bot-history-v2")
+            const meta = getDefaultMeta("ethora-bot-history")
             try {
                 ensureTenantActorAuth()
                 const ctx = resolveAppScopedV2Context(appId)
                 const room = await resolveRoom(ctx.appId, roomJid || chatId)
                 const res = await appChatMessagesV2(room.appId, room.mongoId, { limit })
-                return asToolResult(ok({ roomJid: room.roomJid, ...(res.data?.data ?? res.data), deprecated: "use ethora-chats-history-v2" }, meta))
+                return asToolResult(ok({ roomJid: room.roomJid, ...(res.data?.data ?? res.data), deprecated: "use ethora-chat-history" }, meta))
             } catch (error) {
                 return asToolResult(fail(error, meta))
             }
@@ -3393,7 +3343,7 @@ async function runB2BAppBootstrapAi(args: {
 function b2bAliases(server: McpServer) {
     server.registerTool(
         "ethora.b2b.auth.use",
-        { description: "Dot-namespaced alias for `ethora-auth-use-b2b` — switches the session's active auth mode to B2B (`x-custom-token`). Behavior is identical.\nAuth: requires a `b2bToken` to already be configured. Errors: returns an error if no `b2bToken` is configured.", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false } },
+        { description: "Dot-namespaced alias for `ethora-auth-mode-set` — switches the session's active auth mode to B2B (`x-custom-token`). Behavior is identical.\nAuth: requires a `b2bToken` to already be configured. Errors: returns an error if no `b2bToken` is configured.", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false } },
         async function () {
             try {
                 return asToolResult(ok(setAuthMode("b2b"), getDefaultMeta("ethora.b2b.auth.use")))
@@ -3404,7 +3354,7 @@ function b2bAliases(server: McpServer) {
     )
     server.registerTool(
         "ethora.b2b.app.create",
-        { description: "Dot-namespaced alias for `ethora-b2b-app-create` — create a new Ethora app server-side, allocating a fresh `appId`.\nAuth: B2B mode (`ethora.b2b.auth.use` / `ethora-auth-use-b2b` + a configured `b2bToken`). Errors: 401/403 not in B2B mode; 422 invalid `displayName`. Related: prefer `ethora-b2b-app-create` in new integrations.", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true }, inputSchema: { displayName: z.string().min(1).describe("Human-readable app name shown to users in the app picker and on the public landing page.") } },
+        { description: "Dot-namespaced alias for `ethora-b2b-app-create` — create a new Ethora app server-side, allocating a fresh `appId`.\nAuth: B2B mode (`ethora.b2b.auth.use` / `ethora-auth-mode-set` + a configured `b2bToken`). Errors: 401/403 not in B2B mode; 422 invalid `displayName`. Related: prefer `ethora-b2b-app-create` in new integrations.", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true }, inputSchema: { displayName: z.string().min(1).describe("Human-readable app name shown to users in the app picker and on the public landing page.") } },
         async function ({ displayName }) {
             try {
                 ensureB2BAuthForTool()
@@ -3417,7 +3367,7 @@ function b2bAliases(server: McpServer) {
     )
     server.registerTool(
         "ethora.b2b.bot.enable",
-        { description: "Dot-namespaced alias for `ethora-b2b-bot-enable` — turn on the AI bot for an app (sets `botStatus: \"on\"`). The bot only responds if a prompt + LLM are configured and the backend has an AI service.\nAuth: B2B mode (`ethora.b2b.auth.use` / `ethora-auth-use-b2b` + a configured `b2bToken`). Errors: 401/403 not in B2B mode; 400 no `appId` and none selected; 404 unknown `appId`. Related: prefer `ethora-b2b-bot-enable` in new integrations.", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true }, inputSchema: { appId: z.string().optional().describe("24-char hex appId whose bot to enable. Optional — defaults to the app set via `ethora-app-select`."), botTrigger: z.string().optional().describe("When the bot responds: `/bot` or `any_message`. Omit to leave the existing trigger unchanged.") } },
+        { description: "Dot-namespaced alias for `ethora-bot-enable-b2b` — turn on the AI bot for an app (sets `botStatus: \"on\"`). The bot only responds if a prompt + LLM are configured and the backend has an AI service.\nAuth: B2B mode (`ethora.b2b.auth.use` / `ethora-auth-mode-set` + a configured `b2bToken`). Errors: 401/403 not in B2B mode; 400 no `appId` and none selected; 404 unknown `appId`. Related: prefer `ethora-bot-enable-b2b` in new integrations.", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true }, inputSchema: { appId: z.string().optional().describe("24-char hex appId whose bot to enable. Optional — defaults to the app set via `ethora-app-select`."), botTrigger: z.string().optional().describe("When the bot responds: `/bot` or `any_message`. Omit to leave the existing trigger unchanged.") } },
         async function ({ appId, botTrigger }) {
             try {
                 ensureB2BAuthForTool()
@@ -3437,7 +3387,7 @@ function b2bAliases(server: McpServer) {
     )
     server.registerTool(
         "ethora.b2b.broadcast.wait",
-        { description: "Dot-namespaced sibling of `ethora-wait-broadcast-job-v2` — block until a broadcast job reaches a terminal state (`completed` / `failed`) or `timeoutMs`. Read-only polling. Returns `{ done, state, job }`, or `{ done: false, reason: \"timeout\" }` on timeout.\nAuth: app-token mode (despite `b2b` in the name — `ethora-app-select` + `ethora-auth-use-app`). Errors: 401/403 not in app-token mode; 404 unknown `jobId`.", annotations: { readOnlyHint: true, openWorldHint: true }, inputSchema: { jobId: z.string().min(1).describe("Job id returned by `ethora-chats-broadcast-v2`."), timeoutMs: z.number().int().min(1000).max(300000).optional().describe("Maximum time to wait, in milliseconds. Default 60000."), intervalMs: z.number().int().min(250).max(10000).optional().describe("Delay between status checks, in milliseconds. Default 1000.") } },
+        { description: "Dot-namespaced sibling of `ethora-broadcast-job-wait` — block until a broadcast job reaches a terminal state (`completed` / `failed`) or `timeoutMs`. Read-only polling. Returns `{ done, state, job }`, or `{ done: false, reason: \"timeout\" }` on timeout.\nAuth: app-token mode (despite `b2b` in the name — `ethora-app-select` + `ethora-auth-mode-set`). Errors: 401/403 not in app-token mode; 404 unknown `jobId`.", annotations: { readOnlyHint: true, openWorldHint: true }, inputSchema: { jobId: z.string().min(1).describe("Job id returned by `ethora-broadcast-send`."), timeoutMs: z.number().int().min(1000).max(300000).optional().describe("Maximum time to wait, in milliseconds. Default 60000."), intervalMs: z.number().int().min(250).max(10000).optional().describe("Delay between status checks, in milliseconds. Default 1000.") } },
         async function ({ jobId, timeoutMs, intervalMs }) {
             const meta = getDefaultMeta("ethora.b2b.broadcast.wait")
             try {
@@ -3465,7 +3415,7 @@ function b2bAliases(server: McpServer) {
     server.registerTool(
         "ethora.b2b.app.bootstrap-ai",
         {
-            description: "Dot-namespaced alias for `ethora-b2b-app-bootstrap-ai` — one-call B2B orchestrator: create an app, index RAG sources, then configure and enable its AI bot. Source ingest and bot activation are best-effort (the app is still created if a later step fails). Returns a per-step log including the new `appId`.\nAuth: B2B mode (`ethora.b2b.auth.use` / `ethora-auth-use-b2b` + a configured `b2bToken`). Errors: aborts with the partial step log if app creation fails; previous auth mode restored best-effort.",
+            description: "Dot-namespaced alias for `ethora-b2b-app-bootstrap-ai` — one-call B2B orchestrator: create an app, index RAG sources, then configure and enable its AI bot. Source ingest and bot activation are best-effort (the app is still created if a later step fails). Returns a per-step log including the new `appId`.\nAuth: B2B mode (`ethora.b2b.auth.use` / `ethora-auth-mode-set` + a configured `b2bToken`). Errors: aborts with the partial step log if app creation fails; previous auth mode restored best-effort.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
             inputSchema: {
                 displayName: z.string().min(1).describe("Display name for the new app."),
@@ -3502,7 +3452,7 @@ function b2bAppBootstrapAiTool(server: McpServer) {
     server.registerTool(
         "ethora-b2b-app-bootstrap-ai",
         {
-            description: "One-call B2B orchestrator: create an app, set it as the current context, index RAG sources, then configure and enable its AI bot. Source ingest and bot activation are best-effort (the app is still created if a later step fails); crawl/embedding continues asynchronously after this returns. Returns a per-step log including the new `appId`.\nAuth: B2B mode (`ethora-auth-use-b2b` + a configured `b2bToken`); internally switches to app-token mode for source-ingest steps. Errors: aborts with the partial step log if app creation fails; previous auth mode restored best-effort. Related: rooms+tokens variant is `ethora-b2b-app-provision`.",
+            description: "One-call B2B orchestrator: create an app, set it as the current context, index RAG sources, then configure and enable its AI bot. Source ingest and bot activation are best-effort (the app is still created if a later step fails); crawl/embedding continues asynchronously after this returns. Returns a per-step log including the new `appId`.\nAuth: B2B mode (`ethora-auth-mode-set` + a configured `b2bToken`); internally switches to app-token mode for source-ingest steps. Errors: aborts with the partial step log if app creation fails; previous auth mode restored best-effort. Related: rooms+tokens variant is `ethora-b2b-app-provision`.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
             inputSchema: {
                 displayName: z.string().min(1).describe("Display name for the new app."),
@@ -3545,9 +3495,9 @@ function b2bAppBootstrapAiTool(server: McpServer) {
 
 function generateChatComponentAppTsxTool(server: McpServer) {
     server.registerTool(
-        "ethora-generate-chat-component-app-tsx",
+        "ethora-chat-component-app-generate",
         {
-            description: "Generate a ready-to-paste React `App.tsx` snippet that mounts `@ethora/chat-component`. Returns `{ filename: \"App.tsx\", snippet }`; unpassed values are emitted as placeholders. Does not write any file. Get the appToken from `ethora-app-credentials { appId, confirm: true }` (other tools redact it).\nAuth: none required — pure code generator, no API calls. Errors: effectively none. Security note: the snippet includes `appToken` inline only as a quickstart convenience — do not ship hardcoded tokens to production.",
+            description: "Generate a ready-to-paste React `App.tsx` snippet that mounts `@ethora/chat-component`. Returns `{ filename: \"App.tsx\", snippet }`; unpassed values are emitted as placeholders. Does not write any file. Get the appToken from `ethora-app-credentials-reveal { appId, confirm: true }` (other tools redact it).\nAuth: none required — pure code generator, no API calls. Errors: effectively none. Security note: the snippet includes `appToken` inline only as a quickstart convenience — do not ship hardcoded tokens to production.",
             annotations: { readOnlyHint: true, openWorldHint: false },
             inputSchema: {
                 apiUrl: z.string().optional().describe("Ethora API base URL to embed in the snippet, e.g. `https://api.chat.ethora.com/v1`. Omit to emit a placeholder."),
@@ -3556,7 +3506,7 @@ function generateChatComponentAppTsxTool(server: McpServer) {
             },
         },
         async function ({ apiUrl, appToken, roomJid }) {
-            const meta = getDefaultMeta("ethora-generate-chat-component-app-tsx")
+            const meta = getDefaultMeta("ethora-chat-component-app-generate")
             try {
                 const snippet = [
                     `import { Chat } from \"@ethora/chat-component\";`,
@@ -3587,7 +3537,7 @@ function generateChatComponentAppTsxTool(server: McpServer) {
 
 function generateEnvExamplesTool(server: McpServer) {
     server.registerTool(
-        "ethora-generate-env-examples",
+        "ethora-env-examples-generate",
         {
             description: "Generate `.env.example` templates for the three common Ethora integration targets: the frontend chat component, the backend SDK, and this MCP server. Returns `{ target, template }` when `target` is given, or `{ templates }` with all three. Placeholder values only; does not write any file.\nAuth: none required — pure text generator, no API calls. Errors: effectively none.",
             annotations: { readOnlyHint: true, openWorldHint: false },
@@ -3596,7 +3546,7 @@ function generateEnvExamplesTool(server: McpServer) {
             },
         },
         async function ({ target }) {
-            const meta = getDefaultMeta("ethora-generate-env-examples")
+            const meta = getDefaultMeta("ethora-env-examples-generate")
             try {
                 const templates: any = {
                     "frontend-chat-component": [
@@ -3644,9 +3594,9 @@ function generateEnvExamplesTool(server: McpServer) {
 
 function generateB2BBootstrapRunbookTool(server: McpServer) {
     server.registerTool(
-        "ethora-generate-b2b-bootstrap-runbook",
+        "ethora-b2b-runbook-generate",
         {
-            description: "Generate a human-readable runbook listing this server's tool calls in the right order for a B2B bootstrap, with example payloads. Documentation only — does not write any file or execute any step.\nAuth: none required — pure text generator, no API calls. Errors: effectively none. Related: to actually run the sequence use `ethora-run-recipe` or `ethora-b2b-app-bootstrap-ai`.",
+            description: "Generate a human-readable runbook listing this server's tool calls in the right order for a B2B bootstrap, with example payloads. Documentation only — does not write any file or execute any step.\nAuth: none required — pure text generator, no API calls. Errors: effectively none. Related: to actually run the sequence use `ethora-recipe-run` or `ethora-b2b-app-bootstrap-ai`.",
             annotations: { readOnlyHint: true, openWorldHint: false },
             inputSchema: {
                 apiUrl: z.string().optional().describe("Ethora API base URL to show in the runbook's configure step. Omit to emit a placeholder."),
@@ -3655,21 +3605,21 @@ function generateB2BBootstrapRunbookTool(server: McpServer) {
             },
         },
         async function ({ apiUrl, displayName, crawlUrl }) {
-            const meta = getDefaultMeta("ethora-generate-b2b-bootstrap-runbook")
+            const meta = getDefaultMeta("ethora-b2b-runbook-generate")
             try {
                 const runbook = [
                     `# B2B bootstrap runbook (MCP tool call order)`,
                     ``,
                     `# This is the server-side / automation path.`,
                     `# For a first local test with a human user, start with user auth instead:`,
-                    `# ethora-configure { apiUrl, appJwt } -> ethora-auth-use-user -> ethora-user-login`,
+                    `# ethora-session-configure { apiUrl, appJwt } -> ethora-auth-mode-set -> ethora-user-login`,
                     ``,
                     `## 1) Configure`,
-                    `Call: ethora-configure`,
+                    `Call: ethora-session-configure`,
                     `Payload: ${JSON.stringify({ apiUrl: apiUrl || "https://api.ethoradev.com/v1", b2bToken: "JWT <B2B_SERVER_TOKEN>" }, null, 2)}`,
                     ``,
                     `## 2) Switch to B2B auth`,
-                    `Call: ethora-auth-use-b2b`,
+                    `Call: ethora-auth-mode-set`,
                     `Payload: {}`,
                     ``,
                     `## 3) Bootstrap app + AI`,
@@ -3681,11 +3631,11 @@ function generateB2BBootstrapRunbookTool(server: McpServer) {
                     `Call: ethora-app-select`,
                     `Payload: ${JSON.stringify({ appId: "<APP_ID>", appToken: "JWT <APP_TOKEN>" }, null, 2)}`,
                     ``,
-                    `Call: ethora-auth-use-app`,
+                    `Call: ethora-auth-mode-set`,
                     `Payload: {}`,
                     ``,
                     `## 5) Optional: tune bot`,
-                    `Call: ethora-bot-update-v2`,
+                    `Call: ethora-bot-update`,
                     `Payload: ${JSON.stringify({ trigger: "/bot", prompt: "You are a helpful assistant.", greetingMessage: "Hello! Ask me anything." }, null, 2)}`,
                     ``,
                 ].join("\n")
@@ -3699,9 +3649,9 @@ function generateB2BBootstrapRunbookTool(server: McpServer) {
 
 function sourcesSiteCrawlV2AppTool(server: McpServer) {
     server.registerTool(
-        "ethora-sources-site-crawl-v2",
+        "ethora-source-site-crawl",
         {
-            description: "Crawl a website URL and ingest its content into an app's RAG sources (app-token / B2B variant of `ethora-sources-site-crawl`). Async — returns once the job is accepted; `followLink: true` follows in-domain links and can ingest many pages.\nRequires: a selected app (`ethora-app-select`) or an explicit `appId`.\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth; 400 malformed `url`; 404 unknown `appId`. Related: `ethora-sources-site-crawl-v2-wait` (block until done).",
+            description: "Crawl a website URL and ingest its content into an app's RAG sources (app-token / B2B variant of `ethora-sources-site-crawl`). Async — returns once the job is accepted; `followLink: true` follows in-domain links and can ingest many pages.\nRequires: a selected app (`ethora-app-select`) or an explicit `appId`.\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth; 400 malformed `url`; 404 unknown `appId`. Related: `ethora-source-site-crawl-wait` (block until done).",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("24-char hex appId to ingest into. Required in B2B mode unless already set via `ethora-app-select`; ignored in app-token mode."),
@@ -3715,9 +3665,9 @@ function sourcesSiteCrawlV2AppTool(server: McpServer) {
                 const res = useAppScopedRoute(ctx)
                     ? await sourcesSiteCrawlForAppV2(ctx.appId!, { url, followLink })
                     : await sourcesSiteCrawlV2({ url, followLink })
-                return asToolResult(ok(res.data, getDefaultMeta("ethora-sources-site-crawl-v2")))
+                return asToolResult(ok(res.data, getDefaultMeta("ethora-source-site-crawl")))
             } catch (error) {
-                return asToolResult(fail(error, getDefaultMeta("ethora-sources-site-crawl-v2")))
+                return asToolResult(fail(error, getDefaultMeta("ethora-source-site-crawl")))
             }
         }
     )
@@ -3725,13 +3675,13 @@ function sourcesSiteCrawlV2AppTool(server: McpServer) {
 
 function sourcesSiteReindexV2AppTool(server: McpServer) {
     server.registerTool(
-        "ethora-sources-site-reindex-v2",
+        "ethora-source-site-reindex",
         {
-            description: "Re-crawl and re-embed a previously crawled URL by its `urlId`, refreshing its RAG content (app-token / B2B variant of `ethora-sources-site-reindex`). Async — the existing source record is updated in place once indexing finishes.\nRequires: an indexed site URL from `ethora-sources-site-list-v2` (crawled with `ethora-sources-site-crawl-v2`).\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth; 404 unknown `appId` or `urlId`. Related: get `urlId` from `ethora-sources-site-list-v2`; `ethora-sources-site-reindex-v2-wait` blocks until done.",
+            description: "Re-crawl and re-embed a previously crawled URL by its `urlId`, refreshing its RAG content (app-token / B2B variant of `ethora-sources-site-reindex`). Async — the existing source record is updated in place once indexing finishes.\nRequires: an indexed site URL from `ethora-source-site-list` (crawled with `ethora-source-site-crawl`).\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth; 404 unknown `appId` or `urlId`. Related: get `urlId` from `ethora-source-site-list`; `ethora-source-site-reindex-wait` blocks until done.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("24-char hex appId the URL belongs to. Required in B2B mode unless already set via `ethora-app-select`; ignored in app-token mode."),
-                urlId: z.string().min(1).describe("Id of a previously crawled URL record. Get it from `ethora-sources-site-list-v2`."),
+                urlId: z.string().min(1).describe("Id of a previously crawled URL record. Get it from `ethora-source-site-list`."),
             },
         },
         async function ({ appId, urlId }) {
@@ -3740,9 +3690,9 @@ function sourcesSiteReindexV2AppTool(server: McpServer) {
                 const res = useAppScopedRoute(ctx)
                     ? await sourcesSiteReindexForAppV2(ctx.appId!, { urlId })
                     : await sourcesSiteReindexV2({ urlId })
-                return asToolResult(ok(res.data, getDefaultMeta("ethora-sources-site-reindex-v2")))
+                return asToolResult(ok(res.data, getDefaultMeta("ethora-source-site-reindex")))
             } catch (error) {
-                return asToolResult(fail(error, getDefaultMeta("ethora-sources-site-reindex-v2")))
+                return asToolResult(fail(error, getDefaultMeta("ethora-source-site-reindex")))
             }
         }
     )
@@ -3786,9 +3736,9 @@ async function waitForCrawlJob(
 
 function sourcesSiteCrawlV2WaitTool(server: McpServer) {
     server.registerTool(
-        "ethora-sources-site-crawl-v2-wait",
+        "ethora-source-site-crawl-wait",
         {
-            description: "Crawl a website URL and wait for the crawl to finish: enqueues the job, then polls it until it reports `completed` or `failed`. Returns `{ done, status, jobId, polls, durationMs, result }`; `done: false` with a `note` means the budget ran out while the job was still running (it usually finishes server-side anyway).\nRequires: a selected app (`ethora-app-select`) or an explicit `appId`.\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth; 400 malformed `url`; 504/timeout if it takes longer than `timeoutMs` (the job may still complete server-side — check with `ethora-sources-site-list-v2`).",
+            description: "Crawl a website URL and wait for the crawl to finish: enqueues the job, then polls it until it reports `completed` or `failed`. Returns `{ done, status, jobId, polls, durationMs, result }`; `done: false` with a `note` means the budget ran out while the job was still running (it usually finishes server-side anyway).\nRequires: a selected app (`ethora-app-select`) or an explicit `appId`.\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth; 400 malformed `url`; 504/timeout if it takes longer than `timeoutMs` (the job may still complete server-side — check with `ethora-source-site-list`).",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("24-char hex appId to ingest into. Required in B2B mode unless already set via `ethora-app-select`; ignored in app-token mode."),
@@ -3798,7 +3748,7 @@ function sourcesSiteCrawlV2WaitTool(server: McpServer) {
             },
         },
         async function ({ appId, url, followLink, timeoutMs }) {
-            const meta = getDefaultMeta("ethora-sources-site-crawl-v2-wait")
+            const meta = getDefaultMeta("ethora-source-site-crawl-wait")
             try {
                 const ctx = resolveAppScopedV2Context(appId)
                 const started = Date.now()
@@ -3811,7 +3761,7 @@ function sourcesSiteCrawlV2WaitTool(server: McpServer) {
                 if (!jobId) {
                     // No job handle to follow: report what the API said rather
                     // than claiming the crawl finished.
-                    return asToolResult(ok({ done: false, durationMs: Date.now() - started, result: enqueued, note: "The API did not return a jobId, so completion could not be confirmed. Check `ethora-sources-site-list-v2`." }, meta))
+                    return asToolResult(ok({ done: false, durationMs: Date.now() - started, result: enqueued, note: "The API did not return a jobId, so completion could not be confirmed. Check `ethora-source-site-list`." }, meta))
                 }
                 const waited = await waitForCrawlJob(ctx, jobId, Math.max(0, budget - (Date.now() - started)))
                 return asToolResult(ok({
@@ -3821,7 +3771,7 @@ function sourcesSiteCrawlV2WaitTool(server: McpServer) {
                     polls: waited.polls,
                     durationMs: Date.now() - started,
                     result: waited.job ?? enqueued,
-                    ...(waited.timedOut ? { note: `Still ${waited.status || "in progress"} after ${budget}ms. The crawl usually continues server-side; check \`ethora-sources-site-list-v2\` or raise \`timeoutMs\`.` } : {}),
+                    ...(waited.timedOut ? { note: `Still ${waited.status || "in progress"} after ${budget}ms. The crawl usually continues server-side; check \`ethora-source-site-list\` or raise \`timeoutMs\`.` } : {}),
                 }, meta))
             } catch (error) {
                 return asToolResult(fail(error, meta))
@@ -3832,18 +3782,18 @@ function sourcesSiteCrawlV2WaitTool(server: McpServer) {
 
 function sourcesSiteReindexV2WaitTool(server: McpServer) {
     server.registerTool(
-        "ethora-sources-site-reindex-v2-wait",
+        "ethora-source-site-reindex-wait",
         {
-            description: "Re-crawl and re-embed a previously crawled URL and wait for it to finish: enqueues the job, then polls it until it reports `completed` or `failed`. Returns `{ done, status, jobId, polls, durationMs, result }`; `done: false` with a `note` means the budget ran out while the job was still running.\nRequires: an indexed site URL from `ethora-sources-site-list-v2` (crawled with `ethora-sources-site-crawl-v2`).\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth; 404 unknown `appId` or `urlId`; 504/timeout if it takes longer than `timeoutMs` (the job may still complete server-side). Related: get `urlId` from `ethora-sources-site-list-v2`.",
+            description: "Re-crawl and re-embed a previously crawled URL and wait for it to finish: enqueues the job, then polls it until it reports `completed` or `failed`. Returns `{ done, status, jobId, polls, durationMs, result }`; `done: false` with a `note` means the budget ran out while the job was still running.\nRequires: an indexed site URL from `ethora-source-site-list` (crawled with `ethora-source-site-crawl`).\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth; 404 unknown `appId` or `urlId`; 504/timeout if it takes longer than `timeoutMs` (the job may still complete server-side). Related: get `urlId` from `ethora-source-site-list`.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("24-char hex appId the URL belongs to. Required in B2B mode unless already set via `ethora-app-select`; ignored in app-token mode."),
-                urlId: z.string().min(1).describe("Id of a previously crawled URL record. Get it from `ethora-sources-site-list-v2`."),
+                urlId: z.string().min(1).describe("Id of a previously crawled URL record. Get it from `ethora-source-site-list`."),
                 timeoutMs: z.number().int().min(1000).max(600000).optional().describe("How long to poll for the reindex to finish, in milliseconds. Default 45000, chosen to stay under the ~60s request timeout most MCP clients enforce. Caps at 600000 (10 min) for clients that allow longer calls."),
             },
         },
         async function ({ appId, urlId, timeoutMs }) {
-            const meta = getDefaultMeta("ethora-sources-site-reindex-v2-wait")
+            const meta = getDefaultMeta("ethora-source-site-reindex-wait")
             try {
                 const ctx = resolveAppScopedV2Context(appId)
                 const started = Date.now()
@@ -3854,7 +3804,7 @@ function sourcesSiteReindexV2WaitTool(server: McpServer) {
                 const enqueued = res.data?.result ?? res.data?.data ?? res.data
                 const jobId = String(enqueued?.jobId || enqueued?.job?.jobId || "")
                 if (!jobId) {
-                    return asToolResult(ok({ done: false, durationMs: Date.now() - started, result: enqueued, note: "The API did not return a jobId, so completion could not be confirmed. Check `ethora-sources-site-list-v2`." }, meta))
+                    return asToolResult(ok({ done: false, durationMs: Date.now() - started, result: enqueued, note: "The API did not return a jobId, so completion could not be confirmed. Check `ethora-source-site-list`." }, meta))
                 }
                 const waited = await waitForCrawlJob(ctx, jobId, Math.max(0, budget - (Date.now() - started)))
                 return asToolResult(ok({
@@ -3864,7 +3814,7 @@ function sourcesSiteReindexV2WaitTool(server: McpServer) {
                     polls: waited.polls,
                     durationMs: Date.now() - started,
                     result: waited.job ?? enqueued,
-                    ...(waited.timedOut ? { note: `Still ${waited.status || "in progress"} after ${budget}ms. The reindex usually continues server-side; check \`ethora-sources-site-list-v2\` or raise \`timeoutMs\`.` } : {}),
+                    ...(waited.timedOut ? { note: `Still ${waited.status || "in progress"} after ${budget}ms. The reindex usually continues server-side; check \`ethora-source-site-list\` or raise \`timeoutMs\`.` } : {}),
                 }, meta))
             } catch (error) {
                 return asToolResult(fail(error, meta))
@@ -3875,16 +3825,16 @@ function sourcesSiteReindexV2WaitTool(server: McpServer) {
 
 function sourcesSiteListV2Tool(server: McpServer) {
     server.registerTool(
-        "ethora-sources-site-list-v2",
+        "ethora-source-site-list",
         {
-            description: "List an app's crawled website sources, including each source's id, URL, and current RAG tags. Their ids feed `ethora-sources-site-tags-update-v2`, `ethora-sources-site-delete-url-v2-batch`, and `ethora-sources-site-reindex-v2`.\nRequires: a selected app (`ethora-app-select`) or an explicit `appId`.\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth; 404 unknown `appId`; empty list if nothing has been crawled.",
+            description: "List an app's crawled website sources, including each source's id, URL, and current RAG tags. Their ids feed `ethora-source-site-tags-update`, `ethora-source-site-url-delete-batch`, and `ethora-source-site-reindex`.\nRequires: a selected app (`ethora-app-select`) or an explicit `appId`.\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth; 404 unknown `appId`; empty list if nothing has been crawled.",
             annotations: { readOnlyHint: true, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("24-char hex appId to list sources for. Required in B2B mode unless already set via `ethora-app-select`; ignored in app-token mode."),
             },
         },
         async function ({ appId }) {
-            const meta = getDefaultMeta("ethora-sources-site-list-v2")
+            const meta = getDefaultMeta("ethora-source-site-list")
             try {
                 const ctx = resolveAppScopedV2Context(appId)
                 const res = useAppScopedRoute(ctx)
@@ -3900,18 +3850,18 @@ function sourcesSiteListV2Tool(server: McpServer) {
 
 function sourcesSiteTagsUpdateV2Tool(server: McpServer) {
     server.registerTool(
-        "ethora-sources-site-tags-update-v2",
+        "ethora-source-site-tags-update",
         {
-            description: "Set the RAG retrieval tags on a crawled website source — replaces the source's tag set with the provided `tags` array (not additive; pass `[]` to clear all). Tags let the bot's `ragTags` narrow retrieval.\nRequires: an indexed site URL from `ethora-sources-site-list-v2` (crawled with `ethora-sources-site-crawl-v2`).\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth; 404 unknown `appId` or `sourceId`. Related: get `sourceId` from `ethora-sources-site-list-v2`; doc equivalent is `ethora-sources-docs-tags-update-v2`.",
+            description: "Set the RAG retrieval tags on a crawled website source — replaces the source's tag set with the provided `tags` array (not additive; pass `[]` to clear all). Tags let the bot's `ragTags` narrow retrieval.\nRequires: an indexed site URL from `ethora-source-site-list` (crawled with `ethora-source-site-crawl`).\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth; 404 unknown `appId` or `sourceId`. Related: get `sourceId` from `ethora-source-site-list`; doc equivalent is `ethora-source-doc-tags-update`.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("24-char hex appId the source belongs to. Required in B2B mode unless already set via `ethora-app-select`; ignored in app-token mode."),
-                sourceId: z.string().min(1).describe("Id of the crawled site source to tag. Get it from `ethora-sources-site-list-v2`."),
+                sourceId: z.string().min(1).describe("Id of the crawled site source to tag. Get it from `ethora-source-site-list`."),
                 tags: z.array(z.string().min(1)).max(50).describe("The complete desired tag set for this source (replaces any existing tags). Up to 50 tags; pass `[]` to clear all."),
             },
         },
         async function ({ appId, sourceId, tags }) {
-            const meta = getDefaultMeta("ethora-sources-site-tags-update-v2")
+            const meta = getDefaultMeta("ethora-source-site-tags-update")
             try {
                 const ctx = resolveAppScopedV2Context(appId)
                 const res = useAppScopedRoute(ctx)
@@ -3927,9 +3877,9 @@ function sourcesSiteTagsUpdateV2Tool(server: McpServer) {
 
 function usersBatchCreateV2Tool(server: McpServer) {
     server.registerTool(
-        "ethora-users-batch-create-v2",
+        "ethora-user-batch-create",
         {
-            description: "Provision many Ethora users (1–100) in one asynchronous batch job — the bulk equivalent of `ethora-user-register`. Enqueues a background job (HTTP 202); the job reports per-user conflicts rather than failing the whole batch. Returns `{ jobId, statusUrl }`.\nAuth: B2B mode (`ethora-auth-use-b2b` + a configured `b2bToken`). Errors: 401/403 not in B2B mode; 422 `usersList` validation. Related: track with `ethora-wait-users-batch-job-v2`.",
+            description: "Provision many Ethora users (1–100) in one asynchronous batch job — the bulk equivalent of `ethora-user-register`. Enqueues a background job (HTTP 202); the job reports per-user conflicts rather than failing the whole batch. Returns `{ jobId, statusUrl }`.\nAuth: B2B mode (`ethora-auth-mode-set` + a configured `b2bToken`). Errors: 401/403 not in B2B mode; 422 `usersList` validation. Related: track with `ethora-user-batch-job-wait`.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
             inputSchema: {
                 bypassEmailConfirmation: z.boolean().optional().describe("If true, created users skip email verification and are immediately usable. If false/omitted, each user receives a verification link."),
@@ -3944,7 +3894,7 @@ function usersBatchCreateV2Tool(server: McpServer) {
             },
         },
         async function ({ bypassEmailConfirmation, usersList, timeoutMs }) {
-            const meta = getDefaultMeta("ethora-users-batch-create-v2")
+            const meta = getDefaultMeta("ethora-user-batch-create")
             try {
                 ensureB2BAuthForTool()
                 const res = await usersBatchCreateV2({ bypassEmailConfirmation, usersList }, { timeoutMs: timeoutMs ?? 30_000 })
@@ -3958,17 +3908,17 @@ function usersBatchCreateV2Tool(server: McpServer) {
 
 function usersBatchCreateJobV2Tool(server: McpServer) {
     server.registerTool(
-        "ethora-users-batch-job-v2",
+        "ethora-user-batch-job-start",
         {
-            description: "Fetch the current status and per-user results of a users batch job by `jobId` (one-shot, no polling). Returns the job object with its `state` (pending/running/completed/failed) and per-user outcomes.\nRequires: a `jobId` returned by `ethora-users-batch-create-v2`.\nAuth: B2B mode (`ethora-auth-use-b2b` + a configured `b2bToken`) — must match the auth used to create the job. Errors: 401/403 not in B2B mode; 404 unknown `jobId`. Related: `ethora-wait-users-batch-job-v2` for a blocking wait.",
+            description: "Fetch the current status and per-user results of a users batch job by `jobId` (one-shot, no polling). Returns the job object with its `state` (pending/running/completed/failed) and per-user outcomes.\nRequires: a `jobId` returned by `ethora-user-batch-create`.\nAuth: B2B mode (`ethora-auth-mode-set` + a configured `b2bToken`) — must match the auth used to create the job. Errors: 401/403 not in B2B mode; 404 unknown `jobId`. Related: `ethora-user-batch-job-wait` for a blocking wait.",
             annotations: { readOnlyHint: true, openWorldHint: true },
             inputSchema: {
-                jobId: z.string().min(1).describe("Job id returned by `ethora-users-batch-create-v2`."),
+                jobId: z.string().min(1).describe("Job id returned by `ethora-user-batch-create`."),
                 timeoutMs: z.number().int().min(500).max(60000).optional().describe("HTTP timeout for this status request, in milliseconds. Default 10000."),
             },
         },
         async function ({ jobId, timeoutMs }) {
-            const meta = getDefaultMeta("ethora-users-batch-job-v2")
+            const meta = getDefaultMeta("ethora-user-batch-job-start")
             try {
                 ensureB2BAuthForTool()
                 const res = await usersBatchCreateJobV2(jobId, { timeoutMs: timeoutMs ?? 10_000 })
@@ -3982,18 +3932,18 @@ function usersBatchCreateJobV2Tool(server: McpServer) {
 
 function waitUsersBatchCreateJobV2Tool(server: McpServer) {
     server.registerTool(
-        "ethora-wait-users-batch-job-v2",
+        "ethora-user-batch-job-wait",
         {
-            description: "Block until a users batch job reaches a terminal state (`completed` or `failed`) or `timeoutMs` — read-only polling wrapper around `ethora-users-batch-job-v2`. Returns `{ done, state, job }`, or `{ done: false, reason: \"timeout\" }` on timeout.\nRequires: a `jobId` returned by `ethora-users-batch-create-v2`.\nAuth: B2B mode (`ethora-auth-use-b2b` + a configured `b2bToken`) — must match the auth used to create the job. Errors: 401/403 not in B2B mode; 404 unknown `jobId`.",
+            description: "Block until a users batch job reaches a terminal state (`completed` or `failed`) or `timeoutMs` — read-only polling wrapper around `ethora-user-batch-job-start`. Returns `{ done, state, job }`, or `{ done: false, reason: \"timeout\" }` on timeout.\nRequires: a `jobId` returned by `ethora-user-batch-create`.\nAuth: B2B mode (`ethora-auth-mode-set` + a configured `b2bToken`) — must match the auth used to create the job. Errors: 401/403 not in B2B mode; 404 unknown `jobId`.",
             annotations: { readOnlyHint: true, openWorldHint: true },
             inputSchema: {
-                jobId: z.string().min(1).describe("Job id returned by `ethora-users-batch-create-v2`."),
+                jobId: z.string().min(1).describe("Job id returned by `ethora-user-batch-create`."),
                 timeoutMs: z.number().int().min(1000).max(300000).optional().describe("Maximum time to wait, in milliseconds. Default 60000. Caps at 300000 (5 min)."),
                 intervalMs: z.number().int().min(250).max(10000).optional().describe("Delay between status checks, in milliseconds. Default 1000."),
             },
         },
         async function ({ jobId, timeoutMs, intervalMs }) {
-            const meta = getDefaultMeta("ethora-wait-users-batch-job-v2")
+            const meta = getDefaultMeta("ethora-user-batch-job-wait")
             try {
                 ensureB2BAuthForTool()
                 const timeout = timeoutMs ?? 60_000
@@ -4019,9 +3969,9 @@ function waitUsersBatchCreateJobV2Tool(server: McpServer) {
 
 function appTokensListV2Tool(server: McpServer) {
     server.registerTool(
-        "ethora-app-tokens-list-v2",
+        "ethora-app-token-list",
         {
-            description: "List the app tokens issued for an app — metadata only (`tokenId`, label, created/rotated timestamps, status); the secret token values are never returned (only shown once at create/rotate time).\nAuth: B2B mode (`ethora-auth-use-b2b` + a configured `b2bToken`). Errors: 401/403 not in B2B mode; 400 no `appId` and none selected; 404 unknown `appId`.",
+            description: "List the app tokens issued for an app — metadata only (`tokenId`, label, created/rotated timestamps, status); the secret token values are never returned (only shown once at create/rotate time).\nAuth: B2B mode (`ethora-auth-mode-set` + a configured `b2bToken`). Errors: 401/403 not in B2B mode; 400 no `appId` and none selected; 404 unknown `appId`.",
             annotations: { readOnlyHint: true, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("24-char hex appId to list tokens for. Optional — defaults to the app set via `ethora-app-select`."),
@@ -4029,7 +3979,7 @@ function appTokensListV2Tool(server: McpServer) {
             },
         },
         async function ({ appId, timeoutMs }) {
-            const meta = getDefaultMeta("ethora-app-tokens-list-v2")
+            const meta = getDefaultMeta("ethora-app-token-list")
             try {
                 ensureB2BAuthForTool()
                 const effectiveAppId = String(appId || (getClientState() as any).currentAppId || "").trim()
@@ -4045,18 +3995,18 @@ function appTokensListV2Tool(server: McpServer) {
 
 function appTokensCreateV2Tool(server: McpServer) {
     server.registerTool(
-        "ethora-app-tokens-create-v2",
+        "ethora-app-token-create",
         {
-            description: "Mint a new app token for an app. The secret token value is returned exactly once and cannot be retrieved again — capture it immediately. Returns the new token including its one-time secret value and `tokenId`.\nAuth: B2B mode (`ethora-auth-use-b2b` + a configured `b2bToken`). Errors: 401/403 not in B2B mode; 400 no `appId` and none selected; 404 unknown `appId`. Related: manage with `ethora-app-tokens-list-v2` / `-rotate-v2` / `-revoke-v2`.",
+            description: "Mint a new app token for an app. The secret token value is returned exactly once and cannot be retrieved again — capture it immediately. Returns the new token including its one-time secret value and `tokenId`.\nAuth: B2B mode (`ethora-auth-mode-set` + a configured `b2bToken`). Errors: 401/403 not in B2B mode; 400 no `appId` and none selected; 404 unknown `appId`. Related: manage with `ethora-app-token-list` / `-rotate-v2` / `-revoke-v2`.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("24-char hex appId to mint the token for. Optional — defaults to the app set via `ethora-app-select`."),
-                label: z.string().optional().describe("Human-readable label to identify this token later (e.g. `staging`, `ci`). Shown in `ethora-app-tokens-list-v2`."),
+                label: z.string().optional().describe("Human-readable label to identify this token later (e.g. `staging`, `ci`). Shown in `ethora-app-token-list`."),
                 timeoutMs: z.number().int().min(500).max(60000).optional().describe("HTTP timeout for this request, in milliseconds. Default 10000."),
             },
         },
         async function ({ appId, label, timeoutMs }) {
-            const meta = getDefaultMeta("ethora-app-tokens-create-v2")
+            const meta = getDefaultMeta("ethora-app-token-create")
             try {
                 ensureB2BAuthForTool()
                 const effectiveAppId = String(appId || (getClientState() as any).currentAppId || "").trim()
@@ -4072,19 +4022,19 @@ function appTokensCreateV2Tool(server: McpServer) {
 
 function appTokensRotateV2Tool(server: McpServer) {
     server.registerTool(
-        "ethora-app-tokens-rotate-v2",
+        "ethora-app-token-rotate",
         {
-            description: "Rotate an app token: revoke an existing token and issue a replacement in one step. The old `tokenId` is revoked immediately — anything using it stops working at once. The new secret value is returned exactly once — capture it immediately.\nRequires: a token id from `ethora-app-tokens-list-v2`.\nAuth: B2B mode (`ethora-auth-use-b2b` + a configured `b2bToken`). Errors: 401/403 not in B2B mode; 400 no `appId` and none selected; 404 unknown `appId` or `tokenId`. Related: `ethora-app-tokens-revoke-v2` to revoke without a replacement.",
+            description: "Rotate an app token: revoke an existing token and issue a replacement in one step. The old `tokenId` is revoked immediately — anything using it stops working at once. The new secret value is returned exactly once — capture it immediately.\nRequires: a token id from `ethora-app-token-list`.\nAuth: B2B mode (`ethora-auth-mode-set` + a configured `b2bToken`). Errors: 401/403 not in B2B mode; 400 no `appId` and none selected; 404 unknown `appId` or `tokenId`. Related: `ethora-app-token-revoke` to revoke without a replacement.",
             annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("24-char hex appId the token belongs to. Optional — defaults to the app set via `ethora-app-select`."),
-                tokenId: z.string().min(1).describe("Id of the token to revoke and replace. Get it from `ethora-app-tokens-list-v2`."),
+                tokenId: z.string().min(1).describe("Id of the token to revoke and replace. Get it from `ethora-app-token-list`."),
                 label: z.string().optional().describe("Label for the replacement token. Omit to inherit the old token's label."),
                 timeoutMs: z.number().int().min(500).max(60000).optional().describe("HTTP timeout for this request, in milliseconds. Default 10000."),
             },
         },
         async function ({ appId, tokenId, label, timeoutMs }) {
-            const meta = getDefaultMeta("ethora-app-tokens-rotate-v2")
+            const meta = getDefaultMeta("ethora-app-token-rotate")
             try {
                 ensureB2BAuthForTool()
                 const effectiveAppId = String(appId || (getClientState() as any).currentAppId || "").trim()
@@ -4100,18 +4050,18 @@ function appTokensRotateV2Tool(server: McpServer) {
 
 function appTokensRevokeV2Tool(server: McpServer) {
     server.registerTool(
-        "ethora-app-tokens-revoke-v2",
+        "ethora-app-token-revoke",
         {
-            description: "Permanently revoke an app token by `tokenId` — it stops working immediately; any client, SDK, or MCP session still using it gets auth failures. No replacement is issued.\nRequires: a token id from `ethora-app-tokens-list-v2`.\nAuth: B2B mode (`ethora-auth-use-b2b` + a configured `b2bToken`). Errors: 401/403 not in B2B mode; 400 no `appId` and none selected; 404 unknown `appId`. Related: get `tokenId` from `ethora-app-tokens-list-v2`; `ethora-app-tokens-rotate-v2` for revoke-and-replace.",
+            description: "Permanently revoke an app token by `tokenId` — it stops working immediately; any client, SDK, or MCP session still using it gets auth failures. No replacement is issued.\nRequires: a token id from `ethora-app-token-list`.\nAuth: B2B mode (`ethora-auth-mode-set` + a configured `b2bToken`). Errors: 401/403 not in B2B mode; 400 no `appId` and none selected; 404 unknown `appId`. Related: get `tokenId` from `ethora-app-token-list`; `ethora-app-token-rotate` for revoke-and-replace.",
             annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("24-char hex appId the token belongs to. Optional — defaults to the app set via `ethora-app-select`."),
-                tokenId: z.string().min(1).describe("Id of the token to revoke. Get it from `ethora-app-tokens-list-v2`."),
+                tokenId: z.string().min(1).describe("Id of the token to revoke. Get it from `ethora-app-token-list`."),
                 timeoutMs: z.number().int().min(500).max(60000).optional().describe("HTTP timeout for this request, in milliseconds. Default 10000."),
             },
         },
         async function ({ appId, tokenId, timeoutMs }) {
-            const meta = getDefaultMeta("ethora-app-tokens-revoke-v2")
+            const meta = getDefaultMeta("ethora-app-token-revoke")
             try {
                 ensureB2BAuthForTool()
                 const effectiveAppId = String(appId || (getClientState() as any).currentAppId || "").trim()
@@ -4129,7 +4079,7 @@ function b2bAppProvisionTool(server: McpServer) {
     server.registerTool(
         "ethora-b2b-app-provision",
         {
-            description: "One-call B2B orchestrator: create an app, mint one or more app tokens, provision default chat rooms, then configure and enable its AI bot. Later-step failures don't undo earlier steps. Returns a per-step log including `appId` and the created tokens (returned once — capture them).\nAuth: B2B mode (`ethora-auth-use-b2b` + a configured `b2bToken`). Errors: aborts with the partial step log if app creation fails; previous auth mode restored best-effort. Related: `ethora-b2b-app-bootstrap-ai` does sources+bot but not tokens/rooms.",
+            description: "One-call B2B orchestrator: create an app, mint one or more app tokens, provision default chat rooms, then configure and enable its AI bot. Later-step failures don't undo earlier steps. Returns a per-step log including `appId` and the created tokens (returned once — capture them).\nAuth: B2B mode (`ethora-auth-mode-set` + a configured `b2bToken`). Errors: aborts with the partial step log if app creation fails; previous auth mode restored best-effort. Related: `ethora-b2b-app-bootstrap-ai` does sources+bot but not tokens/rooms.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
             inputSchema: {
                 displayName: z.string().min(1).describe("Display name for the new app."),
@@ -4225,13 +4175,13 @@ function b2bAppProvisionTool(server: McpServer) {
 
 function sourcesSiteDeleteUrlV2AppTool(server: McpServer) {
     server.registerTool(
-        "ethora-sources-site-delete-url-v2",
+        "ethora-source-site-url-delete",
         {
-            description: "Remove a single crawled URL from an app's RAG sources, matched by its exact url string (app-token / B2B variant of `ethora-sources-site-delete-url`). Deletes the source record and its embeddings; not reversible. Matches on the exact stored URL string.\nRequires: an indexed site URL from `ethora-sources-site-list-v2` (crawled with `ethora-sources-site-crawl-v2`).\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth; 404 `url` not a crawled source. Related: get the stored value from `ethora-sources-site-list-v2`; bulk-by-id is `ethora-sources-site-delete-url-v2-batch`.",
+            description: "Remove a single crawled URL from an app's RAG sources, matched by its exact url string (app-token / B2B variant of `ethora-sources-site-delete-url`). Deletes the source record and its embeddings; not reversible. Matches on the exact stored URL string.\nRequires: an indexed site URL from `ethora-source-site-list` (crawled with `ethora-source-site-crawl`).\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth; 404 `url` not a crawled source. Related: get the stored value from `ethora-source-site-list`; bulk-by-id is `ethora-source-site-url-delete-batch`.",
             annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("24-char hex appId the URL belongs to. Required in B2B mode unless already set via `ethora-app-select`; ignored in app-token mode."),
-                url: z.string().min(1).describe("Exact crawled URL string to remove (must match what was stored — get it from `ethora-sources-site-list-v2`)."),
+                url: z.string().min(1).describe("Exact crawled URL string to remove (must match what was stored — get it from `ethora-source-site-list`)."),
             },
         },
         async function ({ appId, url }) {
@@ -4240,9 +4190,9 @@ function sourcesSiteDeleteUrlV2AppTool(server: McpServer) {
                 const res = useAppScopedRoute(ctx)
                     ? await sourcesSiteDeleteUrlForAppV2(ctx.appId!, { url })
                     : await sourcesSiteDeleteUrlV2Single({ url })
-                return asToolResult(ok(res.data, getDefaultMeta("ethora-sources-site-delete-url-v2")))
+                return asToolResult(ok(res.data, getDefaultMeta("ethora-source-site-url-delete")))
             } catch (error) {
-                return asToolResult(fail(error, getDefaultMeta("ethora-sources-site-delete-url-v2")))
+                return asToolResult(fail(error, getDefaultMeta("ethora-source-site-url-delete")))
             }
         }
     )
@@ -4250,13 +4200,13 @@ function sourcesSiteDeleteUrlV2AppTool(server: McpServer) {
 
 function sourcesSiteDeleteUrlV2BatchAppTool(server: McpServer) {
     server.registerTool(
-        "ethora-sources-site-delete-url-v2-batch",
+        "ethora-source-site-url-delete-batch",
         {
-            description: "Bulk-remove crawled website sources (1–100) from an app in one call, matched by their source record ids. Deletes each matching record and its embeddings; not reversible. Ids not present are skipped.\nRequires: an indexed site URL from `ethora-sources-site-list-v2` (crawled with `ethora-sources-site-crawl-v2`).\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth; 404 unknown `appId`. Related: matches on source ids (not URL strings) — get them from `ethora-sources-site-list-v2`.",
+            description: "Bulk-remove crawled website sources (1–100) from an app in one call, matched by their source record ids. Deletes each matching record and its embeddings; not reversible. Ids not present are skipped.\nRequires: an indexed site URL from `ethora-source-site-list` (crawled with `ethora-source-site-crawl`).\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth; 404 unknown `appId`. Related: matches on source ids (not URL strings) — get them from `ethora-source-site-list`.",
             annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("24-char hex appId the sources belong to. Required in B2B mode unless already set via `ethora-app-select`; ignored in app-token mode."),
-                ids: z.array(z.string().min(1)).min(1).max(100).describe("Site source record ids to delete, 1–100 per call. Get them from `ethora-sources-site-list-v2`."),
+                ids: z.array(z.string().min(1)).min(1).max(100).describe("Site source record ids to delete, 1–100 per call. Get them from `ethora-source-site-list`."),
             },
         },
         async function ({ appId, ids }) {
@@ -4265,9 +4215,9 @@ function sourcesSiteDeleteUrlV2BatchAppTool(server: McpServer) {
                 const res = useAppScopedRoute(ctx)
                     ? await sourcesSiteDeleteBatchForAppV2(ctx.appId!, { ids })
                     : await sourcesSiteDeleteUrlV2Batch({ urls: ids })
-                return asToolResult(ok(res.data, getDefaultMeta("ethora-sources-site-delete-url-v2-batch")))
+                return asToolResult(ok(res.data, getDefaultMeta("ethora-source-site-url-delete-batch")))
             } catch (error) {
-                return asToolResult(fail(error, getDefaultMeta("ethora-sources-site-delete-url-v2-batch")))
+                return asToolResult(fail(error, getDefaultMeta("ethora-source-site-url-delete-batch")))
             }
         }
     )
@@ -4275,9 +4225,9 @@ function sourcesSiteDeleteUrlV2BatchAppTool(server: McpServer) {
 
 function sourcesDocsUploadV2AppTool(server: McpServer) {
     server.registerTool(
-        "ethora-sources-docs-upload-v2",
+        "ethora-source-doc-upload",
         {
-            description: "Upload documents (1–5; PDF, text, etc.) into an app's RAG sources (app-token / B2B variant of `ethora-sources-docs-upload`). Async — content becomes queryable once indexing finishes; files passed as base64, 50MB max each.\nRequires: a selected app (`ethora-app-select`) or an explicit `appId`.\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth; 404 unknown `appId`; 413 too large; 422 unsupported document type. Related: `ethora-sources-docs-list-v2`, `ethora-sources-docs-delete-v2`.",
+            description: "Upload documents (1–5; PDF, text, etc.) into an app's RAG sources (app-token / B2B variant of `ethora-source-doc-upload-legacy`). Async — content becomes queryable once indexing finishes; files passed as base64, 50MB max each.\nRequires: a selected app (`ethora-app-select`) or an explicit `appId`.\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth; 404 unknown `appId`; 413 too large; 422 unsupported document type. Related: `ethora-source-doc-list`, `ethora-source-doc-delete`.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("24-char hex appId to ingest into. Required in B2B mode unless already set via `ethora-app-select`; ignored in app-token mode."),
@@ -4303,9 +4253,9 @@ function sourcesDocsUploadV2AppTool(server: McpServer) {
                 const res = useAppScopedRoute(ctx)
                     ? await sourcesDocsUploadForAppV2(ctx.appId!, form, { "Content-Type": "multipart/form-data" })
                     : await sourcesDocsUploadV2(form, { "Content-Type": "multipart/form-data" })
-                return asToolResult(ok(res.data, getDefaultMeta("ethora-sources-docs-upload-v2")))
+                return asToolResult(ok(res.data, getDefaultMeta("ethora-source-doc-upload")))
             } catch (error) {
-                return asToolResult(fail(error, getDefaultMeta("ethora-sources-docs-upload-v2")))
+                return asToolResult(fail(error, getDefaultMeta("ethora-source-doc-upload")))
             }
         }
     )
@@ -4313,13 +4263,13 @@ function sourcesDocsUploadV2AppTool(server: McpServer) {
 
 function sourcesDocsDeleteV2AppTool(server: McpServer) {
     server.registerTool(
-        "ethora-sources-docs-delete-v2",
+        "ethora-source-doc-delete",
         {
-            description: "Remove a previously ingested document from an app's RAG sources by `docId` (app-token / B2B variant of `ethora-sources-docs-delete`). Deletes the document record and its embeddings; not reversible.\nRequires: a document id from `ethora-sources-docs-list-v2`.\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth; 404 unknown `appId` or `docId`. Related: get `docId` from `ethora-sources-docs-list-v2`.",
+            description: "Remove a previously ingested document from an app's RAG sources by `docId` (app-token / B2B variant of `ethora-source-doc-delete-legacy`). Deletes the document record and its embeddings; not reversible.\nRequires: a document id from `ethora-source-doc-list`.\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth; 404 unknown `appId` or `docId`. Related: get `docId` from `ethora-source-doc-list`.",
             annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("24-char hex appId the document belongs to. Required in B2B mode unless already set via `ethora-app-select`; ignored in app-token mode."),
-                docId: z.string().min(1).describe("Id of the ingested document to delete. Get it from `ethora-sources-docs-list-v2`."),
+                docId: z.string().min(1).describe("Id of the ingested document to delete. Get it from `ethora-source-doc-list`."),
             },
         },
         async function ({ appId, docId }) {
@@ -4328,9 +4278,9 @@ function sourcesDocsDeleteV2AppTool(server: McpServer) {
                 const res = useAppScopedRoute(ctx)
                     ? await sourcesDocsDeleteForAppV2(ctx.appId!, docId)
                     : await sourcesDocsDeleteV2(docId)
-                return asToolResult(ok(res.data, getDefaultMeta("ethora-sources-docs-delete-v2")))
+                return asToolResult(ok(res.data, getDefaultMeta("ethora-source-doc-delete")))
             } catch (error) {
-                return asToolResult(fail(error, getDefaultMeta("ethora-sources-docs-delete-v2")))
+                return asToolResult(fail(error, getDefaultMeta("ethora-source-doc-delete")))
             }
         }
     )
@@ -4338,16 +4288,16 @@ function sourcesDocsDeleteV2AppTool(server: McpServer) {
 
 function sourcesDocsListV2Tool(server: McpServer) {
     server.registerTool(
-        "ethora-sources-docs-list-v2",
+        "ethora-source-doc-list",
         {
-            description: "List an app's ingested documents, including each document's id, name, and current RAG tags. Their ids feed `ethora-sources-docs-tags-update-v2` and `ethora-sources-docs-delete-v2`.\nRequires: a selected app (`ethora-app-select`) or an explicit `appId`.\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth; 404 unknown `appId`; empty list if nothing has been uploaded. Related: website-sources equivalent is `ethora-sources-site-list-v2`.",
+            description: "List an app's ingested documents, including each document's id, name, and current RAG tags. Their ids feed `ethora-source-doc-tags-update` and `ethora-source-doc-delete`.\nRequires: a selected app (`ethora-app-select`) or an explicit `appId`.\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth; 404 unknown `appId`; empty list if nothing has been uploaded. Related: website-sources equivalent is `ethora-source-site-list`.",
             annotations: { readOnlyHint: true, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("24-char hex appId to list documents for. Required in B2B mode unless already set via `ethora-app-select`; ignored in app-token mode."),
             },
         },
         async function ({ appId }) {
-            const meta = getDefaultMeta("ethora-sources-docs-list-v2")
+            const meta = getDefaultMeta("ethora-source-doc-list")
             try {
                 const ctx = resolveAppScopedV2Context(appId)
                 const res = useAppScopedRoute(ctx)
@@ -4363,18 +4313,18 @@ function sourcesDocsListV2Tool(server: McpServer) {
 
 function sourcesDocsTagsUpdateV2Tool(server: McpServer) {
     server.registerTool(
-        "ethora-sources-docs-tags-update-v2",
+        "ethora-source-doc-tags-update",
         {
-            description: "Set the RAG retrieval tags on an ingested document — replaces the document's tag set with the provided `tags` array (not additive; pass `[]` to clear all). Tags let the bot's `ragTags` narrow retrieval.\nRequires: a document id from `ethora-sources-docs-list-v2`.\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth; 404 unknown `appId` or `docId`. Related: get `docId` from `ethora-sources-docs-list-v2`; website-source equivalent is `ethora-sources-site-tags-update-v2`.",
+            description: "Set the RAG retrieval tags on an ingested document — replaces the document's tag set with the provided `tags` array (not additive; pass `[]` to clear all). Tags let the bot's `ragTags` narrow retrieval.\nRequires: a document id from `ethora-source-doc-list`.\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth; 404 unknown `appId` or `docId`. Related: get `docId` from `ethora-source-doc-list`; website-source equivalent is `ethora-source-site-tags-update`.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("24-char hex appId the document belongs to. Required in B2B mode unless already set via `ethora-app-select`; ignored in app-token mode."),
-                docId: z.string().min(1).describe("Id of the ingested document to tag. Get it from `ethora-sources-docs-list-v2`."),
+                docId: z.string().min(1).describe("Id of the ingested document to tag. Get it from `ethora-source-doc-list`."),
                 tags: z.array(z.string().min(1)).max(50).describe("The complete desired tag set for this document (replaces any existing tags). Up to 50 tags; pass `[]` to clear all."),
             },
         },
         async function ({ appId, docId, tags }) {
-            const meta = getDefaultMeta("ethora-sources-docs-tags-update-v2")
+            const meta = getDefaultMeta("ethora-source-doc-tags-update")
             try {
                 const ctx = resolveAppScopedV2Context(appId)
                 const res = useAppScopedRoute(ctx)
@@ -4390,7 +4340,7 @@ function sourcesDocsTagsUpdateV2Tool(server: McpServer) {
 
 // Bind an agent as the app's active widget bot. Preferred path (user or B2B
 // session): find the agent's BotInstance for this app (created by
-// `ethora-agent-invite-to-chat`) and set App.defaultBotInstanceId + botStatus
+// `ethora-agent-invite`) and set App.defaultBotInstanceId + botStatus
 // through the app update route, which is what the admin "Active agent for AI
 // Widget" dropdown does. Fallback: the app-token-only /v2/agents/:id/activate
 // route with the stored appToken (that route refuses agents it does not own
@@ -4408,7 +4358,7 @@ async function activateAgentForApp(agentId: string, chatJid: string | undefined,
             const items: any[] = Array.isArray(d) ? d : (d.items || d.botInstances || d.results || d.data?.items || [])
             const match = items.find((bi: any) => String(bi.agentId || bi.agent?._id || bi.agent?.id || "") === id && (!bi.appId || String(bi.appId) === appId)) || items.find((bi: any) => String(bi.agentId || "") === id) || (items.length === 1 ? items[0] : null)
             if (!match) {
-                throw new Error(`No bot instance of agent ${id} exists in app ${appId} yet. Call \`ethora-agent-invite-to-chat { agentIdOrAddress: "${id}", chatJid: "${chatJid || "<ROOM_JID>"}" }\` first, then retry.`)
+                throw new Error(`No bot instance of agent ${id} exists in app ${appId} yet. Call \`ethora-agent-invite { agentIdOrAddress: "${id}", chatJid: "${chatJid || "<ROOM_JID>"}" }\` first, then retry.`)
             }
             const botInstanceId = String(match._id || match.id)
             const upd = await appUpdate(appId, { defaultBotInstanceId: botInstanceId, botStatus: "on" })
@@ -4436,9 +4386,9 @@ async function activateAgentForApp(agentId: string, chatJid: string | undefined,
 // ----------------------------------------------------------------------------
 function widgetTools(server: McpServer) {
     server.registerTool(
-        "ethora-widget-embed-snippet",
+        "ethora-widget-snippet-get",
         {
-            description: "Generate the <script> tag that embeds the Ethora AI chat widget (the floating launcher + chat panel that website visitors use) for an app, plus the prerequisites that must hold before it answers. No API call; pure generator using this deployment's hosted widget URL and public API base. The widget answers with the app's ACTIVE bot: for API-created apps run `ethora-agents-create-v2` -> `ethora-agent-invite-to-chat` -> `ethora-agents-activate-v2 { agentId, chatJid }` first, otherwise `POST /v2/widget/sessions` returns 422 and the widget stays silent.\nRequires: an activated agent on the app (`ethora-agents-activate-v2`); without it the widget opens but never answers.\nAuth: none required (uses the selected app when `appId` is omitted). Errors: effectively none; when no hosted widget is configured the snippet carries a `<WIDGET_URL>` placeholder. Related: `ethora-agents-activate-v2`, `ethora-bot-widget-v2` (legacy per-app bot only).",
+            description: "Generate the <script> tag that embeds the Ethora AI chat widget (the floating launcher + chat panel that website visitors use) for an app, plus the prerequisites that must hold before it answers. No API call; pure generator using this deployment's hosted widget URL and public API base. The widget answers with the app's ACTIVE bot: for API-created apps run `ethora-agent-create` -> `ethora-agent-invite` -> `ethora-agent-activate { agentId, chatJid }` first, otherwise `POST /v2/widget/sessions` returns 422 and the widget stays silent.\nRequires: an activated agent on the app (`ethora-agent-activate`); without it the widget opens but never answers.\nAuth: none required (uses the selected app when `appId` is omitted). Errors: effectively none; when no hosted widget is configured the snippet carries a `<WIDGET_URL>` placeholder. Related: `ethora-agent-activate`, `ethora-bot-widget-get` (legacy per-app bot only).",
             annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
             inputSchema: {
                 appId: z.string().optional().describe("App the widget belongs to (24-char hex). Defaults to the app from `ethora-app-select`."),
@@ -4454,7 +4404,7 @@ function widgetTools(server: McpServer) {
             },
         },
         async function ({ appId, botName, botAvatar, botId, primaryColor, locale, greeting, position, apiBase, widgetUrl }) {
-            const meta = getDefaultMeta("ethora-widget-embed-snippet")
+            const meta = getDefaultMeta("ethora-widget-snippet-get")
             try {
                 const state = getClientState() as any
                 const targetAppId = String(appId || state.currentAppId || "").trim()
@@ -4475,8 +4425,8 @@ function widgetTools(server: McpServer) {
                 const attrText = Object.entries(attributes).map(([k, v]) => `${k}="${esc(v)}"`).join("\n  ")
                 const snippet = `<script id="chat-content-assistant" src="${esc(scriptSrc)}"\n  ${attrText}\n  defer></script>`
                 const prerequisites = [
-                    "The app must have an ACTIVE bot: on API-created apps run `ethora-agents-create-v2`, invite the agent into a room with `ethora-agent-invite-to-chat`, then `ethora-agents-activate-v2 { agentId, chatJid }` (sets App.defaultBotInstanceId). Dashboard-created apps may already have one (AI Widget tab). Without it the widget's `POST /v2/widget/sessions` returns 422 `App has no AI bot configured`.",
-                    "The agent's bot instance must be on (`ethora-bot-instances-list` shows status=on) and the deployment's ai-service must be running.",
+                    "The app must have an ACTIVE bot: on API-created apps run `ethora-agent-create`, invite the agent into a room with `ethora-agent-invite`, then `ethora-agent-activate { agentId, chatJid }` (sets App.defaultBotInstanceId). Dashboard-created apps may already have one (AI Widget tab). Without it the widget's `POST /v2/widget/sessions` returns 422 `App has no AI bot configured`.",
+                    "The agent's bot instance must be on (`ethora-bot-instance-list` shows status=on) and the deployment's ai-service must be running.",
                     "`data-api-base` must be the API URL browsers can reach (this deployment: " + (api || "<not configured; set ETHORA_MCP_PUBLIC_API_URL or pass apiBase>") + "); the API allows cross-origin requests from any website by default.",
                     "The `<script>` tag must keep id=\"chat-content-assistant\": the bundle locates its own tag by that id to read the data-* attributes.",
                     "Widget sessions are rate limited per visitor IP (RATE_LIMIT_WIDGET_SESSION_MAX); each visitor gets a private room that persists in their browser storage.",
@@ -4501,9 +4451,7 @@ export function registerTools(server: McpServer) {
     helpTool(server);
     runRecipeTool(server);
     doctorTool(server);
-    authUseAppTool(server);
-    authUseUserTool(server);
-    authUseB2BTool(server);
+    authModeSetTool(server);
     appSelectTool(server);
     chatsBroadcastTool(server);
     chatsBroadcastJobTool(server);
@@ -4541,7 +4489,6 @@ export function registerTools(server: McpServer) {
     appListTool(server);
     appCreateTool(server);
     appUpdateTool(server);
-    appGetDefaultRoomsTool(server);
     craeteAppChatTool(server);
     appDeleteChatTool(server);
     getDefaultRoomsWithAppIdTool(server);
@@ -4590,8 +4537,8 @@ export function registerTools(server: McpServer) {
     chatsHistoryGetV2Tool(server);
     if (isAliasesEnabled()) {
         // Back-compat alias tools are off-by-default to keep the tool surface lean.
-        // The canonical tools (ethora-chats-message-v2 / -history-v2, ethora-b2b-* ,
-        // ethora-auth-use-b2b, ethora-wait-broadcast-job-v2) cover the same ground.
+        // The canonical tools (ethora-message-send / -history-v2, ethora-b2b-* ,
+        // ethora-auth-mode-set, ethora-broadcast-job-wait) cover the same ground.
         // Enable with ETHORA_MCP_ENABLE_ALIASES=true.
         botMessageCreateV2Tool(server);
         botHistoryGetV2Tool(server);

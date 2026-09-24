@@ -61,7 +61,7 @@ export type SessionContext = {
   oauth?: SessionOAuth
   // The Bearer header is re-applied on every request so a long-lived client
   // keeps working after an idle eviction. That used to silently undo an
-  // in-session `ethora-auth-use-b2b` / `ethora-configure`, which reported
+  // in-session `ethora-auth-mode-set` / `ethora-session-configure`, which reported
   // success while every later call still ran as the header's identity.
   // `explicitAuthMode` records that a tool chose the mode deliberately; the
   // header then stops overwriting it until its value actually changes
@@ -81,7 +81,7 @@ export function createSessionContext(id?: string): SessionContext {
     id: id || randomUUID(),
     tokens: {
       // Deployment-level bootstrap credentials seed every session; a session
-      // may override them via `ethora-configure` without affecting others.
+      // may override them via `ethora-session-configure` without affecting others.
       appJwt: appConfig.appJwt,
       appToken: "",
       appTokenAppId: "",

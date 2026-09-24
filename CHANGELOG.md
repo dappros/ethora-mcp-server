@@ -2,6 +2,17 @@
 
 All notable changes to this package are documented here. For cross-SDK release notes, see [ethora/RELEASE-NOTES.md](https://github.com/dappros/ethora/blob/main/RELEASE-NOTES.md).
 
+## 27.0.0 - 2026-09-24
+
+### Changed
+- **Tool names follow one rule: `ethora-<resource>-<verb>[-<qualifier>]`.** Singular resource, verb last, qualifiers (`-wait`, `-batch`, `-legacy`, `-b2b`) after the verb, no `-v2` suffixes. Examples: `ethora-agents-create-v2` is now `ethora-agent-create`, `ethora-chats-message-v2` is `ethora-message-send`, `ethora-wait-broadcast-job-v2` is `ethora-broadcast-job-wait`, `ethora-sources-site-crawl-v2-wait` is `ethora-source-site-crawl-wait`, `ethora-generate-env-examples` is `ethora-env-examples-generate`.
+- Three switches became one tool: `ethora-auth-use-user` / `-app` / `-b2b` are `ethora-auth-mode-set { mode }`. `ethora-app-get-default-rooms` and `-with-app-id` are one `ethora-app-rooms-list { appId? }`. The hosted catalogue is 86 tools (24 listed by default).
+- **Every earlier name keeps working.** Old names are aliases: unlisted, but a call is rewritten to the canonical tool, with the preset argument for the merged ones; results and `X-Ethora-Tool` attribution report the canonical name. The mapping is `src/toolNames.ts` (also in the README) and the tests check it against the registry.
+- Descriptions, `Requires:` lines, recipes, `ethora-help`, the docs corpus, the README and the Claude Code plugin skills all use the new names.
+
+### Migration
+- Nothing is required for existing clients. To adopt the new names, replace each old name with the one in the README table; the API request log (`source: mcp:<tool>`) shows canonical names from this version on.
+
 ## 26.9.4 - 2026-09-24
 
 ### Changed

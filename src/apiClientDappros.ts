@@ -125,7 +125,7 @@ httpClientDappros.interceptors.request.use((config) => {
   ) {
     if (!httpTokens.appJwt) {
       throw new Error(
-        "ETHORA_APP_JWT is not configured. Set env ETHORA_APP_JWT or call the `ethora-configure` tool."
+        "ETHORA_APP_JWT is not configured. Set env ETHORA_APP_JWT or call the `ethora-session-configure` tool."
       )
     }
     config.headers.Authorization = httpTokens.appJwt;
@@ -135,7 +135,7 @@ httpClientDappros.interceptors.request.use((config) => {
 
   if (ethoraContext.authMode === "b2b") {
     if (!httpTokens.b2bToken) {
-      throw new Error("B2B auth is selected but no b2bToken is configured. Set env ETHORA_B2B_TOKEN or call `ethora-configure` with b2bToken, or switch auth mode.")
+      throw new Error("B2B auth is selected but no b2bToken is configured. Set env ETHORA_B2B_TOKEN or call `ethora-session-configure` with b2bToken, or switch auth mode.")
     }
     // Backend expects `x-custom-token` for b2b/server/client flows.
     // Keep any existing Authorization header untouched.
@@ -160,14 +160,14 @@ httpClientDappros.interceptors.request.use((config) => {
 
   if (ethoraContext.authMode === "app") {
     if (!httpTokens.appToken) {
-      throw new Error("App-token auth is selected but no appToken is configured. Call `ethora-app-select` with appToken, or call `ethora-configure` and set appToken.")
+      throw new Error("App-token auth is selected but no appToken is configured. Call `ethora-app-select` with appToken, or call `ethora-session-configure` and set appToken.")
     }
     config.headers.Authorization = httpTokens.appToken
     return config
   }
 
   if (!httpTokens.token) {
-    throw new Error("Not logged in. Call `ethora-user-login` first (or switch to app-token auth via `ethora-auth-use-app`).")
+    throw new Error("Not logged in. Call `ethora-user-login` first (or switch to app-token auth via `ethora-auth-mode-set`).")
   }
   config.headers.Authorization = httpTokens.token;
 
@@ -386,7 +386,7 @@ export function appList() {
 }
 
 // Single app document (owner view). The tool layer redacts credentials from
-// results; `ethora-app-credentials` is the one place appToken is passed through.
+// results; `ethora-app-credentials-reveal` is the one place appToken is passed through.
 export function appGet(appId: string) {
   return httpClientDappros.get(`/apps/${String(appId || "").trim()}`)
 }

@@ -34,75 +34,75 @@ export const TOOL_GROUPS: Record<string, { summary: string; tools: string[] }> =
       "ethora-status", "ethora-help", "ethora-feedback-submit", "ethora-tools-enable", "search", "fetch",
       "ethora-user-register", "ethora-user-login", "ethora-api-key-create",
       "ethora-app-create", "ethora-app-list", "ethora-app-select", "ethora-app-update",
-      "ethora-app-create-chat", "ethora-chats-message-v2", "ethora-chats-history-v2",
-      "ethora-agents-create-v2", "ethora-agents-list-v2", "ethora-agents-update-v2",
-      "ethora-agent-invite-to-chat", "ethora-agents-activate-v2",
-      "ethora-sources-site-crawl-v2-wait", "ethora-sources-docs-upload-v2",
-      "ethora-widget-embed-snippet",
+      "ethora-chat-create", "ethora-message-send", "ethora-chat-history",
+      "ethora-agent-create", "ethora-agent-list", "ethora-agent-update",
+      "ethora-agent-invite", "ethora-agent-activate",
+      "ethora-source-site-crawl-wait", "ethora-source-doc-upload",
+      "ethora-widget-snippet-get",
     ],
   },
   keys: {
     summary: "List and revoke API keys, reveal an app's credentials, mint and rotate app tokens.",
     tools: [
-      "ethora-api-key-list", "ethora-api-key-revoke", "ethora-app-credentials",
-      "ethora-app-tokens-create-v2", "ethora-app-tokens-list-v2", "ethora-app-tokens-revoke-v2", "ethora-app-tokens-rotate-v2",
+      "ethora-api-key-list", "ethora-api-key-revoke", "ethora-app-credentials-reveal",
+      "ethora-app-token-create", "ethora-app-token-list", "ethora-app-token-revoke", "ethora-app-token-rotate",
     ],
   },
   session: {
     summary: "Diagnostics, recipes and switching the session's auth mode (app token, B2B token) for server integrations.",
-    tools: ["ethora-doctor", "ethora-run-recipe", "ethora-configure", "ethora-auth-use-user", "ethora-auth-use-app", "ethora-auth-use-b2b"],
+    tools: ["ethora-doctor", "ethora-recipe-run", "ethora-session-configure", "ethora-auth-mode-set"],
   },
   "apps-admin": {
     summary: "Delete, export and import whole apps; inspect default rooms.",
-    tools: ["ethora-app-delete", "ethora-app-export-v2", "ethora-app-import-v2", "ethora-app-get-default-rooms", "ethora-app-get-default-rooms-with-app-id"],
+    tools: ["ethora-app-delete", "ethora-app-export", "ethora-app-import", "ethora-app-rooms-list"],
   },
   rooms: {
     summary: "Delete rooms, broadcast to many rooms, search messages, read message context and unread counts.",
     tools: [
-      "ethora-app-delete-chat", "ethora-chats-broadcast-v2", "ethora-chats-broadcast-job-v2", "ethora-wait-broadcast-job-v2",
-      "ethora-messages-search-v2", "ethora-messages-context-v2", "ethora-unread-counts-v2",
+      "ethora-chat-delete", "ethora-broadcast-send", "ethora-broadcast-job-start", "ethora-broadcast-job-wait",
+      "ethora-message-search", "ethora-message-context", "ethora-chat-unread-counts",
     ],
   },
   "agents-admin": {
     summary: "Inspect, clone, delete, export and import agents; edit an agent's soul and visibility.",
     tools: [
-      "ethora-agents-get-v2", "ethora-agents-clone-v2", "ethora-agents-delete-v2", "ethora-agents-export-v2", "ethora-agents-import-v2",
-      "ethora-agent-set-visibility", "ethora-agent-soul-set", "ethora-agent-soul-append",
+      "ethora-agent-get", "ethora-agent-clone", "ethora-agent-delete", "ethora-agent-export", "ethora-agent-import",
+      "ethora-agent-visibility-set", "ethora-agent-soul-set", "ethora-agent-soul-append",
     ],
   },
   sources: {
     summary: "Knowledge-base maintenance: async crawl and reindex jobs, list and tag sites and documents, delete URLs and documents.",
     tools: [
-      "ethora-sources-site-crawl-v2", "ethora-sources-site-reindex-v2", "ethora-sources-site-reindex-v2-wait", "ethora-sources-site-list-v2",
-      "ethora-sources-site-tags-update-v2", "ethora-sources-site-delete-url-v2", "ethora-sources-site-delete-url-v2-batch",
-      "ethora-sources-docs-list-v2", "ethora-sources-docs-tags-update-v2", "ethora-sources-docs-delete-v2",
+      "ethora-source-site-crawl", "ethora-source-site-reindex", "ethora-source-site-reindex-wait", "ethora-source-site-list",
+      "ethora-source-site-tags-update", "ethora-source-site-url-delete", "ethora-source-site-url-delete-batch",
+      "ethora-source-doc-list", "ethora-source-doc-tags-update", "ethora-source-doc-delete",
     ],
   },
   "users-files": {
     summary: "Batch-create users and upload, fetch or delete files.",
-    tools: ["ethora-users-batch-create-v2", "ethora-users-batch-job-v2", "ethora-wait-users-batch-job-v2", "ethora-files-upload-v2", "ethora-files-get-v2", "ethora-files-delete-v2"],
+    tools: ["ethora-user-batch-create", "ethora-user-batch-job-start", "ethora-user-batch-job-wait", "ethora-file-upload", "ethora-file-get", "ethora-file-delete"],
   },
   "legacy-bot": {
     summary: "The per-app bot of apps created in the dashboard before the agents framework, and the pre-v2 document tools. Prefer the agents and sources tools for anything new.",
     tools: [
-      "ethora-bot-get-v2", "ethora-bot-update-v2", "ethora-bot-enable-v2", "ethora-bot-disable-v2", "ethora-bot-widget-v2",
-      "ethora-bot-history-v2", "ethora-bot-message-v2", "ethora-bot-instances-list", "ethora-bot-instance-status",
-      "ethora-bot-instance-diag", "ethora-bot-instance-leave-chat", "ethora-bot-instance-test-message", "ethora-b2b-bot-enable",
-      "ethora-sources-docs-upload", "ethora-sources-docs-delete",
+      "ethora-bot-get", "ethora-bot-update", "ethora-bot-enable", "ethora-bot-disable", "ethora-bot-widget-get",
+      "ethora-bot-history", "ethora-bot-message-send", "ethora-bot-instance-list", "ethora-bot-instance-status-set",
+      "ethora-bot-instance-diagnose", "ethora-bot-instance-leave", "ethora-bot-instance-test", "ethora-bot-enable-b2b",
+      "ethora-source-doc-upload-legacy", "ethora-source-doc-delete-legacy",
     ],
   },
   b2b: {
     summary: "Server-to-server provisioning with a B2B token, plus code and config generators for integrations.",
     tools: [
       "ethora-b2b-app-create", "ethora-b2b-app-provision", "ethora-b2b-app-bootstrap-ai",
-      "ethora-generate-b2b-bootstrap-runbook", "ethora-generate-env-examples", "ethora-generate-chat-component-app-tsx",
+      "ethora-b2b-runbook-generate", "ethora-env-examples-generate", "ethora-chat-component-app-generate",
       // Dotted names from the first release, kept so old integrations keep working.
       "ethora.b2b.auth.use", "ethora.b2b.app.create", "ethora.b2b.bot.enable", "ethora.b2b.broadcast.wait", "ethora.b2b.app.bootstrap-ai",
     ],
   },
   wallet: {
     summary: "Wallet balance and ERC-20 transfer. Local (stdio) only; never offered on the hosted server.",
-    tools: ["ethora-wallet-get-balance", "ethora-wallet-erc20-transfer"],
+    tools: ["ethora-wallet-balance-get", "ethora-wallet-erc20-transfer"],
   },
 }
 
@@ -118,16 +118,16 @@ export function groupOf(name: string): string | undefined {
 // Wording added to the description of tools whose sibling is the better
 // default, so a model that enabled a group still picks the right variant.
 const VARIANT_NOTES: Record<string, string> = {
-  "ethora-sources-site-crawl-v2": "Async variant: returns a job id to poll. Prefer `ethora-sources-site-crawl-v2-wait` unless the crawl is expected to exceed its wait budget.",
-  "ethora-sources-site-reindex-v2": "Async variant: returns a job id to poll. Prefer `ethora-sources-site-reindex-v2-wait` unless the job is expected to exceed its wait budget.",
-  "ethora-chats-broadcast-job-v2": "Async variant of `ethora-chats-broadcast-v2`; pair with `ethora-wait-broadcast-job-v2`.",
-  "ethora-users-batch-job-v2": "Async variant of `ethora-users-batch-create-v2`; pair with `ethora-wait-users-batch-job-v2`.",
-  "ethora-sources-docs-upload": "Legacy pre-v2 upload for the per-app bot. For agents use `ethora-sources-docs-upload-v2`.",
-  "ethora-sources-docs-delete": "Legacy pre-v2 delete for the per-app bot. For agents use `ethora-sources-docs-delete-v2`.",
-  "ethora.b2b.auth.use": "Legacy dotted name kept for old integrations; use `ethora-auth-use-b2b`.",
+  "ethora-source-site-crawl": "Async variant: returns a job id to poll. Prefer `ethora-source-site-crawl-wait` unless the crawl is expected to exceed its wait budget.",
+  "ethora-source-site-reindex": "Async variant: returns a job id to poll. Prefer `ethora-source-site-reindex-wait` unless the job is expected to exceed its wait budget.",
+  "ethora-broadcast-job-start": "Async variant of `ethora-broadcast-send`; pair with `ethora-broadcast-job-wait`.",
+  "ethora-user-batch-job-start": "Async variant of `ethora-user-batch-create`; pair with `ethora-user-batch-job-wait`.",
+  "ethora-source-doc-upload-legacy": "Legacy pre-v2 upload for the per-app bot. For agents use `ethora-source-doc-upload`.",
+  "ethora-source-doc-delete-legacy": "Legacy pre-v2 delete for the per-app bot. For agents use `ethora-source-doc-delete`.",
+  "ethora.b2b.auth.use": "Legacy dotted name kept for old integrations; use `ethora-auth-mode-set`.",
   "ethora.b2b.app.create": "Legacy dotted name kept for old integrations; use `ethora-b2b-app-create`.",
-  "ethora.b2b.bot.enable": "Legacy dotted name kept for old integrations; use `ethora-b2b-bot-enable`.",
-  "ethora.b2b.broadcast.wait": "Legacy dotted name kept for old integrations; use `ethora-chats-broadcast-v2` or the broadcast job tools.",
+  "ethora.b2b.bot.enable": "Legacy dotted name kept for old integrations; use `ethora-bot-enable-b2b`.",
+  "ethora.b2b.broadcast.wait": "Legacy dotted name kept for old integrations; use `ethora-broadcast-send` or the broadcast job tools.",
   "ethora.b2b.app.bootstrap-ai": "Legacy dotted name kept for old integrations; use `ethora-b2b-app-bootstrap-ai`.",
 }
 const LEGACY_BOT_NOTE = "Legacy per-app bot (apps created in the dashboard before the agents framework). For anything new use the agents tools (`ethora-agents-*`)."
