@@ -1,7 +1,8 @@
 # syntax=docker/dockerfile:1
 
 # Build stage: compile TypeScript -> dist/ (dist is gitignored, so it must be built here)
-FROM node:22-alpine AS builder
+ARG NODE_VERSION=24
+FROM node:${NODE_VERSION}-alpine AS builder
 
 WORKDIR /app
 
@@ -13,7 +14,7 @@ COPY src ./src
 RUN npm run build
 
 # Runtime stage: production deps + compiled output only
-FROM node:22-alpine AS release
+FROM node:${NODE_VERSION}-alpine AS release
 
 ENV NODE_ENV=production
 
