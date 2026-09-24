@@ -166,11 +166,60 @@ export function asToolResult(envelope: any): CallToolResult {
     return { content: [{ type: "text", text: JSON.stringify(envelope) }] }
 }
 
+// On the hosted server the client talks to the API over loopback; the address
+// a person or agent can use is the public one, so that is what goes out.
+export function publicApiUrlFor(state: any): string {
+    return state?.hosted && appConfig.publicApiUrl ? String(appConfig.publicApiUrl) : String(state?.apiUrl || "")
+}
+
+// Who spoke: archive rows carry an XMPP localpart (`<appId>_<userId>`, with
+// `-bot` for bot instances) and sometimes a nick. A person or an agent
+// narrating a room needs a name and a kind, so rows are annotated with
+// `senderName` and `senderKind` (human | agent | app). Lookups are one call
+// each per invocation and any failure leaves the row as it was.
+async function annotateSenders(appId: string, rows: any[]): Promise<any[]> {
+    if (!Array.isArray(rows) || !rows.length) return rows
+    const looksBot = (from: string) => /-bot(@|$)/.test(from) || /_bot(@|$)/.test(from)
+    let byInstance: Map<string, string> | null = null
+    const needBots = rows.some((r) => looksBot(String(r?.from || "")))
+    if (needBots) {
+        try {
+            const [inst, agents] = await Promise.all([botInstancesListV2({ appId }), agentsListV2(appId)])
+            const agentName = new Map<string, string>()
+            for (const a of (agents?.data?.agents || agents?.data?.items || agents?.data?.data?.agents || agents?.data?.result || []) as any[]) {
+                const id = String(a?.id || a?._id || ""); if (id) agentName.set(id, String(a?.displayName || a?.name || a?.botDisplayName || "Agent"))
+            }
+            byInstance = new Map()
+            for (const b of (inst?.data?.items || inst?.data?.botInstances || inst?.data?.data?.items || inst?.data?.result || []) as any[]) {
+                const name = agentName.get(String(b?.agentId || "")) || String(b?.displayName || b?.botDisplayName || "Agent")
+                for (const k of [b?._id, b?.id, b?.xmppUsername, b?.userId]) if (k) byInstance.set(String(k), name)
+            }
+        } catch { byInstance = null }
+    }
+    const systemLocal = `${appId}_${appId}`
+    return rows.map((r) => {
+        if (!r || typeof r !== "object") return r
+        const from = String(r.from || "")
+        const local = from.split("@")[0].replace(/-bot$/, "")
+        const nick = String(r.nick || "").trim()
+        let senderKind: "human" | "agent" | "app" = "human"
+        let senderName = nick && !/^[0-9a-f]{24}_[0-9a-f]{24}/.test(nick) ? nick : ""
+        if (looksBot(from)) {
+            senderKind = "agent"
+            const resolved = byInstance?.get(local) || byInstance?.get(local.split("_")[1] || "")
+            if (resolved) senderName = resolved
+        } else if (local === systemLocal) {
+            senderKind = "app"; senderName = senderName || "app"
+        }
+        return { ...r, senderName: senderName || from, senderKind }
+    })
+}
+
 export function getDefaultMeta(tool: string) {
     const state = getClientState() as any
     return {
         tool,
-        apiUrl: state.apiUrl,
+        apiUrl: publicApiUrlFor(state),
         authMode: state.authMode,
         currentAppId: state.currentAppId,
         // Echoed on every envelope so a model can notice session drift (a
@@ -333,7 +382,7 @@ function configureTool(server: McpServer) {
     server.registerTool(
         "ethora-session-configure",
         {
-            description: "Set the Ethora API URL and credentials for this MCP session. Stores values in memory only; each call merges with omitted fields kept. Alternative to env vars (ETHORA_API_URL / ETHORA_APP_JWT / ETHORA_APP_TOKEN / ETHORA_B2B_TOKEN). On a hosted server `apiUrl` is fixed and cannot be changed; credentials are per session.\nAuth: none required — this establishes auth material. Errors: only if a value is structurally invalid. Follow with an `ethora-auth-use-*` tool to pick the active mode.",
+            description: "Set the Ethora API URL and credentials for this MCP session. Stores values in memory only; each call merges with omitted fields kept. Alternative to env vars (ETHORA_API_URL / ETHORA_APP_JWT / ETHORA_APP_TOKEN / ETHORA_B2B_TOKEN). On a hosted server `apiUrl` is fixed and cannot be changed; credentials are per session.\nAuth: none required — this establishes auth material. Errors: only if a value is structurally invalid. Follow with `ethora-auth-mode-set { mode }` to pick the active mode.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
             inputSchema: {
                 apiUrl: z.string().optional().describe("Full Ethora API URL including the version path, e.g. `https://api.chat.ethora.com/v1` or `http://localhost:8080/v1`. If you only have the host, set ETHORA_BASE_URL env instead and the server appends `/v1`."),
@@ -377,8 +426,8 @@ function helpTool(server: McpServer) {
             description: "Task-oriented orientation for this MCP server: explains the three Ethora auth modes (user / app-token / B2B) and recommends next tool calls + recipes based on current session state.\nAuth: none required — inspects state, no API calls. Errors: effectively none. Related: pass a recommended recipe id to `ethora-recipe-run`.",
             annotations: { readOnlyHint: true, openWorldHint: false },
             inputSchema: {
-                goal: z.enum(["auto", "b2b-bootstrap-ai", "broadcast", "sources-ingest", "files-upload", "bot-manage", "chat-test", "widget", "user-login"]).optional()
-                    .describe("Goal hint to tailor the recommendations and recipe list. Omit or use `auto` to get recommendations inferred from the current session state."),
+                goal: z.enum(["auto", "new-app", "in-app-chat", "multi-agent-room", "widget", "chat-test", "b2b-bootstrap-ai", "broadcast", "sources-ingest", "files-upload", "bot-manage", "user-login"]).optional()
+                    .describe("What you are trying to do: `new-app` (a new chat app: create, brand, rooms, users, where it lives), `in-app-chat` (chat inside your existing product with your own UI and users), `multi-agent-room` (several AI agents in one room, talking to people and each other), `widget` (AI chat widget on a website), `chat-test` (post and read messages), `b2b-bootstrap-ai` (server-side provisioning), `broadcast`, `sources-ingest`, `files-upload`, `bot-manage`, `user-login`. Omit or use `auto` for recommendations inferred from the current session state."),
             },
         },
         async function ({ goal }) {
@@ -671,6 +720,83 @@ function helpTool(server: McpServer) {
                         ],
                     })
                 }
+                // Goal: a brand-new chat app (create, brand, rooms, first users, where it lives)
+                if (effectiveGoal === "new-app") {
+                    const appId = String(state.currentAppId || "<APP_ID>")
+                    nextCalls.push(
+                        { tool: "ethora-app-create", args: { displayName: "My App" }, why: "Creates the app (tenant). The result carries `created.id`, `next` and `dashboardUrl` (the app in the web dashboard, where branding, users and the hosted web client are managed)." },
+                        { tool: "ethora-app-select", args: { appId }, why: "Makes it the current app so the tools below can omit appId." },
+                        { tool: "ethora-app-update", args: { appId, displayName: "My App", appTagline: "Chat for our community", primaryColor: "#2f6feb" }, why: "Branding: name, tagline and primary colour. Logo and domain are set in the web dashboard (app settings, Appearance)." },
+                        { tool: "ethora-chat-create", args: { appId, title: "General", pinned: true }, why: "Rooms; `pinned: true` auto-joins every new user." },
+                        { tool: "ethora-user-batch-create", args: { appId, usersList: [{ email: "first@example.com", firstName: "First", lastName: "User" }] }, why: "Seed users (enable the `users-files` group first, or let your end users sign up in the web client)." },
+                    )
+                    recipes.push({
+                        id: "new-app",
+                        title: "Build a new chat-based app",
+                        description: "One app = one tenant with its own users, rooms, branding and web client. Create it, brand it, add rooms, seed or invite users; add an AI agent later with the `multi-agent-room` or `widget` recipes. The hosted web client needs no code; for your own UI see the `in-app-chat` recipe.",
+                        steps: [
+                            { tool: "ethora-app-create", args: { displayName: "My App" } },
+                            { tool: "ethora-app-select", args: { appId: "<APP_ID>" } },
+                            { tool: "ethora-app-update", args: { appId: "<APP_ID>", appTagline: "Chat for our community", primaryColor: "#2f6feb" } },
+                            { tool: "ethora-chat-create", args: { appId: "<APP_ID>", title: "General", pinned: true } },
+                            { tool: "ethora-tools-enable", args: { group: "users-files" } },
+                            { tool: "ethora-user-batch-create", args: { appId: "<APP_ID>", usersList: [{ email: "first@example.com", firstName: "First", lastName: "User" }] } },
+                        ],
+                    })
+                }
+                // Goal: chat inside an existing product (your UI, your users)
+                if (effectiveGoal === "in-app-chat") {
+                    const appId = String(state.currentAppId || "<APP_ID>")
+                    nextCalls.push(
+                        { tool: "ethora-app-create", args: { displayName: "My Product Chat" }, why: "One Ethora app per product: it holds the rooms and the chat identities of your users." },
+                        { tool: "ethora-app-select", args: { appId }, why: "Current app for the calls below." },
+                        { tool: "ethora-chat-create", args: { appId, title: "Support" }, why: "Rooms your UI will open; keep the `jid`." },
+                        { tool: "fetch", args: { id: "doc:chat-component-quickstart" }, why: "The React chat component (`@ethora/chat-component`) renders rooms in your web app; this is the copy-paste quickstart." },
+                        { tool: "fetch", args: { id: "doc:sdk-backend-quickstart" }, why: "How your backend signs your own users into Ethora chat (no Ethora password): the backend SDK mints their chat tokens from your app credentials." },
+                        { tool: "ethora-chat-component-app-generate", args: { appId }, why: "Generates a ready `App.tsx` wired to this app (enable the `b2b` group first)." },
+                    )
+                    recipes.push({
+                        id: "in-app-chat",
+                        title: "Add in-app chat to an existing app",
+                        description: "Web: drop in `@ethora/chat-component` (React) and sign your users in from your backend with `@ethora/sdk-backend`, so they never see an Ethora login. iOS/Android: the React Native app template in the Ethora SDK monorepo, or the same REST + XMPP APIs. Steps 1-3 set up the app and rooms over MCP; steps 4-6 are the code side.",
+                        steps: [
+                            { tool: "ethora-app-create", args: { displayName: "My Product Chat" } },
+                            { tool: "ethora-app-select", args: { appId: "<APP_ID>" } },
+                            { tool: "ethora-chat-create", args: { appId: "<APP_ID>", title: "Support" } },
+                            { tool: "fetch", args: { id: "doc:chat-component-quickstart" } },
+                            { tool: "fetch", args: { id: "doc:sdk-backend-quickstart" } },
+                            { tool: "ethora-app-credentials-reveal", args: { appId: "<APP_ID>", confirm: true } },
+                        ],
+                    })
+                }
+                // Goal: several agents in one room, with each other and with people
+                if (effectiveGoal === "multi-agent-room") {
+                    const appId = String(state.currentAppId || "<APP_ID>")
+                    nextCalls.push(
+                        { tool: "ethora-chat-create", args: { appId, title: "Salon" }, why: "The room the agents share; keep the `jid`." },
+                        { tool: "ethora-agent-create", args: { name: "Freud", prompt: "You are Sigmund Freud. Two sentences at most. End every message by addressing @Jung or the person who spoke.", responseMode: "smart" }, why: "One-word display names: the mention matcher uses exact names. `smart` (default) lets the response gate pick who answers; `mentioned` replies only when named, which is the reliable way to script turn order." },
+                        { tool: "ethora-agent-create", args: { name: "Jung", prompt: "You are Carl Jung. Two sentences at most. End every message by addressing @Freud or the person who spoke.", responseMode: "smart" }, why: "Second persona. Agents reply to each other only when a message names them or the gate picks them, so make each prompt hand the turn to the other by @-name." },
+                        { tool: "ethora-agent-invite", args: { agentIdOrAddress: "<AGENT_ID_1>", chatJid: "<ROOM_JID>" }, why: "Spawns the bot instance in the room." },
+                        { tool: "ethora-agent-invite", args: { agentIdOrAddress: "<AGENT_ID_2>", chatJid: "<ROOM_JID>" }, why: "Second agent in the same room." },
+                        { tool: "ethora-message-send", args: { roomJid: "<ROOM_JID>", text: "Freud, what would you tell Jung about dreams?", waitForReplySec: 45 }, why: "Address one agent by name to start; the reply comes back in `replies` with `senderName`. The addressed agent answers first; the loop guard keeps them from talking over each other." },
+                        { tool: "ethora-chat-history", args: { roomJid: "<ROOM_JID>", limit: 20 }, why: "Watch the exchange continue; `results[].senderName` says who spoke." },
+                    )
+                    recipes.push({
+                        id: "multi-agent-room",
+                        title: "Seed a room with several AI agents",
+                        description: "Agents in one room reply to people and to each other. Turn-taking is driven by names: give every agent a single-word display name, and instruct each prompt to end by @-mentioning who speaks next. `responseMode: 'smart'` (default) lets the gate choose; `responseMode: 'mentioned'` replies only when named and gives strict turn order (debates, games, interviews). `cooldownSec` and `responseProbability` throttle chatty agents. Full text: `fetch { id: \"doc:recipes#controlling-turn-taking-multi-agent-rooms\" }`.",
+                        steps: [
+                            { tool: "ethora-app-select", args: { appId: "<APP_ID>" } },
+                            { tool: "ethora-chat-create", args: { appId: "<APP_ID>", title: "Salon" } },
+                            { tool: "ethora-agent-create", args: { name: "Freud", prompt: "...end every message by addressing @Jung or the person who spoke.", responseMode: "smart" } },
+                            { tool: "ethora-agent-create", args: { name: "Jung", prompt: "...end every message by addressing @Freud or the person who spoke.", responseMode: "smart" } },
+                            { tool: "ethora-agent-invite", args: { agentIdOrAddress: "<AGENT_ID_1>", chatJid: "<ROOM_JID>" } },
+                            { tool: "ethora-agent-invite", args: { agentIdOrAddress: "<AGENT_ID_2>", chatJid: "<ROOM_JID>" } },
+                            { tool: "ethora-message-send", args: { roomJid: "<ROOM_JID>", text: "Freud, what would you tell Jung about dreams?", waitForReplySec: 45 } },
+                            { tool: "ethora-chat-history", args: { roomJid: "<ROOM_JID>", limit: 20 } },
+                        ],
+                    })
+                }
                 // Auto mode: minimal “get unstuck” guidance
                 if (effectiveGoal === "auto") {
                     if (!checks.hasApiUrl) {
@@ -741,7 +867,7 @@ function helpTool(server: McpServer) {
                 return asToolResult(ok({
                     hosted: state.hosted ? {
                         enabled: true,
-                        apiUrl: state.apiUrl,
+                        apiUrl: publicApiUrlFor(state),
                         authPaths: [
                             "Connection header `Authorization: Bearer <user API key | appToken | b2b token>` (applied on every request; no tool call needed).",
                             "`ethora-user-login` with email + password (binds this MCP session; add `createApiKey: true` to get a reusable key).",
@@ -975,7 +1101,7 @@ function runRecipeTool(server: McpServer) {
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
             inputSchema: {
                 recipeId: z.string().min(1).optional().describe("Id of the recipe to run. Omit to instead list the runnable recipes for the selected `goal` (get ids from `ethora-help`)."),
-                goal: z.enum(["auto", "b2b-bootstrap-ai", "broadcast", "sources-ingest", "files-upload", "bot-manage", "chat-test", "widget", "user-login"]).optional()
+                goal: z.enum(["auto", "new-app", "in-app-chat", "multi-agent-room", "widget", "chat-test", "b2b-bootstrap-ai", "broadcast", "sources-ingest", "files-upload", "bot-manage", "user-login"]).optional()
                     .describe("Goal scope used to look up recipes when `recipeId` is omitted. Defaults to `auto`."),
                 vars: z.record(z.any()).optional().describe("Key/value substitutions injected into recipe steps (e.g. appId, appToken, b2bToken, appJwt, email, password, apiUrl). A recipe declares which vars it requires; missing required vars fail the run before any step executes."),
                 dryRun: z.boolean().optional().describe("If true, resolve and return the step list with `vars` substituted but execute nothing. Use this to preview a recipe before running it for real."),
@@ -1915,7 +2041,21 @@ function appCreateTool(server: McpServer) {
                 const createdId = createdApp?._id || createdApp?.appId || created.appId
                 const createdToken = created.appToken || createdApp?.appToken
                 if (createdId && createdToken) rememberAppToken(String(createdId), String(createdToken))
-                return asToolResult(ok(result.data, getDefaultMeta("ethora-app-create")))
+                // Same shape as every create tool: what was made, and what to do next.
+                const meta = getDefaultMeta("ethora-app-create")
+                const dashboardUrl = createdId ? `${String(meta.apiUrl || "").replace(/^https?:\/\/api\./, "https://app.").replace(/\/v\d+\/?$/, "")}/app/admin/apps/${createdId}/settings` : undefined
+                const out = {
+                    ...(result.data || {}),
+                    created: { kind: "app", id: createdId ? String(createdId) : undefined, name: createdApp?.displayName || displayName },
+                    ...(dashboardUrl ? { dashboardUrl } : {}),
+                    next: [
+                        { tool: "ethora-app-select", args: { appId: createdId ? String(createdId) : "<APP_ID>" }, why: "Make it the current app so the next calls can omit appId." },
+                        { tool: "ethora-chat-create", args: { title: "General", pinned: true }, why: "First room; pinned rooms auto-join every new user." },
+                        { tool: "ethora-agent-create", args: { name: "Helper", prompt: "You are a helpful assistant for this app." }, why: "An AI agent to put in rooms or behind the website widget." },
+                        { tool: "ethora-help", args: { goal: "new-app" }, why: "Branding, users and where the app lives; or `in-app-chat` to use your own UI." },
+                    ],
+                }
+                return asToolResult(ok(out, meta))
             } catch (error) {
                 return asToolResult(fail(error, getDefaultMeta("ethora-app-create")))
             }
@@ -2042,7 +2182,19 @@ function craeteAppChatTool(server: McpServer) {
                     throw new Error(APP_CONTEXT_MISSING_MESSAGE)
                 }
                 let result = await appCreateChat(effectiveAppId, title, pinned)
-                return asToolResult(ok(result.data, getDefaultMeta("ethora-chat-create")))
+                const roomData: any = result.data || {}
+                const roomObj: any = roomData.result || roomData.chat || roomData
+                const jid = String(roomObj?.jid || roomObj?.roomJid || "")
+                const out = {
+                    ...roomData,
+                    created: { kind: "room", id: jid ? jid.split("_").slice(1).join("_") : undefined, jid: jid || undefined, name: roomObj?.title || title },
+                    next: [
+                        { tool: "ethora-agent-invite", args: { agentIdOrAddress: "<AGENT_ID>", chatJid: jid || "<ROOM_JID>" }, why: "Put an AI agent in the room (create one with ethora-agent-create first)." },
+                        { tool: "ethora-message-send", args: { roomJid: jid || "<ROOM_JID>", text: "Hello", waitForReplySec: 45 }, why: "Post a message and wait for an agent's reply." },
+                        { tool: "ethora-chat-history", args: { roomJid: jid || "<ROOM_JID>", limit: 20 }, why: "Read the room; each row has senderName and senderKind." },
+                    ],
+                }
+                return asToolResult(ok(out, getDefaultMeta("ethora-chat-create")))
             } catch (error) {
                 return asToolResult(fail(error, getDefaultMeta("ethora-chat-create")))
             }
@@ -2321,7 +2473,18 @@ function agentsCreateV2Tool(server: McpServer) {
                 const res = await agentsCreateV2(rest as any, ctx.appId)
                 const createdId = String(res?.data?.agent?.id || res?.data?.agent?._id || "")
                 if (createdId) selectAgent({ agentId: createdId })
-                return asToolResult(ok(res.data, meta))
+                const agentObj: any = res?.data?.agent || {}
+                const out = {
+                    ...(res.data || {}),
+                    created: { kind: "agent", id: createdId || undefined, address: agentObj?.address || undefined, name: agentObj?.displayName || agentObj?.name || (rest as any)?.name },
+                    next: [
+                        { tool: "ethora-agent-invite", args: { agentIdOrAddress: createdId || "<AGENT_ID>", chatJid: "<ROOM_JID>" }, why: "Put the agent in a room (ethora-chat-create makes one); it starts answering there." },
+                        { tool: "ethora-source-site-crawl-wait", args: { url: "https://example.com", agentId: createdId || "<AGENT_ID>" }, why: "Optional: give it a knowledge base from a website (or ethora-source-doc-upload for files)." },
+                        { tool: "ethora-agent-activate", args: { agentId: createdId || "<AGENT_ID>", chatJid: "<ROOM_JID>" }, why: "Optional: make it the app's website-widget bot, then ethora-widget-snippet-get." },
+                        { tool: "ethora-help", args: { goal: "multi-agent-room" }, why: "Several agents in one room, talking to people and to each other." },
+                    ],
+                }
+                return asToolResult(ok(out, meta))
             } catch (error) {
                 return asToolResult(fail(error, meta))
             }
@@ -3037,7 +3200,7 @@ function chatsMessageCreateV2Tool(server: McpServer) {
                     out.waitedSec = wait
                     out.historyUnavailable = historyUnavailable
                     out.postedVisibleInHistory = postedTs > 0
-                    out.replies = replies.map((r) => ({ from: r.nick || r.from, text: r.body, ts: r.ts }))
+                    out.replies = (await annotateSenders(String(room.appId), replies)).map((r) => ({ from: r.nick || r.from, senderName: r.senderName, senderKind: r.senderKind, text: r.body, ts: r.ts }))
                     if (!replies.length) out.note = historyUnavailable
                         ? "Message archive unavailable on this deployment; cannot observe replies."
                         : `No reply from another participant within ${wait}s. Agents reply only if invited into this room (ethora-agent-invite) and their response gate allows it; check ethora-bot-instance-list.`
@@ -3070,7 +3233,9 @@ function chatsHistoryGetV2Tool(server: McpServer) {
                 const ctx = resolveAppScopedV2Context(appId)
                 const room = await resolveRoom(ctx.appId, roomJid || chatId)
                 const res = await appChatMessagesV2(room.appId, room.mongoId, { limit, before })
-                return asToolResult(ok({ appId: room.appId, chatId: room.mongoId, roomJid: room.roomJid, ...(res.data?.data ?? res.data) }, meta))
+                const body: any = res.data?.data ?? res.data
+                const results = Array.isArray(body?.results) ? await annotateSenders(String(room.appId), body.results) : body?.results
+                return asToolResult(ok({ appId: room.appId, chatId: room.mongoId, roomJid: room.roomJid, ...body, results }, meta))
             } catch (error) {
                 return asToolResult(fail(error, meta))
             }

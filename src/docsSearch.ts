@@ -28,6 +28,9 @@ type Doc = {
   url: string
   kind: "doc" | "tool"
   guide?: boolean
+  // A whole markdown document under its bare id; sections are listed
+  // separately, so term search prefers those and this serves fetch.
+  whole?: boolean
 }
 
 const CREDENTIALS_MD = `
@@ -151,6 +154,47 @@ function toolDocs(server: McpServer): Doc[] {
   return docs
 }
 
+// What is not available over MCP (yet), said plainly, with where it does exist.
+// Newcomers ask for these; a search that returns unrelated tools reads as a
+// broken product, an honest "no, here is where" does not.
+const NOT_AVAILABLE_MD = `
+# Not available over MCP (and where it lives instead)
+
+## Webhooks and message events
+There is no webhook or event subscription over MCP. To react to messages, poll \`ethora-chat-history\` (it returns a \`nextBefore\` cursor) or \`ethora-message-search\`, or run your own listener with the backend SDK, which connects to the room over XMPP. \`ethora-message-send { waitForReplySec }\` covers the common "post and wait for the agent's answer" case.
+
+## Push notifications
+Mobile push (Firebase, APNs) is configured per app in the web dashboard under the app's settings, where the service credentials are uploaded. Nothing to call over MCP.
+
+## Moderation, bans and blocking
+Banning or blocking users and deleting other people's messages happen in the web client and dashboard (app users list, room member menus); they are not exposed as MCP tools yet. \`ethora-chat-delete\` removes a whole room; \`ethora-app-delete\` removes an app.
+
+## Billing, custom domains, logo
+Plans and billing, a custom domain and the logo images are managed in the web dashboard (Billing; the app's Appearance settings). \`ethora-app-update\` covers the display name, tagline and primary colour.
+
+## Voice, video, file previews
+Calls and media are features of the chat clients (web client, React Native app, chat component); MCP manages the apps, rooms, users and agents behind them.
+`
+
+// Phrases newcomers use and the documents that actually answer them. Applied
+// on top of term scoring so intent wins over word overlap ("branding" should
+// reach ethora-app-update, not every tool with "app" in its name).
+const INTENTS: Array<{ match: RegExp; ids: string[] }> = [
+  // Order matters: the first matching intent leads the results.
+  { match: /\b(end[- ]?users?|my users|customers?|sso|single sign|log ?in|sign ?in|token)s?\b.*\b(chat|log|sign|auth)/i, ids: ["doc:sdk-backend-quickstart", "doc:recipes#add-in-app-chat-to-an-existing-app", "doc:auth-map"] },
+  { match: /\b(in[- ]?app|existing (app|product|site)|my (app|product|react|next|vue|angular|ios|android|react native|mobile)|chat component|embed(ded)? chat|add chat)\b/i, ids: ["doc:recipes#add-in-app-chat-to-an-existing-app", "doc:chat-component-quickstart", "doc:sdk-backend-quickstart", "tool:ethora-chat-component-app-generate"] },
+  { match: /\b(widget|website|web ?page|wordpress|landing page|floating|launcher)\b/i, ids: ["doc:recipes#ai-chat-widget-on-a-website-user-auth", "tool:ethora-widget-snippet-get", "tool:ethora-agent-activate"] },
+  { match: /\b(agents? (talk|chat|speak|debat|convers|reply)|several agents|multiple agents|two agents|each other|multi[- ]?agent|turn[- ]?taking|personas?|round ?table|debate)\b/i, ids: ["doc:recipes#seed-a-room-with-several-ai-agents", "doc:recipes#controlling-turn-taking-multi-agent-rooms", "doc:recipes#ai-agents-end-to-end-phase-1", "tool:ethora-agent-create"] },
+  { match: /\b(new (chat )?app|from scratch|brand(ing|ed)?|logo|colou?r|tagline|tenant|my own app|white[- ]?label)\b/i, ids: ["doc:recipes#build-a-new-chat-based-app", "tool:ethora-app-create", "tool:ethora-app-update"] },
+  { match: /\b(react native|ios|android|mobile app|flutter|swift|kotlin)\b/i, ids: ["doc:recipes#add-in-app-chat-to-an-existing-app", "doc:not-available#voice-video-file-previews"] },
+  { match: /\b(webhook|callback|event|subscribe|listen|notify me|on message|when a message)\b/i, ids: ["doc:not-available#webhooks-and-message-events", "tool:ethora-chat-history", "tool:ethora-message-send"] },
+  { match: /\b(push|apns|fcm|firebase|notification)s?\b/i, ids: ["doc:not-available#push-notifications"] },
+  { match: /\b(moderat|ban|block|kick|mute|report|abuse|spam)/i, ids: ["doc:not-available#moderation-bans-and-blocking"] },
+  { match: /\b(billing|plan|pricing|subscription|custom domain|dns)\b/i, ids: ["doc:not-available#billing-custom-domains-logo"] },
+  { match: /\b(knowledge|rag|crawl|index|documents?|pdf|faq|train)\b/i, ids: ["tool:ethora-source-site-crawl-wait", "tool:ethora-source-doc-upload", "doc:recipes#sources-ingest-app-token"] },
+  { match: /\b(api key|personal url|connector|claude\.ai|chatgpt|cursor|reconnect)\b/i, ids: ["doc:api-keys", "doc:hosted-guide"] },
+]
+
 function buildCorpus(server: McpServer): Doc[] {
   const docs: Doc[] = [
     { id: "doc:hosted-guide", title: "Ethora MCP: getting started (hosted server)", text: HOSTED_INSTRUCTIONS, url: README_URL, kind: "doc", guide: true },
@@ -163,9 +207,30 @@ function buildCorpus(server: McpServer): Doc[] {
     ...splitMarkdown("sdk-backend-quickstart", "Backend SDK quickstart", BACKEND_SDK_QUICKSTART_MD),
     ...splitMarkdown("recipes", "Ethora recipes", RECIPES_MD),
     ...splitMarkdown("agent-flows", "Agent flows (scripted conversations)", AGENT_FLOWS_MD),
+    ...splitMarkdown("not-available", "Not available over MCP (and where it lives instead)", NOT_AVAILABLE_MD).map((d) => ({ ...d, guide: true })),
     ...toolDocs(server),
   ]
-  return docs
+  // Whole documents by their bare id (`doc:recipes`, `doc:auth-map`), which is
+  // how the README and the recipes refer to them. Sections stay as they are;
+  // the whole document is what a reader asking for "the recipes" wants.
+  const wholes: Array<[string, string, string]> = [
+    ["recipes", "Ethora recipes", RECIPES_MD],
+    ["auth-map", "Ethora auth map", AUTH_MAP_MD],
+    ["chat-component-quickstart", "Chat component quickstart", CHAT_COMPONENT_QUICKSTART_MD],
+    ["sdk-backend-quickstart", "Backend SDK quickstart", BACKEND_SDK_QUICKSTART_MD],
+    ["agent-flows", "Agent flows (scripted conversations)", AGENT_FLOWS_MD],
+    ["credentials", "Credentials: which one for what", CREDENTIALS_MD],
+    ["feedback", "Feedback: reporting a problem or a request", FEEDBACK_MD],
+    ["tool-groups", "Tool groups: what is listed by default and how to enable more", TOOL_GROUPS_MD],
+    ["not-available", "Not available over MCP (and where it lives instead)", NOT_AVAILABLE_MD],
+    ["api-keys", "API keys", API_KEYS_MD],
+  ]
+  // splitMarkdown may already have emitted the bare id for the text before
+  // the first heading (often just the title line); the whole document wins.
+  const wholeIds = new Set(wholes.map(([id]) => `doc:${id}`))
+  const kept = docs.filter((d) => !wholeIds.has(d.id))
+  for (const [id, title, md] of wholes) kept.push({ id: `doc:${id}`, title, text: md.trim(), url: README_URL, kind: "doc", whole: true, guide: docs.some((d) => d.id === `doc:${id}` && d.guide) })
+  return kept
 }
 
 const STOPWORDS = new Set(["a", "an", "the", "to", "of", "in", "on", "for", "and", "or", "with", "how", "do", "i", "my", "me", "is", "it", "can", "what", "does", "from", "into", "via", "be", "by", "at", "as"])
@@ -202,6 +267,7 @@ export function registerDocsSearch(server: McpServer) {
         results = docs.filter((d) => d.guide)
       } else {
         results = docs
+          .filter((d) => !d.whole)
           .map((d) => {
             // Exact title tokens weigh most (a tool named ethora-app-create should
             // win "create an app"), text hits are capped so long documents do not
@@ -224,6 +290,15 @@ export function registerDocsSearch(server: McpServer) {
           .sort((a, b) => b.score - a.score || a.d.text.length - b.d.text.length)
           .slice(0, 8)
           .map((x) => x.d)
+      }
+      // Intent matches go first, then the term-scored results, without repeats.
+      const byId = new Map(docs.map((d) => [d.id, d]))
+      const intentIds = INTENTS.filter((i) => i.match.test(String(query || ""))).flatMap((i) => i.ids)
+      if (intentIds.length) {
+        const ordered: Doc[] = []
+        for (const id of intentIds) { const d = byId.get(id); if (d && !ordered.includes(d)) ordered.push(d) }
+        for (const d of results) if (!ordered.includes(d)) ordered.push(d)
+        results = ordered.slice(0, 8)
       }
       const payload = { results: results.map((d) => ({ id: d.id, title: d.title, url: d.url })) }
       return { content: [{ type: "text", text: JSON.stringify(payload) }] }
