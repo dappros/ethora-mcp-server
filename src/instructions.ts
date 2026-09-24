@@ -2,6 +2,10 @@
 // assistants (Claude, ChatGPT, Cursor, agents) read this before any tool call,
 // so it carries the auth flow and the ordering that makes the tool set usable.
 
+// Shared by every profile: the tool list starts small on purpose.
+export const TOOL_GROUPS_LINE =
+  "Only the core tools are listed at first (sign in, apps, rooms, messages, agents, knowledge base, widget). More exist in groups: keys, session, apps-admin, rooms, agents-admin, sources, users-files, legacy-bot, b2b. Call `ethora-tools-enable` with no arguments to see them, or `ethora-tools-enable { group }` (or `{ group: \"all\" }`) to add one; the tool list refreshes by itself. `search` and `fetch` describe hidden tools too, and each doc names its group."
+
 export const HOSTED_INSTRUCTIONS = [
   "Ethora MCP Server: create and manage Ethora chat/messaging apps, users, chats, AI agents and bots through the Ethora API.",
   "Auth: call `ethora-status` first. If `hasUserToken` is true you are already authenticated (an API key or token was sent as a Bearer header on the connection) and can skip login.",
@@ -15,6 +19,7 @@ export const HOSTED_INSTRUCTIONS = [
   "Manage keys with `ethora-api-key-create`, `ethora-api-key-list` and `ethora-api-key-revoke`. Each MCP session is private: nothing from another client's session is visible here.",
   "If a tool fails in a way the user should know about, or something is missing or wrong, offer to report it with `ethora-feedback-submit`; it reaches the Ethora team and attaches this session's recent errors automatically.",
   "After registering or creating a key, give the user their `connectorUrl` (returned alongside the key): pasting it as a custom connector in Claude.ai or ChatGPT reconnects them authenticated in every future conversation with no login step.",
+  TOOL_GROUPS_LINE,
 ].join("\n")
 
 export const STDIO_INSTRUCTIONS = [
@@ -24,6 +29,7 @@ export const STDIO_INSTRUCTIONS = [
   "Typical flow after auth: `ethora-app-create`, `ethora-app-select`, then chats/users/agents tools. Use `search` and `fetch` for documentation and `ethora-help` for recommended next calls.",
   "App credentials (appSecret, tenantSecret, appToken, passwords) are redacted from tool results; use `ethora-app-credentials { appId, confirm: true }` for the appToken.",
   "Never print API keys, tokens or passwords unless the user explicitly asks. Destructive tools are gated behind ETHORA_MCP_ENABLE_DANGEROUS_TOOLS=true and delete data owned by the current user; confirm before calling them.",
+  TOOL_GROUPS_LINE,
 ].join("\n")
 
 // Entry points where the MCP client already supplies the identity (OAuth on
@@ -39,6 +45,7 @@ const AUTHENTICATED_COMMON = [
   "Each MCP session is private: nothing from another client's session is visible here.",
   "App credentials are never included in tool results: appSecret, tenantSecret, appToken and passwords come back as [redacted]. When a snippet or config needs the appToken, call `ethora-app-credentials { appId, confirm: true }`; the App Secret is only available in the web dashboard API tab.",
   "If a tool fails in a way the user should know about, or something is missing or wrong, offer to report it with `ethora-feedback-submit`; it reaches the Ethora team and attaches this session's recent errors automatically.",
+  TOOL_GROUPS_LINE,
 ]
 
 export const OAUTH_INSTRUCTIONS = [

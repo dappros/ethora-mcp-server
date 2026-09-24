@@ -24,6 +24,8 @@ export const SCOPE_EXEMPT_TOOLS = new Set([
   "ethora-help",
   "ethora-status",
   "ethora-doctor",
+  // Session-local: changes which tools are listed, touches no user data.
+  "ethora-tools-enable",
 ])
 
 // Tools hidden on the OAuth entry point: identity there comes from the OAuth

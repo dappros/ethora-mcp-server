@@ -20,7 +20,7 @@ type EntryKind = "open" | "oauth"
 export type HttpServerOptions = {
   name: string
   version: string
-  buildServer: (profile: "open" | "authenticated" | "oauth") => McpServer
+  buildServer: (profile: "open" | "authenticated" | "oauth", toolsProfile?: "core" | "all") => McpServer
 }
 
 const OAUTH_VALIDATION_TTL_MS = 5 * 60 * 1000
@@ -332,7 +332,10 @@ export async function startHttpServer(opts: HttpServerOptions) {
         // Instructions follow how identity arrives: OAuth token, a key in the
         // path or a Bearer header (already authenticated), or nothing (open).
         const profile = kind === "oauth" ? "oauth" : (pathKey || headerJwt) ? "authenticated" : "open"
-        const server = opts.buildServer(profile)
+        // `?tools=all` on the endpoint URL lists the whole catalogue up front
+        // (scripts, power users); the default is the core group.
+        const toolsProfile = String((req.query as any)?.tools || "").toLowerCase() === "all" ? "all" : "core"
+        const server = opts.buildServer(profile, toolsProfile)
         if (kind === "oauth") hideOAuthTools(server)
         entry = { server, transport, session }
         fresh = true

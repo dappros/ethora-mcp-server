@@ -1,6 +1,6 @@
 {
   "name": "ethora-mcp-server",
-  "version": "26.9.3",
+  "version": "26.9.4",
   "description": "MCP server for the open-source Ethora chat & messaging platform — manage apps and chat rooms, broadcast messages, and deploy AI agents / chatbots with RAG sources, across user-auth and B2B/app-token flows.",
   "author": {
     "name": "Dappros Ltd",

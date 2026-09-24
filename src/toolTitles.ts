@@ -9,6 +9,7 @@ export const TOOL_TITLES: Record<string, string> = {
   "ethora-configure": "Configure Connection",
   "ethora-status": "Session Status",
   "ethora-help": "Help and Next Steps",
+  "ethora-tools-enable": "Enable More Tools",
   "ethora-run-recipe": "Run Recipe",
   "ethora-doctor": "Connection Doctor",
   "ethora-auth-use-app": "Use App Token Auth",
