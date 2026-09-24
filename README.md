@@ -323,6 +323,10 @@ Outbound API calls carry `X-Ethora-Client: mcp/<version>` and, for the duration 
 
 ## Development
 
+### Version numbers
+
+Versions are calendar-based: **`YY.M.patch`**, where `YY.M` is the year and month the release ships (`26.9.5` is the fifth September 2026 release, `26.10.0` the first of October) and `patch` counts releases within the month. No leading zero on the month, so `26.10` sorts after `26.9` under semver. Breaking changes do not bump a major; they get the next patch and a changelog entry, and earlier tool names stay callable as aliases. `npm run sync-version` refuses any other shape or any month other than the current one (`ETHORA_VERSION_MONTH=YY.M` overrides on purpose), and the publish workflow runs it. `27.0.0` and `27.1.0`, published on 2026-09-24 against this rule, are deprecated; `26.9.5` is the same code.
+
 ### Tool naming
 
 Since 27.0 every listed tool follows one rule: **`ethora-<resource>-<verb>[-<qualifier>]`**.

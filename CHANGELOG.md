@@ -2,6 +2,10 @@
 
 All notable changes to this package are documented here. For cross-SDK release notes, see [ethora/RELEASE-NOTES.md](https://github.com/dappros/ethora/blob/main/RELEASE-NOTES.md).
 
+## 26.9.5 - 2026-09-24
+
+Same code as 27.1.0, republished under the calendar version scheme this package uses: `YY.M.patch` (`26.9.5` = fifth September 2026 release). `27.0.0` and `27.1.0` were published against that scheme by mistake and are deprecated on npm and in the MCP Registry, because under semver they would sort above every future `26.10.x` release. Nothing else changed; the notes for 27.1.0 and 27.0.0 below describe what this version contains: canonical tool names with every earlier name kept as an unlisted alias, the core tool profile, and the newcomer journeys. `npm run sync-version` now refuses any version that is not the current month's `YY.M.patch`.
+
 ## 27.1.0 - 2026-09-24
 
 ### Added

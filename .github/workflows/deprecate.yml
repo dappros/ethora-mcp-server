@@ -1,0 +1,73 @@
+# Mark published versions as deprecated on npm and in the MCP Registry, with
+# a message pointing at the replacement. Manual only. npm needs the same
+# NPM_TOKEN secret the publish workflow uses; the registry uses this
+# repository's Actions OIDC identity, like publishing does.
+name: Deprecate versions
+
+on:
+  workflow_dispatch:
+    inputs:
+      versions:
+        description: Space-separated versions to deprecate (e.g. "27.0.0 27.1.0")
+        type: string
+        required: true
+      message:
+        description: Deprecation message shown to installers
+        type: string
+        required: true
+        default: "Superseded; install the latest version."
+      registry_status:
+        description: Status to set in the MCP Registry for these versions
+        type: choice
+        options: [deprecated, deleted]
+        default: deprecated
+
+jobs:
+  deprecate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      MCP_PUBLISHER_VERSION: "1.8.1"
+      SERVER_NAME: io.github.dappros/ethora-mcp-server
+      PACKAGE: "@ethora/mcp-server"
+    steps:
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Deprecate on npm
+        if: env.NPM_TOKEN != ''
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          for v in ${{ inputs.versions }}; do
+            echo "npm deprecate ${PACKAGE}@${v}"
+            npm deprecate "${PACKAGE}@${v}" "${{ inputs.message }}"
+          done
+          npm view "${PACKAGE}" dist-tags.latest deprecated --json || true
+
+      - name: Install mcp-publisher
+        run: |
+          set -euo pipefail
+          base="https://github.com/modelcontextprotocol/registry/releases/download/v${MCP_PUBLISHER_VERSION}"
+          archive="mcp-publisher_linux_amd64.tar.gz"
+          curl -fsSL -o "${archive}" "${base}/${archive}"
+          curl -fsSL -o checksums.txt "${base}/registry_${MCP_PUBLISHER_VERSION}_checksums.txt"
+          grep " ${archive}$" checksums.txt | sha256sum -c -
+          tar xzf "${archive}" mcp-publisher
+          ./mcp-publisher --version
+
+      - name: Update status in the MCP Registry
+        run: |
+          set -euo pipefail
+          ./mcp-publisher login github-oidc
+          for v in ${{ inputs.versions }}; do
+            echo "registry status ${{ inputs.registry_status }} for ${SERVER_NAME} ${v}"
+            ./mcp-publisher status --status "${{ inputs.registry_status }}" --message "${{ inputs.message }}" "${SERVER_NAME}" "${v}"
+          done
