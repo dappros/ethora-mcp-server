@@ -42,7 +42,7 @@ const { installToolAliases } = await import("./toolNames.js")
 type ToolsProfile = import("./toolGroups.js").ToolsProfile
 
 const SERVER_NAME = "Ethora MCP Server"
-const SERVER_VERSION = "26.9.5"
+const SERVER_VERSION = "26.10.0"
 
 export function buildServer(profile?: "open" | "authenticated" | "oauth", toolsProfile?: ToolsProfile) {
   // In HTTP mode this runs once per session, after setHostedMode(true); the
