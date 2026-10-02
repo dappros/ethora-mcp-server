@@ -72,6 +72,17 @@ let changed = 0;
   changed++;
 }
 
+// claude-plugin/.claude-plugin/plugin.json — Claude plugin bundle manifest
+// (the directory asks for the version to rise with every release)
+{
+  const path = join(root, "claude-plugin", ".claude-plugin", "plugin.json");
+  const json = JSON.parse(readFileSync(path, "utf8"));
+  json.version = version;
+  writeFileSync(path, JSON.stringify(json, null, 2) + "\n");
+  console.log(`claude-plugin/.claude-plugin/plugin.json -> ${version}`);
+  changed++;
+}
+
 // src/index.ts — serverInfo version literal
 // Matches both the McpServer serverInfo literal and the SERVER_VERSION constant.
 {

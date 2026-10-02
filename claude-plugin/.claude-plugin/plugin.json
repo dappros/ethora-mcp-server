@@ -1,7 +1,7 @@
 {
   "name": "ethora",
   "displayName": "Ethora",
-  "version": "1.0.0",
+  "version": "26.10.0",
   "description": "Build and operate Ethora chat apps and AI agents from Claude: create apps, provision users, open rooms, send messages, configure RAG agents, script conversation flows and generate an embeddable chat widget.",
   "author": {
     "name": "Dappros Ltd",
