@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "ethora",
-  "version": "26.9.5",
+  "version": "26.10.0",
   "description": "Build and run chat apps, messaging rooms and AI agents on Ethora from ChatGPT: create an app, open rooms, add users, create agents with a knowledge base, put a chat widget on a website.",
   "author": {
     "name": "Dappros Ltd",
@@ -10,7 +10,15 @@
   "homepage": "https://ethora.com/ai-sdk/mcp-server/",
   "repository": "https://github.com/dappros/ethora-mcp-server",
   "license": "MIT",
-  "keywords": ["chat", "messaging", "ai-agents", "chatbot", "rag", "chat-widget", "customer-support"],
+  "keywords": [
+    "chat",
+    "messaging",
+    "ai-agents",
+    "chatbot",
+    "rag",
+    "chat-widget",
+    "customer-support"
+  ],
   "extensions": {
     "com.openai": {
       "interface": {
