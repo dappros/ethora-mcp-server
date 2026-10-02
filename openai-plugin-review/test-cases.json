@@ -37,7 +37,7 @@
       "description": "Destructive action requires confirmation and acts only on the user's own apps.",
       "prompt": "Delete the app Review Desk.",
       "tools_triggered": "ethora-app-delete",
-      "expected_behavior": "The tool is marked destructive; the assistant confirms with the user before calling it. Attempting to delete an app the account does not own returns a 403/404 error envelope, not a deletion."
+      "expected_behavior": "The tool is marked destructive, so ChatGPT asks for confirmation unless the user has pre-approved write actions. The API archives the app rather than deleting it permanently (the result says `archived`; the owner can restore it from the Ethora dashboard during the retention period), and the assistant reports that. Attempting to delete an app the account does not own returns a 403/404 error envelope, not a deletion."
     },
     {
       "description": "A room that does not exist.",
