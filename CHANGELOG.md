@@ -10,6 +10,8 @@ All notable changes to this package are documented here. For cross-SDK release n
 
 ### Added
 - ChatGPT plugin package (`openai-plugin/`, `npm run plugin:openai`) and review materials; `ethora-status` returns the user's stable id.
+- Account memory on the hosted server: the selected app and agent, the remembered appToken and the enabled tool groups are kept per signed-in account (24 hours, in process) and restored into every new session that authenticates as that account. ChatGPT opens a new MCP session for every tool call, so the app selected in one call was gone by the next and app-scoped tools fell back to the token's own app. Restoration happens only after the bearer is validated against the API.
+- `ethora-app-create` makes the new app the current app, and an account that owns exactly one app has it selected automatically on the first app-scoped call.
 
 ## 26.9.5 - 2026-09-24
 
