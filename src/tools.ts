@@ -1471,8 +1471,8 @@ function appSelectTool(server: McpServer) {
     server.registerTool(
         "ethora-app-select",
         {
-            description: "Set the current app context for this session so app-scoped tools can omit their `appId` argument. Stores `currentAppId` and, if given, `appToken` (which defaults the auth mode to app-token unless `authMode` overrides).\nAuth: none required to set the context. Errors: effectively none — a non-existent `appId` is not validated here; the first app-scoped API call surfaces the 404. Related: pairs with `ethora-auth-mode-set`.",
-            annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+            description: "Session-only: remembers which app later calls refer to. Changes nothing on the server and can be called again at any time to switch. Set the current app context for this session so app-scoped tools can omit their `appId` argument. Stores `currentAppId` and, if given, `appToken` (which defaults the auth mode to app-token unless `authMode` overrides).\nAuth: none required to set the context. Errors: effectively none — a non-existent `appId` is not validated here; the first app-scoped API call surfaces the 404. Related: pairs with `ethora-auth-mode-set`.",
+            annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
             inputSchema: {
                 appId: z.string().describe("24-char hex Ethora appId to set as the current context. Get it from `ethora-app-list`, `ethora-app-create`, or a B2B create/provision response."),
                 appToken: z.string().optional().describe("Per-app appToken to store alongside the appId. If provided, the active auth mode switches to app-token (unless `authMode` says otherwise). Secret."),
@@ -2090,8 +2090,8 @@ function appUpdateTool(server: McpServer) {
     server.registerTool(
         'ethora-app-update',
         {
-            description: "Update mutable fields on an app the caller owns (displayName, domainName, appTagline, primaryColor, botStatus). Partial update — omitted fields are left unchanged.\nRequires: an `appId` from `ethora-app-list` or `ethora-app-create`.\nAuth: user-auth mode, active session; the caller must own the app. Errors: 401 not logged in; 403 not owner; 404 unknown `appId`; 422 validation (e.g. `domainName` taken, `primaryColor` not `#RRGGBB`).",
-            annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+            description: "Overwrites the fields you pass; previous values are not kept and cannot be restored from the API, so confirm changes to the prompt, name or settings with the user first. Update mutable fields on an app the caller owns (displayName, domainName, appTagline, primaryColor, botStatus). Partial update — omitted fields are left unchanged.\nRequires: an `appId` from `ethora-app-list` or `ethora-app-create`.\nAuth: user-auth mode, active session; the caller must own the app. Errors: 401 not logged in; 403 not owner; 404 unknown `appId`; 422 validation (e.g. `domainName` taken, `primaryColor` not `#RRGGBB`).",
+            annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("24-char hex ObjectId of the app to update. Optional — defaults to the app most recently passed to `ethora-app-select`."),
                 displayName: z.string().optional().describe("New human-readable app name. Visible in the app picker and on the public landing page."),
@@ -2352,8 +2352,8 @@ function botUpdateV2Tool(server: McpServer) {
     server.registerTool(
         "ethora-bot-update",
         {
-            description: "Configure the AI bot for an app — prompt, LLM, trigger, greeting, RAG behavior, identity, and public widget settings. Partial update — omitted fields are left unchanged. `status: \"on\"` activates the bot (best-effort; needs a prompt + LLM and a backend AI service).\nRequires: an app with a legacy per-app aiBot (dashboard-created). API-created apps have none: use `ethora-agent-create` -> `ethora-agent-invite` -> `ethora-agent-activate` instead.\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth; 404 unknown `appId`; 422 validation (e.g. an `llmProvider`/`llmModel` not enabled). Related: `ethora-bot-get`, `ethora-agent-activate`.",
-            annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+            description: "Overwrites the fields you pass; previous values are not kept and cannot be restored from the API, so confirm changes to the prompt, name or settings with the user first. Configure the AI bot for an app — prompt, LLM, trigger, greeting, RAG behavior, identity, and public widget settings. Partial update — omitted fields are left unchanged. `status: \"on\"` activates the bot (best-effort; needs a prompt + LLM and a backend AI service).\nRequires: an app with a legacy per-app aiBot (dashboard-created). API-created apps have none: use `ethora-agent-create` -> `ethora-agent-invite` -> `ethora-agent-activate` instead.\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth; 404 unknown `appId`; 422 validation (e.g. an `llmProvider`/`llmModel` not enabled). Related: `ethora-bot-get`, `ethora-agent-activate`.",
+            annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("24-char hex appId. Required in B2B mode unless already set via `ethora-app-select`; ignored in app-token mode."),
                 status: z.enum(["on", "off"]).optional().describe("`on` activates the bot, `off` deactivates it. Omit to leave the current status unchanged."),
@@ -2498,8 +2498,8 @@ function agentsUpdateV2Tool(server: McpServer) {
     server.registerTool(
         "ethora-agent-update",
         {
-            description: "Update a saved AI agent (PUT /v2/agents/:agentId). All fields are optional — only what you pass is updated. Common uses: tune the system `prompt` after a test run, switch `responseMode` to control turn-taking in multi-agent rooms, or adjust `cooldownSec`. See `ethora-agents-quickstart` prompt for the end-to-end recipe.\nRequires: an agent id or address from `ethora-agent-list` or `ethora-agent-create`.",
-            annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+            description: "Overwrites the fields you pass; previous values are not kept and cannot be restored from the API, so confirm changes to the prompt, name or settings with the user first. Update a saved AI agent (PUT /v2/agents/:agentId). All fields are optional — only what you pass is updated. Common uses: tune the system `prompt` after a test run, switch `responseMode` to control turn-taking in multi-agent rooms, or adjust `cooldownSec`. See `ethora-agents-quickstart` prompt for the end-to-end recipe.\nRequires: an agent id or address from `ethora-agent-list` or `ethora-agent-create`.",
+            annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 agentId: z.string().min(1).describe("Mongo _id (24 hex chars) of the agent to update."),
                 name: z.string().optional().describe("New display name. For multi-agent scenarios prefer single-word names — the @-mention matcher uses exact display-name match with word-boundary."),
@@ -2674,8 +2674,8 @@ function agentSoulSetTool(server: McpServer) {
     server.registerTool(
         "ethora-agent-soul-set",
         {
-            description: "Replace an Agent's SOUL.MD with the provided markdown. Operator-driven; alternative to -append.\nRequires: an agent id or address from `ethora-agent-list` or `ethora-agent-create`.",
-            annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+            description: "Replaces the whole SOUL.MD; the previous text is not kept, so confirm with the user first (use -append to add without replacing). Replace an Agent's SOUL.MD with the provided markdown. Operator-driven; alternative to -append.\nRequires: an agent id or address from `ethora-agent-list` or `ethora-agent-create`.",
+            annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 agentIdOrAddress: z.string().min(1),
                 soulMd: z.string().min(0).describe("Replace SOUL.MD contents. Pass empty string to clear."),
@@ -3905,7 +3905,7 @@ function sourcesSiteCrawlV2WaitTool(server: McpServer) {
     server.registerTool(
         "ethora-source-site-crawl-wait",
         {
-            description: "Crawl a website URL and wait for the crawl to finish: enqueues the job, then polls it until it reports `completed` or `failed`. Returns `{ done, status, jobId, polls, durationMs, result }`; `done: false` with a `note` means the budget ran out while the job was still running (it usually finishes server-side anyway).\nRequires: a selected app (`ethora-app-select`) or an explicit `appId`.\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth; 400 malformed `url`; 504/timeout if it takes longer than `timeoutMs` (the job may still complete server-side — check with `ethora-source-site-list`).",
+            description: "Adds the crawled pages to the agent's knowledge base; existing documents are kept and nothing is deleted, and re-running the same URL re-indexes it. Crawl a website URL and wait for the crawl to finish: enqueues the job, then polls it until it reports `completed` or `failed`. Returns `{ done, status, jobId, polls, durationMs, result }`; `done: false` with a `note` means the budget ran out while the job was still running (it usually finishes server-side anyway).\nRequires: a selected app (`ethora-app-select`) or an explicit `appId`.\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth; 400 malformed `url`; 504/timeout if it takes longer than `timeoutMs` (the job may still complete server-side — check with `ethora-source-site-list`).",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("24-char hex appId to ingest into. Required in B2B mode unless already set via `ethora-app-select`; ignored in app-token mode."),

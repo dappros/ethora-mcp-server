@@ -2,6 +2,15 @@
 
 All notable changes to this package are documented here. For cross-SDK release notes, see [ethora/RELEASE-NOTES.md](https://github.com/dappros/ethora/blob/main/RELEASE-NOTES.md).
 
+## Unreleased
+
+### Changed
+- Directory review findings: `ethora-app-update`, `ethora-agent-update`, `ethora-bot-update` and `ethora-agent-soul-set` are marked `destructiveHint: true` and say what they overwrite; `ethora-app-select` and `ethora-tools-enable` are read-only (session-only, no account data); `ethora-source-site-crawl-wait` says it adds to the knowledge base without deleting anything.
+- The `admin` OAuth scope is now required by irreversible operations (delete, revoke, rotate, credential reveal) by name, not by the destructive hint, so a read+write grant can still edit agents and apps.
+
+### Added
+- ChatGPT plugin package (`openai-plugin/`, `npm run plugin:openai`) and review materials; `ethora-status` returns the user's stable id.
+
 ## 26.9.5 - 2026-09-24
 
 Same code as 27.1.0, republished under the calendar version scheme this package uses: `YY.M.patch` (`26.9.5` = fifth September 2026 release). `27.0.0` and `27.1.0` were published against that scheme by mistake and are deprecated on npm and in the MCP Registry, because under semver they would sort above every future `26.10.x` release. Nothing else changed; the notes for 27.1.0 and 27.0.0 below describe what this version contains: canonical tool names with every earlier name kept as an unlisted alias, the core tool profile, and the newcomer journeys. `npm run sync-version` now refuses any version that is not the current month's `YY.M.patch`.

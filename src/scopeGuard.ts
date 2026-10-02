@@ -51,11 +51,19 @@ export const SCOPE_OVERRIDES: Record<string, Scope> = {
   "ethora-feedback-submit": "read",
 }
 
-// Required scope for a tool, derived from its annotations (overrides first).
+// Operations that cannot be undone from the API: deleting, revoking and
+// rotating. These need `admin`. Updates that overwrite a field are marked
+// destructiveHint (the directory reviews want that honesty: an overwritten
+// prompt is gone) but remain ordinary writes, so a read+write grant can still
+// edit an agent without holding the scope that can delete the app.
+const IRREVERSIBLE = /-(delete|revoke|rotate)(-|$)/
+
+// Required scope for a tool: overrides first, then irreversible-by-name, then
+// the read-only hint, else write.
 export function requiredScope(name: string, annotations: any): Scope | null {
   if (SCOPE_EXEMPT_TOOLS.has(name)) return null
   if (SCOPE_OVERRIDES[name]) return SCOPE_OVERRIDES[name]
-  if (annotations?.destructiveHint) return "admin"
+  if (IRREVERSIBLE.test(name)) return "admin"
   if (annotations?.readOnlyHint) return "read"
   return "write"
 }
