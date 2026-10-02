@@ -256,9 +256,25 @@ export function configureClient(params: { apiUrl?: string; appJwt?: string; appT
   return getClientState()
 }
 
+// Stable, opaque id of the signed-in user, read from the user token's own
+// claims. ChatGPT's connector guidance asks for a profile-style tool that
+// returns one so a reconnected account is recognised; ethora-status is it.
+function userIdFromToken(token: string): string | undefined {
+  try {
+    const part = String(token || "").replace(/^Bearer\s+/i, "").split(".")[1]
+    if (!part) return undefined
+    const json = JSON.parse(Buffer.from(part.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8"))
+    const id = json?.data?.userId || json?.userId
+    return id ? String(id) : undefined
+  } catch {
+    return undefined
+  }
+}
+
 export function getClientState() {
   return {
     apiUrl: String(httpClientDappros.defaults.baseURL || ""),
+    userId: httpTokens.token ? userIdFromToken(httpTokens.token) : undefined,
     hasAppJwt: Boolean(httpTokens.appJwt),
     hasAppToken: Boolean(httpTokens.appToken),
     hasB2BToken: Boolean(httpTokens.b2bToken),

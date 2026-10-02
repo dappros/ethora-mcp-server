@@ -143,3 +143,6 @@ vite.config.ts.timestamp-*
 
 # macOS
 .DS_Store
+
+# built ChatGPT plugin archives
+dist-plugins/

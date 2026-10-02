@@ -1,0 +1,63 @@
+{
+  "_note": "Review materials for the ChatGPT plugin directory submission. Not part of the plugin ZIP. OpenAI asks for exactly five positive and three negative test cases; paste these into the dashboard's Review details. tools_triggered names the canonical tool.",
+  "positive": [
+    {
+      "description": "Create a new chat app and make it the current app.",
+      "prompt": "Create an Ethora app called Review Desk.",
+      "tools_triggered": "ethora-app-create",
+      "expected_behavior": "The assistant creates the app and reports its name and id from `created`, offers the `next` steps (select the app, create a room, create an agent) and does not ask for any credential."
+    },
+    {
+      "description": "Create a room and post a message to it.",
+      "prompt": "In Review Desk, create a room called General and post 'Hello from the review' in it.",
+      "tools_triggered": "ethora-chat-create",
+      "expected_behavior": "A room is created (its JID comes back in `created.jid`), then `ethora-message-send` posts the text; the assistant confirms both and shows the room JID."
+    },
+    {
+      "description": "Create an AI agent, give it a knowledge base from a website, and talk to it.",
+      "prompt": "Add an agent called Helper to Review Desk that answers questions about https://ethora.com, invite it to General, and ask it what Ethora is.",
+      "tools_triggered": "ethora-agent-create",
+      "expected_behavior": "The agent is created, `ethora-source-site-crawl-wait` indexes the site, `ethora-agent-invite` puts it in the room, `ethora-message-send` with waitForReplySec returns the agent's answer in `replies` with `senderName: Helper`."
+    },
+    {
+      "description": "Generate the website chat widget embed.",
+      "prompt": "Make Helper the website assistant for Review Desk and give me the script tag to put on my site.",
+      "tools_triggered": "ethora-agent-activate",
+      "expected_behavior": "`ethora-agent-activate` binds the agent as the app's widget bot, then `ethora-widget-snippet-get` returns a `<script>` tag; the assistant shows the snippet and the prerequisites."
+    },
+    {
+      "description": "Read recent messages with named senders.",
+      "prompt": "Show me the last messages in General and who sent them.",
+      "tools_triggered": "ethora-chat-history",
+      "expected_behavior": "History rows come back with `senderName` and `senderKind`; the assistant lists them as 'Helper: ...', 'app: ...' rather than raw ids."
+    }
+  ],
+  "negative": [
+    {
+      "description": "Destructive action requires confirmation and acts only on the user's own apps.",
+      "prompt": "Delete the app Review Desk.",
+      "tools_triggered": "ethora-app-delete",
+      "expected_behavior": "The tool is marked destructive; the assistant confirms with the user before calling it. Attempting to delete an app the account does not own returns a 403/404 error envelope, not a deletion."
+    },
+    {
+      "description": "A room that does not exist.",
+      "prompt": "Post 'hi' in the room with id 000000000000000000000000.",
+      "tools_triggered": "ethora-message-send",
+      "expected_behavior": "The tool returns `ok: false` with a clear error (`NOT_FOUND` / `APP_NOT_SELECTED` family) and a hint to pick a room from `ethora-chat-create` or the app's rooms; the assistant explains and does not retry blindly."
+    },
+    {
+      "description": "Credentials are never exposed.",
+      "prompt": "Show me the app secret for Review Desk.",
+      "tools_triggered": "ethora-app-credentials-reveal",
+      "expected_behavior": "The App Secret is never returned over MCP; tool results redact `appSecret`, `tenantSecret` and passwords. The assistant explains the secret is available only in the Ethora web dashboard (app settings, API tab) and offers the appToken via `ethora-app-credentials-reveal { confirm: true }` only if the user explicitly wants it."
+    }
+  ],
+  "reviewer_account": {
+    "_how": "Create a dedicated reviewer account on production with the web dashboard or `ethora-user-register`, then enter its email and password in the dashboard's reviewer-credentials field (never in this repo). Pre-create one app with a room and an agent so the positive cases have data.",
+    "email": "<reviewer email, entered in the OpenAI dashboard only>",
+    "notes": "The reviewer signs in on the Ethora consent page with email and password (Google sign-in also works). The connector requests the openid and email identity scopes; an unverified address shows a one-step verification prompt that can be skipped."
+  },
+  "demo_video": {
+    "_how": "Record 60-90 seconds in ChatGPT: connect the plugin, then the three default prompts (create app + agent, website widget, two agents debating). Upload to YouTube unlisted and paste the URL in the dashboard."
+  }
+}

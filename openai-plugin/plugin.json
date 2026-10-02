@@ -1,0 +1,46 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "ethora",
+  "version": "26.9.5",
+  "description": "Build and run chat apps, messaging rooms and AI agents on Ethora from ChatGPT: create an app, open rooms, add users, create agents with a knowledge base, put a chat widget on a website.",
+  "author": {
+    "name": "Dappros Ltd",
+    "url": "https://ethora.com"
+  },
+  "homepage": "https://ethora.com/ai-sdk/mcp-server/",
+  "repository": "https://github.com/dappros/ethora-mcp-server",
+  "license": "MIT",
+  "keywords": ["chat", "messaging", "ai-agents", "chatbot", "rag", "chat-widget", "customer-support"],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Ethora",
+        "shortDescription": "Chat apps and AI agents",
+        "longDescription": "Ethora is an open-source chat and messaging platform with a built-in AI agent framework. This plugin connects ChatGPT to your Ethora account so you can build and run chat products by describing them.\n\nWhat you can do:\n- Create a chat app (your own tenant with users, rooms and branding) and open chat rooms.\n- Create AI agents with a persona and a knowledge base from a website or uploaded documents, put them in rooms, and talk to them.\n- Seed a room with several agents that reply to people and to each other.\n- Generate the <script> tag that puts an AI chat widget on any website.\n- Send and read messages, search message history, manage users and files.\n\nWho it is for: product teams and developers adding chat or AI assistants to a website or app, and anyone who wants a working chat space with AI participants without setting up infrastructure.\n\nHow it works: you sign in with your Ethora account (or create one in the conversation). Tools act only on apps you own. A compact core tool set is listed by default; more tools are enabled on request within the conversation.\n\nLimitations: the plugin manages apps, rooms, users and agents. It does not render chat inside ChatGPT; people chat in the Ethora web client, your app via the chat component, or the website widget. Webhooks, push-notification setup, moderation actions and billing are managed in the Ethora dashboard, not through the plugin. Wallet and crypto features are not available in the hosted server.",
+        "developerName": "Dappros Ltd",
+        "category": "Developer Tools",
+        "capabilities": [
+          "Create a chat app with rooms and users",
+          "Create AI agents with a persona and a knowledge base",
+          "Put several AI agents in one room that talk to people and each other",
+          "Generate a chat widget embed for any website",
+          "Send and read messages, search chat history",
+          "Crawl a website or upload documents as agent knowledge",
+          "Manage API keys and app tokens for integrations"
+        ],
+        "websiteURL": "https://ethora.com/ai-sdk/mcp-server/",
+        "supportURL": "https://ethora.com/contact/",
+        "privacyPolicyURL": "https://ethora.com/privacy-policy-mcp/",
+        "termsOfServiceURL": "https://ethora.com/terms/",
+        "defaultPrompt": [
+          "Create an Ethora app called Support Desk with a room and an AI agent that answers from our docs.",
+          "Put a chat widget on my website that answers questions about our product.",
+          "Set up a room with two AI agents who debate a topic with me."
+        ],
+        "brandColor": "#0052CD",
+        "composerIcon": "./assets/icon.png",
+        "logo": "./assets/logo.png"
+      }
+    }
+  }
+}
