@@ -214,8 +214,8 @@ export function registerToolsEnable(server: McpServer) {
   server.registerTool(
     "ethora-tools-enable",
     {
-      description: `Only the core tools are listed by default. Call this to enable another group for this session; the tool list refreshes automatically (tools/list_changed). Without \`group\` it returns the catalogue: each group's summary, tool count and whether it is enabled. Groups: ${GROUP_NAMES.filter((g) => g !== CORE_GROUP).join(", ")}; \`all\` enables everything. Hidden tools are still described by \`search\` / \`fetch\`, and each doc names its group.\nAuth: none. Errors: UNKNOWN_GROUP for a name outside the list.`,
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      description: `Session-only: changes which tools this connection lists. Touches no account data. Only the core tools are listed by default. Call this to enable another group for this session; the tool list refreshes automatically (tools/list_changed). Without \`group\` it returns the catalogue: each group's summary, tool count and whether it is enabled. Groups: ${GROUP_NAMES.filter((g) => g !== CORE_GROUP).join(", ")}; \`all\` enables everything. Hidden tools are still described by \`search\` / \`fetch\`, and each doc names its group.\nAuth: none. Errors: UNKNOWN_GROUP for a name outside the list.`,
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
       inputSchema: {
         group: z.enum(enumGroups).optional().describe("Group to enable, or `all`. Omit to list the groups."),
       },
