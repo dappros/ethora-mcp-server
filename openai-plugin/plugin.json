@@ -45,7 +45,7 @@
           "Put a chat widget on my website that answers questions about our product.",
           "Set up a room with two AI agents who debate a topic with me."
         ],
-        "brandColor": "#0052CD",
+        "brandColor": "#4918C1",
         "composerIcon": "./assets/icon.png",
         "logo": "./assets/logo.png"
       }
