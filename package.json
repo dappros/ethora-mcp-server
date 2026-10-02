@@ -20,6 +20,7 @@
     "check": "tsc --noEmit --incremental",
     "format": "prettier --write .",
     "sync-version": "node scripts/sync-version.mjs",
+    "plugin:openai": "node scripts/build-openai-plugin.mjs",
     "prepublishOnly": "npm run build",
     "inspector": "npx @modelcontextprotocol/inspector node dist/index.js",
     "test": "npm run build && node --test test/"

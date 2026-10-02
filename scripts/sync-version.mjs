@@ -62,6 +62,16 @@ let changed = 0;
   changed++;
 }
 
+// openai-plugin/plugin.json — ChatGPT plugin manifest (Agent Plugins format)
+{
+  const path = join(root, "openai-plugin", "plugin.json");
+  const json = JSON.parse(readFileSync(path, "utf8"));
+  json.version = version;
+  writeFileSync(path, JSON.stringify(json, null, 2) + "\n");
+  console.log(`openai-plugin/plugin.json -> ${version}`);
+  changed++;
+}
+
 // src/index.ts — serverInfo version literal
 // Matches both the McpServer serverInfo literal and the SERVER_VERSION constant.
 {

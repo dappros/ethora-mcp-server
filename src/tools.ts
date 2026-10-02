@@ -442,6 +442,8 @@ function helpTool(server: McpServer) {
                     hasAppToken: Boolean(state.hasAppToken),
                     hasB2BToken: Boolean(state.hasB2BToken),
                     hasUserToken: Boolean(state.hasUserToken),
+                    // Opaque, stable per account; lets a client recognise a reconnected user.
+                    userId: state.userId,
                     hasCurrentAppId: Boolean(state.currentAppId),
                     enableDangerousTools: Boolean(state.enableDangerousTools),
                 }
