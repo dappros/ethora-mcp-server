@@ -73,6 +73,7 @@ import {
     getClientState,
     selectAgent,
     selectApp,
+    ethoraContext,
     setAuthMode,
     sourcesDocsDelete,
     sourcesDocsDeleteForAppV2,
@@ -229,7 +230,7 @@ export function getDefaultMeta(tool: string) {
     }
 }
 
-export const APP_CONTEXT_MISSING_MESSAGE = "No app selected in this session. Pass `appId` explicitly, or call `ethora-app-select { appId }`. Sessions do not persist across reconnects."
+export const APP_CONTEXT_MISSING_MESSAGE = "No app selected. Pass `appId` explicitly, or call `ethora-app-select { appId }` (`ethora-app-list` shows your apps). An account with exactly one app gets it selected automatically; on the hosted server the selection is remembered for the signed-in account across sessions."
 
 function requireCurrentAppId() {
     const state = getClientState() as any
@@ -1471,7 +1472,7 @@ function appSelectTool(server: McpServer) {
     server.registerTool(
         "ethora-app-select",
         {
-            description: "Session-only: remembers which app later calls refer to. Changes nothing on the server and can be called again at any time to switch. Set the current app context for this session so app-scoped tools can omit their `appId` argument. Stores `currentAppId` and, if given, `appToken` (which defaults the auth mode to app-token unless `authMode` overrides).\nAuth: none required to set the context. Errors: effectively none — a non-existent `appId` is not validated here; the first app-scoped API call surfaces the 404. Related: pairs with `ethora-auth-mode-set`.",
+            description: "Session-only: remembers which app later calls refer to. Changes nothing on the server and can be called again at any time to switch. Set the current app context for this session so app-scoped tools can omit their `appId` argument. On the hosted server the selection is remembered for the signed-in account (24 hours), so a client that opens a new session per call keeps it; `ethora-app-create` selects the new app by itself, and an account with exactly one app has it selected automatically. Stores `currentAppId` and, if given, `appToken` (which defaults the auth mode to app-token unless `authMode` overrides).\nAuth: none required to set the context. Errors: effectively none — a non-existent `appId` is not validated here; the first app-scoped API call surfaces the 404. Related: pairs with `ethora-auth-mode-set`.",
             annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
             inputSchema: {
                 appId: z.string().describe("24-char hex Ethora appId to set as the current context. Get it from `ethora-app-list`, `ethora-app-create`, or a B2B create/provision response."),
@@ -2043,6 +2044,8 @@ function appCreateTool(server: McpServer) {
                 const createdId = createdApp?._id || createdApp?.appId || created.appId
                 const createdToken = created.appToken || createdApp?.appToken
                 if (createdId && createdToken) rememberAppToken(String(createdId), String(createdToken))
+                // The app someone just created is the one their next calls mean.
+                if (createdId) ethoraContext.currentAppId = String(createdId)
                 // Same shape as every create tool: what was made, and what to do next.
                 const meta = getDefaultMeta("ethora-app-create")
                 const dashboardUrl = createdId ? `${String(meta.apiUrl || "").replace(/^https?:\/\/api\./, "https://app.").replace(/\/v\d+\/?$/, "")}/app/admin/apps/${createdId}/settings` : undefined
@@ -2051,8 +2054,7 @@ function appCreateTool(server: McpServer) {
                     created: { kind: "app", id: createdId ? String(createdId) : undefined, name: createdApp?.displayName || displayName },
                     ...(dashboardUrl ? { dashboardUrl } : {}),
                     next: [
-                        { tool: "ethora-app-select", args: { appId: createdId ? String(createdId) : "<APP_ID>" }, why: "Make it the current app so the next calls can omit appId." },
-                        { tool: "ethora-chat-create", args: { title: "General", pinned: true }, why: "First room; pinned rooms auto-join every new user." },
+                        { tool: "ethora-chat-create", args: { title: "General", pinned: true }, why: "First room; pinned rooms auto-join every new user. The new app is already the current app, so appId can be omitted." },
                         { tool: "ethora-agent-create", args: { name: "Helper", prompt: "You are a helpful assistant for this app." }, why: "An AI agent to put in rooms or behind the website widget." },
                         { tool: "ethora-help", args: { goal: "new-app" }, why: "Branding, users and where the app lives; or `in-app-chat` to use your own UI." },
                     ],

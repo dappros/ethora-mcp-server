@@ -34,6 +34,8 @@ The MCP server for **Ethora**, an open-source chat and messaging platform with a
 
 The hosted and self-hosted modes are the same server started with `ETHORA_MCP_TRANSPORT=http`. Every MCP session has private in-memory state: one client's login, selected app or tokens are never visible to another session.
 
+**Account memory.** Some clients open a new MCP session for every tool call (ChatGPT does), which would lose the selected app between calls. So the server keeps a small snapshot per signed-in account, keyed by the user id in the bearer token: the current app and agent, the appToken the API handed that account for the current app, and the enabled tool groups. A new session that arrives with a token for the same account (OAuth, personal URL or Bearer header) gets it back, after the token has been validated against the API. Memory lives in the process, expires after 24 hours idle, and never holds the user token itself. Two more defaults close the same gap: `ethora-app-create` selects the new app, and an account that owns exactly one app has it selected automatically on the first app-scoped call.
+
 ## 60-second quickstart
 
 **Claude.ai or ChatGPT (custom connector).** In the Ethora web app open Account, then the **AI Assistants** tab, create an API key and copy the **personal connector URL** it shows (`https://mcp.chat.ethora.com/mcp/k/<key>`). Paste it as a custom connector. Every conversation is authenticated with no login step. For a listed connector that uses the vendor's OAuth login instead, the URL is `https://mcp.chat.ethora.com/mcp/oauth`.
@@ -195,6 +197,7 @@ The widget answers with the app's active bot (`defaultBotInstanceId`). On an app
 | `ETHORA_MCP_PUBLIC_URL` | Public base URL advertised in discovery and used for `connectorUrl`, e.g. `https://mcp.chat.ethora.com/mcp` |
 | `ETHORA_MCP_TRUST_PROXY` | `true` takes the client IP from `X-Forwarded-For`; it is forwarded to the API so per-IP limits apply per caller |
 | `ETHORA_MCP_SESSION_TTL_MS` | Idle session eviction, default 4 hours |
+| `ETHORA_MCP_ACCOUNT_MEMORY_TTL_MS` | How long an account's remembered context (current app, agent, enabled groups) survives without a session, default 24 hours |
 | `ETHORA_MCP_AUTH_ISSUER` | Public URL of the OAuth authorization server (the Ethora API host); enables `/mcp/oauth` |
 | `ETHORA_MCP_WIDGET_URL` | Base URL of the hosted AI chat widget (`<url>/assistant.js`) for `ethora-widget-snippet-get` |
 | `ETHORA_MCP_PUBLIC_API_URL` | Public API base browsers can reach, emitted as `data-api-base`; falls back to `ETHORA_MCP_AUTH_ISSUER`, then a non-loopback `ETHORA_API_URL` |

@@ -208,13 +208,45 @@ function catalogue(server: McpServer) {
     })
 }
 
+/**
+ * Enable the tools of the given groups (`all` = every non-core group) on one
+ * server instance. Shared by `ethora-tools-enable` and by the HTTP server when
+ * it restores an account's remembered groups on a new session.
+ */
+export function enableGroups(server: McpServer, groups: string[], entry: "open" | "oauth" = getSession().entry) {
+  const reg = registry(server)
+  const targets = groups.includes("all") ? GROUP_NAMES.filter((g) => g !== CORE_GROUP) : groups.filter((g) => TOOL_GROUPS[g])
+  const enabled: string[] = []
+  const alreadyEnabled: string[] = []
+  const notAvailable: string[] = []
+  for (const g of targets) {
+    for (const name of TOOL_GROUPS[g].tools) {
+      const t = reg[name]
+      if (!t) { notAvailable.push(name); continue }
+      // OAuth sessions never get the session-credential tools back.
+      if (entry === "oauth" && OAUTH_HIDDEN_TOOLS.has(name)) { notAvailable.push(name); continue }
+      if (t.enabled !== false) { alreadyEnabled.push(name); continue }
+      if (typeof t.enable === "function") t.enable()
+      delete t._hiddenByGroup
+      enabled.push(name)
+    }
+  }
+  return { enabled, alreadyEnabled, notAvailable }
+}
+
+/** Non-core groups that have been enabled on this server instance (any tool of the group listed). */
+export function enabledGroups(server: McpServer): string[] {
+  const reg = registry(server)
+  return GROUP_NAMES.filter((g) => g !== CORE_GROUP && TOOL_GROUPS[g].tools.some((n) => reg[n] && reg[n].enabled !== false && !reg[n]._hiddenByGroup))
+}
+
 /** The one extra tool: list the groups, or enable one (or all). */
 export function registerToolsEnable(server: McpServer) {
   const enumGroups = [...GROUP_NAMES.filter((g) => g !== CORE_GROUP), "all"] as unknown as [string, ...string[]]
   server.registerTool(
     "ethora-tools-enable",
     {
-      description: `Session-only: changes which tools this connection lists. Touches no account data. Only the core tools are listed by default. Call this to enable another group for this session; the tool list refreshes automatically (tools/list_changed). Without \`group\` it returns the catalogue: each group's summary, tool count and whether it is enabled. Groups: ${GROUP_NAMES.filter((g) => g !== CORE_GROUP).join(", ")}; \`all\` enables everything. Hidden tools are still described by \`search\` / \`fetch\`, and each doc names its group.\nAuth: none. Errors: UNKNOWN_GROUP for a name outside the list.`,
+      description: `Session-only: changes which tools this connection lists. Touches no account data. Only the core tools are listed by default. Call this to enable another group for this session; the tool list refreshes automatically (tools/list_changed). On the hosted server the enabled groups are remembered for the signed-in account, so a client that opens a new session per call keeps them. Without \`group\` it returns the catalogue: each group's summary, tool count and whether it is enabled. Groups: ${GROUP_NAMES.filter((g) => g !== CORE_GROUP).join(", ")}; \`all\` enables everything. Hidden tools are still described by \`search\` / \`fetch\`, and each doc names its group.\nAuth: none. Errors: UNKNOWN_GROUP for a name outside the list.`,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
       inputSchema: {
         group: z.enum(enumGroups).optional().describe("Group to enable, or `all`. Omit to list the groups."),
@@ -227,23 +259,7 @@ export function registerToolsEnable(server: McpServer) {
         if (!group) {
           return asToolResult(ok({ groups: catalogue(server), hint: "Call again with { group } to enable one." }, meta))
         }
-        const targets = group === "all" ? GROUP_NAMES.filter((g) => g !== CORE_GROUP) : [group]
-        const entry = getSession().entry
-        const enabled: string[] = []
-        const alreadyEnabled: string[] = []
-        const notAvailable: string[] = []
-        for (const g of targets) {
-          for (const name of TOOL_GROUPS[g].tools) {
-            const t = reg[name]
-            if (!t) { notAvailable.push(name); continue }
-            // OAuth sessions never get the session-credential tools back.
-            if (entry === "oauth" && OAUTH_HIDDEN_TOOLS.has(name)) { notAvailable.push(name); continue }
-            if (t.enabled !== false) { alreadyEnabled.push(name); continue }
-            if (typeof t.enable === "function") t.enable()
-            delete t._hiddenByGroup
-            enabled.push(name)
-          }
-        }
+        const { enabled, alreadyEnabled, notAvailable } = enableGroups(server, [group])
         return asToolResult(ok({
           group,
           enabled,

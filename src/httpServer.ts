@@ -8,6 +8,8 @@ import { createSessionContext, runWithSession, setHostedMode, SessionContext } f
 import { fetchAppJwtByDomainName, usersMe } from "./apiClientDappros.js"
 import { ALL_SCOPES, ADVERTISED_SCOPES, hideOAuthTools, parseScopes } from "./scopeGuard.js"
 import { renderLandingPage } from "./landingPage.js"
+import { AccountMemoryStore, identityKeyFor, applyMemory, snapshotSession } from "./accountMemory.js"
+import { enableGroups, enabledGroups } from "./toolGroups.js"
 
 type Entry = {
   server: McpServer
@@ -147,6 +149,8 @@ export async function startHttpServer(opts: HttpServerOptions) {
   const prmUrl = `${publicBase}/.well-known/oauth-protected-resource/mcp/oauth`
 
   const sessions = new Map<string, Entry>()
+  // Per-account context carried across sessions (see accountMemory.ts).
+  const memory = new AccountMemoryStore({ ttlMs: envInt("ETHORA_MCP_ACCOUNT_MEMORY_TTL_MS", 24 * 60 * 60 * 1000) })
 
   const discovery = () => ({
     name: opts.name,
@@ -214,7 +218,7 @@ export async function startHttpServer(opts: HttpServerOptions) {
     res.json(discovery())
   })
   app.get("/.well-known/mcp", (_req, res) => { res.json(discovery()) })
-  app.get("/healthz", (_req, res) => { res.json({ ok: true, sessions: sessions.size, version: opts.version, appJwtReady: Boolean(appConfig.appJwt), oauth: Boolean(authIssuer) }) })
+  app.get("/healthz", (_req, res) => { res.json({ ok: true, sessions: sessions.size, accounts: memory.size, version: opts.version, appJwtReady: Boolean(appConfig.appJwt), oauth: Boolean(authIssuer) }) })
   // A missing robots.txt means "allow", but it answers as an HTML 404 page,
   // which is a poor first impression on a host we want crawled and indexed.
   // Say allow explicitly and point at the discovery document.
@@ -296,7 +300,40 @@ export async function startHttpServer(opts: HttpServerOptions) {
       return false
     }
     session.oauth = { validatedToken: jwt, validatedAt: now, scopes: scopesForToken(jwt) }
+    memory.markTokenValidated(jwt, now)
     return true
+  }
+
+  // A bearer on the open entry point (personal URL or Authorization header) is
+  // normally checked by the API on each call. Account memory needs to know it
+  // is genuine before anything is restored or stored under the user id it
+  // names, so confirm it once (cached per token for a few minutes).
+  const validateBearerForMemory = async (session: SessionContext, jwt: string): Promise<boolean> => {
+    if (memory.isTokenValidated(jwt)) return true
+    try {
+      await runWithSession(session, () => usersMe())
+    } catch {
+      return false
+    }
+    memory.markTokenValidated(jwt)
+    return true
+  }
+
+  // Fresh session with a token that names a user: restore that account's
+  // remembered context and keep snapshotting it after every tool call.
+  const attachAccountMemory = async (entry: Entry, kind: EntryKind, bearer: string) => {
+    const { session, server } = entry
+    const key = identityKeyFor(bearer)
+    if (!key) return
+    const valid = kind === "oauth" ? true : await validateBearerForMemory(session, bearer)
+    if (!valid) return
+    session.identityKey = key
+    const applied = applyMemory(session, memory.get(key))
+    if (applied.groups.length) enableGroups(server, applied.groups, kind)
+    if (applied.appId || applied.agentId || applied.groups.length) {
+      console.error(`[mcp-http] session ${session.id} restored account context: app=${applied.appId || "-"} agent=${applied.agentId || "-"} groups=${applied.groups.join(",") || "-"}`)
+    }
+    session.afterTool = () => memory.remember(key, snapshotSession(session, enabledGroups(server)))
   }
 
   const handleMcp = async (req: Request, res: Response, kind: EntryKind, pathKey?: string) => {
@@ -372,9 +409,14 @@ export async function startHttpServer(opts: HttpServerOptions) {
       }
     }
 
+    // Before connect(), so restored tool groups are listed from the first
+    // tools/list without a list_changed round trip.
+    if (fresh && (headerJwt || pathKey)) await attachAccountMemory(entry, kind, headerJwt || pathKey || "")
+
     if (fresh) await server.connect(transport)
 
     await runWithSession(session, () => transport.handleRequest(req, res, req.body))
+    session.afterTool?.()
 
     if (req.method === "DELETE") {
       await closeEntry(session.id, "client DELETE")
@@ -408,6 +450,7 @@ export async function startHttpServer(opts: HttpServerOptions) {
     for (const [sid, e] of sessions) {
       if (now - e.session.lastSeenAt > sessionTtlMs) void closeEntry(sid, "idle timeout")
     }
+    memory.sweep(now)
   }, Math.min(60_000, sessionTtlMs))
   sweeper.unref()
 

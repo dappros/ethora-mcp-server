@@ -73,6 +73,18 @@ export type SessionContext = {
   // Tool currently executing, set by the registration wrapper so outbound API
   // calls can be attributed (X-Ethora-Tool) without every handler passing it.
   currentTool?: string
+  // Account memory key (`user:<id>`) once the bearer has been validated against
+  // the API. Set by the HTTP server; while present, the session's context is
+  // snapshotted after every request and restored into the account's next
+  // session (clients such as ChatGPT open one session per tool call).
+  identityKey?: string
+  // Runs when a tool call finishes (set by the HTTP server to snapshot the
+  // session into account memory). Tool results are streamed after
+  // handleRequest() returns, so the request boundary is too early.
+  afterTool?: () => void
+  // The default-app lookup (only owned app becomes the current app) ran once
+  // for this session; it is not repeated whether or not it found one.
+  defaultAppChecked?: boolean
 }
 
 export function createSessionContext(id?: string): SessionContext {
