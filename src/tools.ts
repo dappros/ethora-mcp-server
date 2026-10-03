@@ -4548,7 +4548,7 @@ async function activateAgentForApp(agentId: string, chatJid: string | undefined,
         }
     }
     if (!appTokenFor(appId)) {
-        throw new Error(`No appToken stored for app ${appId}. Call \`ethora-app-select { appId: "${appId}", appToken: "<appToken>" }\` (the appToken is in the \`ethora-app-create\` result or the admin UI) and retry.`)
+        throw new Error(`No appToken stored for app ${appId}. Call \`ethora-app-select\` with { appId: "${appId}", appToken: ${placeholder("appToken")} } (the appToken is in the \`ethora-app-create\` result or the admin UI) and retry.`)
     }
     try {
         const res = await agentsActivateV2(id, { chatJid, appId })
