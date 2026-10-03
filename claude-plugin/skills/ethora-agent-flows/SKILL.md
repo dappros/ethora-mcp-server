@@ -1,4 +1,5 @@
 ---
+name: ethora-agent-flows
 description: Write or edit a scripted conversation flow for an Ethora AI agent, as flowsYaml. Use when the user wants an agent to follow a fixed sequence such as an opening menu, an appointment request, an intake questionnaire, a survey or a lead-capture form, rather than letting the model improvise every turn.
 ---
 

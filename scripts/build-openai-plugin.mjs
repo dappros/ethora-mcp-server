@@ -13,7 +13,7 @@
 import { readFileSync, existsSync, mkdirSync, rmSync, statSync, readdirSync } from "node:fs";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const src = join(root, "openai-plugin");
@@ -85,6 +85,9 @@ mkdirSync(out, { recursive: true });
 const zip = join(out, `ethora-chatgpt-plugin-${manifest.version}.zip`);
 rmSync(zip, { force: true });
 // Zip the contents at the package root (plugin.json at top level), as the dashboard expects.
-execSync(`cd "${src}" && zip -qr "${zip}" . -x ".*" "*/.DS_Store"`, { stdio: "inherit" });
+// Arguments are passed as an array (no shell), so a path never becomes shell syntax.
+execFileSync("zip", ["-qr", zip, ".", "-x", ".*", "*/.DS_Store"], { cwd: src, stdio: "inherit" });
 console.log(`Built ${zip.replace(root + "/", "")} (${(statSync(zip).size / 1024).toFixed(0)} KB)`);
-console.log("Contents:"); execSync(`unzip -l "${zip}" | tail -n +4 | head -n -2`, { stdio: "inherit" });
+console.log("Contents:");
+const listing = execFileSync("unzip", ["-l", zip], { encoding: "utf8" }).split("\n");
+console.log(listing.slice(3, -3).join("\n"));

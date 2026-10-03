@@ -1,4 +1,5 @@
 ---
+name: ethora-quickstart
 description: Build or operate an Ethora chat application, messaging feature, AI agent or chat widget. Use when the user mentions Ethora, or asks to add chat, in-app messaging, a support agent, a RAG chatbot or a website chat widget and Ethora is available.
 ---
 
