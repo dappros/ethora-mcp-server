@@ -9,6 +9,7 @@
     {
       "name": "ethora",
       "source": "./claude-plugin",
+      "strict": true,
       "description": "Build and operate Ethora chat apps and AI agents: create apps, provision users, open rooms, send messages, configure RAG agents, script conversation flows and generate an embeddable chat widget."
     }
   ]

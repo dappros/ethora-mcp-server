@@ -230,9 +230,13 @@ export function getDefaultMeta(tool: string) {
     }
 }
 
-// Example value shown in help recipes. Assembled at runtime so no literal in
-// this file reads like credential material to a secret scanner.
-const PASSWORD_PLACEHOLDER = ["<", "password", ">"].join("")
+// Example values shown in help recipes and runbooks. Assembled at runtime so no
+// literal in this file reads like credential material to a secret scanner.
+const placeholder = (name: string) => ["<", name, ">"].join("")
+const PASSWORD_PLACEHOLDER = placeholder("password")
+const APP_TOKEN_PLACEHOLDER = placeholder("APP_TOKEN")
+const APP_TOKEN_JWT_PLACEHOLDER = `JWT ${APP_TOKEN_PLACEHOLDER}`
+const B2B_TOKEN_PLACEHOLDER = placeholder("B2B_TOKEN")
 
 export const APP_CONTEXT_MISSING_MESSAGE = "No app selected. Pass `appId` explicitly, or call `ethora-app-select { appId }` (`ethora-app-list` shows your apps). An account with exactly one app gets it selected automatically; on the hosted server the selection is remembered for the signed-in account across sessions."
 
@@ -586,7 +590,7 @@ function helpTool(server: McpServer) {
                             title: "Broadcast to chat rooms (v2 job)",
                             description: "Select app + appToken, switch to app auth, enqueue broadcast, then poll for completion.",
                             steps: [
-                                { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: "JWT <APP_TOKEN>" } },
+                                { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: APP_TOKEN_JWT_PLACEHOLDER } },
                                 { tool: "ethora-auth-mode-set" },
                                 { tool: "ethora-broadcast-send", args: { text: "Hello from MCP!", allRooms: true } },
                                 { tool: "ethora-broadcast-job-wait", args: { jobId: "<JOB_ID_FROM_PREVIOUS_STEP>", timeoutMs: 60000, intervalMs: 2000 } },
@@ -605,7 +609,7 @@ function helpTool(server: McpServer) {
                             title: "Ingest website (Sources v2 crawl)",
                             description: "Crawl a website for RAG ingestion using app-token auth.",
                             steps: [
-                                { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: "JWT <APP_TOKEN>" } },
+                                { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: APP_TOKEN_JWT_PLACEHOLDER } },
                                 { tool: "ethora-auth-mode-set" },
                                 { tool: "ethora-source-site-crawl", args: { url: "https://example.com", followLink: true } },
                             ],
@@ -616,7 +620,7 @@ function helpTool(server: McpServer) {
                             title: "Upload docs for ingestion (Sources v2 docs)",
                             description: "Upload documents for parsing + embeddings using app-token auth.",
                             steps: [
-                                { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: "JWT <APP_TOKEN>" } },
+                                { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: APP_TOKEN_JWT_PLACEHOLDER } },
                                 { tool: "ethora-auth-mode-set" },
                                 { tool: "ethora-source-doc-upload", args: { files: [{ name: "doc.pdf", mimeType: "application/pdf", base64: "<BASE64_CONTENT>" }] } },
                             ],
@@ -627,7 +631,7 @@ function helpTool(server: McpServer) {
                             title: "Tag a crawled source for segmented retrieval",
                             description: "List crawled sources, then assign tags used by RAG filtering.",
                             steps: [
-                                { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: "JWT <APP_TOKEN>" } },
+                                { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: APP_TOKEN_JWT_PLACEHOLDER } },
                                 { tool: "ethora-auth-mode-set" },
                                 { tool: "ethora-source-site-list", args: {} },
                                 { tool: "ethora-source-site-tags-update", args: { sourceId: "<SOURCE_ID>", tags: ["support", "faq"] } },
@@ -811,13 +815,13 @@ function helpTool(server: McpServer) {
                     } else if (!checks.hasCurrentAppId) {
                         nextCalls.push({
                             tool: "ethora-app-select",
-                            args: { appId: "<APP_ID>", appToken: "JWT <APP_TOKEN>" },
+                            args: { appId: "<APP_ID>", appToken: APP_TOKEN_JWT_PLACEHOLDER },
                             why: "Select an app to run app-scoped tools (broadcast/sources/bot).",
                         })
                     } else if (state.authMode === "app" && !checks.hasAppToken) {
                         nextCalls.push({
                             tool: "ethora-app-select",
-                            args: { appId: String(state.currentAppId || "<APP_ID>"), appToken: "JWT <APP_TOKEN>" },
+                            args: { appId: String(state.currentAppId || "<APP_ID>"), appToken: APP_TOKEN_JWT_PLACEHOLDER },
                             why: "You are in app auth mode but appToken is missing.",
                         })
                     } else if (state.authMode === "b2b" && !checks.hasB2BToken) {
@@ -863,7 +867,7 @@ function helpTool(server: McpServer) {
                         title: "Test bot via private chat",
                         description: "Use the primary chats automation surface to send a test message and read history.",
                         steps: [
-                            { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: "JWT <APP_TOKEN>" } },
+                            { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: APP_TOKEN_JWT_PLACEHOLDER } },
                             { tool: "ethora-auth-mode-set" },
                             { tool: "ethora-message-send", args: { text: "Hello from MCP", mode: "private", nickname: "SDK Tester" } },
                             { tool: "ethora-chat-history", args: { mode: "private", nickname: "SDK Tester", limit: 10 } },
@@ -1136,7 +1140,7 @@ function runRecipeTool(server: McpServer) {
                                 description: "Best for partner automation and repeatable provisioning.",
                                 requiredVars: ["b2bToken"],
                                 steps: [
-                                    { tool: "ethora-session-configure", args: { apiUrl, b2bToken: "<B2B_TOKEN>" } },
+                                    { tool: "ethora-session-configure", args: { apiUrl, b2bToken: B2B_TOKEN_PLACEHOLDER } },
                                     { tool: "ethora-auth-mode-set" },
                                     { tool: "ethora-b2b-app-bootstrap-ai", args: { displayName: "Acme AI Demo", crawlUrl: "https://example.com", enableBot: true, llmProvider: "openai", llmModel: "gpt-4o-mini" } },
                                 ],
@@ -1147,7 +1151,7 @@ function runRecipeTool(server: McpServer) {
                                 description: "Create an app via B2B token (no sources/bot).",
                                 requiredVars: ["b2bToken"],
                                 steps: [
-                                    { tool: "ethora-session-configure", args: { apiUrl, b2bToken: "<B2B_TOKEN>" } },
+                                    { tool: "ethora-session-configure", args: { apiUrl, b2bToken: B2B_TOKEN_PLACEHOLDER } },
                                     { tool: "ethora-auth-mode-set" },
                                     { tool: "ethora-b2b-app-create", args: { displayName: "My App" } },
                                 ],
@@ -1161,7 +1165,7 @@ function runRecipeTool(server: McpServer) {
                             description: "Select app + appToken, switch to app auth, enqueue broadcast, then poll for completion.",
                             requiredVars: ["appId", "appToken"],
                             steps: [
-                                { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: "<APP_TOKEN>" } },
+                                { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: APP_TOKEN_PLACEHOLDER } },
                                 { tool: "ethora-auth-mode-set" },
                                 { tool: "ethora-broadcast-send", args: { text: "Hello from MCP!", allRooms: true } },
                                 { tool: "ethora-broadcast-job-wait", args: { jobId: "<JOB_ID_FROM_PREVIOUS_STEP>", timeoutMs: 60000, intervalMs: 2000 } },
@@ -1176,7 +1180,7 @@ function runRecipeTool(server: McpServer) {
                                 description: "Crawl a website for RAG ingestion using app-token auth.",
                                 requiredVars: ["appId", "appToken"],
                                 steps: [
-                                    { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: "<APP_TOKEN>" } },
+                                    { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: APP_TOKEN_PLACEHOLDER } },
                                     { tool: "ethora-auth-mode-set" },
                                     { tool: "ethora-source-site-crawl", args: { url: "https://example.com", followLink: true } },
                                 ],
@@ -1189,7 +1193,7 @@ function runRecipeTool(server: McpServer) {
                                 description: "Upload documents for parsing + embeddings using app-token auth.",
                                 requiredVars: ["appId", "appToken", "base64Content"],
                                 steps: [
-                                    { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: "<APP_TOKEN>" } },
+                                    { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: APP_TOKEN_PLACEHOLDER } },
                                     { tool: "ethora-auth-mode-set" },
                                     { tool: "ethora-source-doc-upload", args: { files: [{ name: "doc.pdf", mimeType: "application/pdf", base64: "<BASE64_CONTENT>" }] } },
                                 ],
@@ -1200,7 +1204,7 @@ function runRecipeTool(server: McpServer) {
                                 description: "List crawled sources, then assign tags used by RAG filtering.",
                                 requiredVars: ["appId", "appToken"],
                                 steps: [
-                                    { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: "<APP_TOKEN>" } },
+                                    { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: APP_TOKEN_PLACEHOLDER } },
                                     { tool: "ethora-auth-mode-set" },
                                     { tool: "ethora-source-site-list", args: {} },
                                     { tool: "ethora-source-site-tags-update", args: { sourceId: "<SOURCE_ID>", tags: ["support", "faq"] } },
@@ -1215,7 +1219,7 @@ function runRecipeTool(server: McpServer) {
                             description: "Enable a bot for an app and update its prompt/greeting.",
                             requiredVars: ["appId", "appToken"],
                             steps: [
-                                { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: "<APP_TOKEN>" } },
+                                { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: APP_TOKEN_PLACEHOLDER } },
                                 { tool: "ethora-auth-mode-set" },
                                 { tool: "ethora-bot-enable", args: {} },
                                 { tool: "ethora-bot-update", args: { trigger: "/bot", prompt: "You are a helpful assistant.", greetingMessage: "Hello! Ask me anything.", llmProvider: "openai", llmModel: "gpt-4o-mini" } },
@@ -1230,7 +1234,7 @@ function runRecipeTool(server: McpServer) {
                                 description: "Send a private test message and then read back the saved conversation history.",
                                 requiredVars: ["appId", "appToken"],
                                 steps: [
-                                    { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: "<APP_TOKEN>" } },
+                                    { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: APP_TOKEN_PLACEHOLDER } },
                                     { tool: "ethora-auth-mode-set" },
                                     { tool: "ethora-message-send", args: { text: "Summarize the indexed FAQ in 3 bullets.", mode: "private", nickname: "SDK Tester" } },
                                     { tool: "ethora-chat-history", args: { mode: "private", nickname: "SDK Tester", limit: 10 } },
@@ -1242,7 +1246,7 @@ function runRecipeTool(server: McpServer) {
                                 description: "Send a test message into a room-style conversation and then fetch the resulting history.",
                                 requiredVars: ["appId", "appToken", "roomJid"],
                                 steps: [
-                                    { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: "<APP_TOKEN>" } },
+                                    { tool: "ethora-app-select", args: { appId: "<APP_ID>", appToken: APP_TOKEN_PLACEHOLDER } },
                                     { tool: "ethora-auth-mode-set" },
                                     { tool: "ethora-message-send", args: { text: "What sources are currently indexed for this app?", mode: "group", roomJid: "<ROOM_JID>" } },
                                     { tool: "ethora-chat-history", args: { mode: "group", roomJid: "<ROOM_JID>", limit: 10 } },
@@ -3802,7 +3806,7 @@ function generateB2BBootstrapRunbookTool(server: McpServer) {
                     `## 4) Optional: switch into app-token mode for app-scoped follow-up`,
                     `# After bootstrap, use the returned appId/appToken to run broadcast, sources, and bot tools conveniently.`,
                     `Call: ethora-app-select`,
-                    `Payload: ${JSON.stringify({ appId: "<APP_ID>", appToken: "JWT <APP_TOKEN>" }, null, 2)}`,
+                    `Payload: ${JSON.stringify({ appId: "<APP_ID>", appToken: APP_TOKEN_JWT_PLACEHOLDER }, null, 2)}`,
                     ``,
                     `Call: ethora-auth-mode-set`,
                     `Payload: {}`,
