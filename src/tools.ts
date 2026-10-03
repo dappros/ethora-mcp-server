@@ -237,6 +237,7 @@ const PASSWORD_PLACEHOLDER = placeholder("password")
 const APP_TOKEN_PLACEHOLDER = placeholder("APP_TOKEN")
 const APP_TOKEN_JWT_PLACEHOLDER = `JWT ${APP_TOKEN_PLACEHOLDER}`
 const B2B_TOKEN_PLACEHOLDER = placeholder("B2B_TOKEN")
+const jwtPlaceholder = (name: string) => `JWT ${placeholder(name)}`
 
 export const APP_CONTEXT_MISSING_MESSAGE = "No app selected. Pass `appId` explicitly, or call `ethora-app-select { appId }` (`ethora-app-list` shows your apps). An account with exactly one app gets it selected automatically; on the hosted server the selection is remembered for the signed-in account across sessions."
 
@@ -492,7 +493,7 @@ function helpTool(server: McpServer) {
                     if (!checks.hasAppJwt) {
                         nextCalls.push({
                             tool: "ethora-session-configure",
-                            args: { appJwt: "JWT <APP_JWT_FOR_LOGIN_REGISTER>" },
+                            args: { appJwt: jwtPlaceholder("APP_JWT_FOR_LOGIN_REGISTER") },
                             why: "User-auth mode needs App JWT only for login/register bootstrap.",
                         })
                     }
@@ -512,7 +513,7 @@ function helpTool(server: McpServer) {
                         title: "User login (for user-auth tools like files)",
                         description: "Recommended first-run local flow for developers and admins using the MCP server on their own machine.",
                         steps: [
-                            { tool: "ethora-session-configure", args: { apiUrl: String(state.apiUrl || "https://api.ethoradev.com/v1"), appJwt: "JWT <APP_JWT_FOR_LOGIN_REGISTER>" } },
+                            { tool: "ethora-session-configure", args: { apiUrl: String(state.apiUrl || "https://api.ethoradev.com/v1"), appJwt: jwtPlaceholder("APP_JWT_FOR_LOGIN_REGISTER") } },
                             { tool: "ethora-auth-mode-set" },
                             { tool: "ethora-user-login", args: { email: "user@example.com", password: PASSWORD_PLACEHOLDER } },
                         ],
@@ -538,7 +539,7 @@ function helpTool(server: McpServer) {
                     if (!checks.hasB2BToken) {
                         nextCalls.push({
                             tool: "ethora-session-configure",
-                            args: { b2bToken: "JWT <B2B_SERVER_TOKEN>" },
+                            args: { b2bToken: jwtPlaceholder("B2B_SERVER_TOKEN") },
                             why: "B2B mode requires a server token sent as x-custom-token.",
                         })
                     }
@@ -553,7 +554,7 @@ function helpTool(server: McpServer) {
                         title: "B2B bootstrap: create app → ingest → enable bot",
                         description: "Recommended server-side flow when Ethora is being automated from your own backend or agent runner.",
                         steps: [
-                            { tool: "ethora-session-configure", args: { apiUrl: String(state.apiUrl || "https://api.ethoradev.com/v1"), b2bToken: "JWT <B2B_SERVER_TOKEN>" } },
+                            { tool: "ethora-session-configure", args: { apiUrl: String(state.apiUrl || "https://api.ethoradev.com/v1"), b2bToken: jwtPlaceholder("B2B_SERVER_TOKEN") } },
                             { tool: "ethora-auth-mode-set" },
                             { tool: "ethora-b2b-app-bootstrap-ai", args: { displayName: "Acme AI Demo", crawlUrl: "https://example.com", enableBot: true, llmProvider: "openai", llmModel: "gpt-4o-mini" } },
                         ],
@@ -564,7 +565,7 @@ function helpTool(server: McpServer) {
                         title: "B2B: create app only",
                         description: "Create an app via B2B token (no sources/bot).",
                         steps: [
-                            { tool: "ethora-session-configure", args: { apiUrl: String(state.apiUrl || "https://api.ethoradev.com/v1"), b2bToken: "JWT <B2B_SERVER_TOKEN>" } },
+                            { tool: "ethora-session-configure", args: { apiUrl: String(state.apiUrl || "https://api.ethoradev.com/v1"), b2bToken: jwtPlaceholder("B2B_SERVER_TOKEN") } },
                             { tool: "ethora-auth-mode-set" },
                             { tool: "ethora-b2b-app-create", args: { displayName: "My App" } },
                         ],
@@ -827,7 +828,7 @@ function helpTool(server: McpServer) {
                     } else if (state.authMode === "b2b" && !checks.hasB2BToken) {
                         nextCalls.push({
                             tool: "ethora-session-configure",
-                            args: { b2bToken: "JWT <B2B_SERVER_TOKEN>" },
+                            args: { b2bToken: jwtPlaceholder("B2B_SERVER_TOKEN") },
                             why: "You are in B2B auth mode but b2bToken is missing.",
                         })
                     } else if (state.authMode === "user" && !checks.hasUserToken) {
@@ -1276,9 +1277,9 @@ function runRecipeTool(server: McpServer) {
                                 description: "Configure appJwt (if needed), switch to user auth, and login.",
                                 requiredVars: ["appJwt", "email", "password"],
                                 steps: [
-                                    { tool: "ethora-session-configure", args: { apiUrl, appJwt: "<APP_JWT>" } },
+                                    { tool: "ethora-session-configure", args: { apiUrl, appJwt: placeholder("APP_JWT") } },
                                     { tool: "ethora-auth-mode-set" },
-                                    { tool: "ethora-user-login", args: { email: "<EMAIL>", password: "<PASSWORD>" } },
+                                    { tool: "ethora-user-login", args: { email: "<EMAIL>", password: placeholder("PASSWORD") } },
                                 ],
                             },
                             {
@@ -1288,7 +1289,7 @@ function runRecipeTool(server: McpServer) {
                                 requiredVars: ["email", "password", "base64Content"],
                                 steps: [
                                     { tool: "ethora-auth-mode-set" },
-                                    { tool: "ethora-user-login", args: { email: "<EMAIL>", password: "<PASSWORD>" } },
+                                    { tool: "ethora-user-login", args: { email: "<EMAIL>", password: placeholder("PASSWORD") } },
                                     { tool: "ethora-file-upload", args: { files: [{ name: "example.txt", mimeType: "text/plain", base64: "<BASE64_CONTENT>" }] } },
                                 ],
                             }
@@ -3793,7 +3794,7 @@ function generateB2BBootstrapRunbookTool(server: McpServer) {
                     ``,
                     `## 1) Configure`,
                     `Call: ethora-session-configure`,
-                    `Payload: ${JSON.stringify({ apiUrl: apiUrl || "https://api.ethoradev.com/v1", b2bToken: "JWT <B2B_SERVER_TOKEN>" }, null, 2)}`,
+                    `Payload: ${JSON.stringify({ apiUrl: apiUrl || "https://api.ethoradev.com/v1", b2bToken: jwtPlaceholder("B2B_SERVER_TOKEN") }, null, 2)}`,
                     ``,
                     `## 2) Switch to B2B auth`,
                     `Call: ethora-auth-mode-set`,
