@@ -7,7 +7,7 @@
 // (`ethora-app-credentials-reveal`, the login/register/api-key tools).
 
 export const REDACTED = "[redacted]"
-export const REDACTED_APP_TOKEN = "[redacted - call ethora-app-credentials-reveal to reveal appToken]"
+export const REDACTED_APP_CREDENTIAL = "[redacted - call ethora-app-credentials-reveal to reveal appToken]"
 
 // Exact key names (case-insensitive) that always carry a credential.
 const EXACT_KEYS = /^(appSecret|tenantSecret|appToken|appJwt|b2bToken|token|authToken|idToken|serverToken|password|secret|privateKey|mnemonic|seed|refreshToken|accessToken|jwt|apiKey|api_key|clientSecret)$/i
@@ -19,7 +19,7 @@ export function isSecretKey(key: string): boolean {
 }
 
 function replacementFor(key: string): string {
-  return /^appToken$/i.test(key) ? REDACTED_APP_TOKEN : REDACTED
+  return /^appToken$/i.test(key) ? REDACTED_APP_CREDENTIAL : REDACTED
 }
 
 // Deep-copies `value`, replacing the value of every credential-named key at any
