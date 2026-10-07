@@ -19,6 +19,7 @@ All notable changes to this package are documented here. For cross-SDK release n
 - `ethora-widget-snippet-get` notes that the saved appearance applies by itself and that cosmetic attributes on the tag override it.
 
 ### Fixed
+- `ethora-agent-list` in user auth lists your own and public agents again when an app is selected: the API's app-scoped route now lists only agents homed in that app, so the tool uses it only when `appId` is passed (or with a B2B token).
 - `ethora-agent-create` suggested `ethora-source-site-crawl-wait { agentId }`, but the crawl tool had no `agentId`, so the argument was dropped and pages went to the app's default agent.
 - `ethora-source-site-crawl-wait` said re-running a URL re-indexes it; the API answers 409 for an indexed URL unless `force` is set.
 - Directory review findings: `ethora-app-update`, `ethora-agent-update`, `ethora-bot-update` and `ethora-agent-soul-set` are marked `destructiveHint: true` and say what they overwrite; `ethora-app-select` and `ethora-tools-enable` are read-only (session-only, no account data); `ethora-source-site-crawl-wait` says it adds to the knowledge base without deleting anything.

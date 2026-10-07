@@ -2410,10 +2410,10 @@ function agentsListV2Tool(server: McpServer) {
     server.registerTool(
         "ethora-agent-list",
         {
-            description: "List AI agents (`GET /v2/apps/:appId/agents`, or `GET /v2/agents`): by default your own agents plus the public ones. Agents belong to your account, not to one app, so the same agent can answer in several of your apps. Public agents (e.g. the platform's Support Agent, sample personas) can be tried with `ethora-agent-try` and copied with `ethora-agent-clone`, not edited. Returns agents with ids, names, owner, visibility, categories and config.\nAuth: user session or B2B token. Errors: 401/403 wrong auth; empty list when nothing matches.",
+            description: "List AI agents (`GET /v2/agents`): by default your own agents plus the public ones. Pass `appId` to list only the agents homed in that app (`GET /v2/apps/:appId/agents`, which needs you to manage the app; B2B tokens always use this form). Agents belong to your account, not to one app, so the same agent can answer in several of your apps. Public agents (e.g. the platform's Support Agent, sample personas) can be tried with `ethora-agent-try` and copied with `ethora-agent-clone`, not edited. Returns agents with ids, names, owner, visibility, categories and config.\nAuth: user session or B2B token. Errors: 401/403 wrong auth; empty list when nothing matches.",
             annotations: { readOnlyHint: true, openWorldHint: true },
             inputSchema: {
-                appId: z.string().optional().describe("24-char hex appId for the app-scoped route (`GET /v2/apps/:appId/agents`, needed with a B2B token). Defaults to the app selected with `ethora-app-select`."),
+                appId: z.string().optional().describe("Only agents whose home app is this 24-char hex appId. In user auth the selected app is NOT applied by default (agents are account-level); with a B2B token the selected app is used."),
                 visibility: z.enum(["mine", "public"]).optional().describe("`mine` = only your own agents, `public` = only public agents (the directory to clone from). Omit for both."),
                 category: z.enum(["customer-support", "persona", "entertainment", "worker"]).optional().describe("Only agents tagged with this category."),
                 limit: z.number().int().min(1).max(200).optional().describe("Page size (max 200)."),
@@ -2424,9 +2424,12 @@ function agentsListV2Tool(server: McpServer) {
             const meta = getDefaultMeta("ethora-agent-list")
             try {
                 ensureTenantActorAuth()
-                const ctx = resolveAppScopedV2Context(appId)
+                // User auth: account-level list unless an app is named. The
+                // app-scoped route lists only agents homed in that app.
+                const state = getClientState() as any
+                const scopedAppId = state.authMode === "user" ? String(appId || "").trim() || undefined : resolveAppScopedV2Context(appId).appId
                 const params = Object.fromEntries(Object.entries({ visibility, category, limit, offset }).filter(([, v]) => v !== undefined)) as any
-                const res = await agentsListV2(ctx.appId, params)
+                const res = await agentsListV2(scopedAppId, params)
                 return asToolResult(ok(res.data, meta))
             } catch (error) {
                 return asToolResult(fail(error, meta))
