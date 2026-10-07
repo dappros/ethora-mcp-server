@@ -64,19 +64,24 @@ export const TOOL_GROUPS: Record<string, { summary: string; tools: string[] }> =
     ],
   },
   "agents-admin": {
-    summary: "Inspect, clone, delete, export and import agents; edit an agent's soul and visibility.",
+    summary: "Inspect, clone (with or without its knowledge), delete, export and import agents; try an agent without a room; check and rebuild its knowledge index; edit its Memory and visibility.",
     tools: [
       "ethora-agent-get", "ethora-agent-clone", "ethora-agent-delete", "ethora-agent-export", "ethora-agent-import",
       "ethora-agent-visibility-set", "ethora-agent-soul-set", "ethora-agent-soul-append",
+      "ethora-agent-try", "ethora-agent-knowledge-get", "ethora-agent-knowledge-rebuild",
     ],
   },
   sources: {
-    summary: "Knowledge-base maintenance: async crawl and reindex jobs, list and tag sites and documents, delete URLs and documents.",
+    summary: "Knowledge-base maintenance: async crawl and reindex jobs, stop a crawl, list and tag sites and documents, delete URLs and documents.",
     tools: [
-      "ethora-source-site-crawl", "ethora-source-site-reindex", "ethora-source-site-reindex-wait", "ethora-source-site-list",
+      "ethora-source-site-crawl", "ethora-source-site-crawl-cancel", "ethora-source-site-reindex", "ethora-source-site-reindex-wait", "ethora-source-site-list",
       "ethora-source-site-tags-update", "ethora-source-site-url-delete", "ethora-source-site-url-delete-batch",
       "ethora-source-doc-list", "ethora-source-doc-tags-update", "ethora-source-doc-delete",
     ],
+  },
+  widget: {
+    summary: "Read and change the website widget's saved look (colours, fonts, size, launcher, teaser, texts); live embeds pick it up without a new snippet.",
+    tools: ["ethora-widget-appearance-get", "ethora-widget-appearance-set"],
   },
   "users-files": {
     summary: "Batch-create users and upload, fetch or delete files.",

@@ -4,7 +4,23 @@ All notable changes to this package are documented here. For cross-SDK release n
 
 ## Unreleased
 
+### Added
+- `ethora-widget-appearance-get` / `-set` (new `widget` group): the website widget's look is saved on the app and every embed loads it, so it can be changed without a new snippet. `-set` merges into the saved set by default (`replace: true` for the whole set, `""` removes one attribute).
+- `ethora-agent-try`: one test turn against an agent's prompt, Memory and knowledge without a chat room, with the sources used; works on public agents too.
+- `ethora-agent-knowledge-get` / `-rebuild`: what an agent can actually search (and what is stored but missing from the index), and re-indexing the missing items.
+- `ethora-source-site-crawl-cancel`: stop a running crawl.
+- `agentId` on `ethora-source-site-crawl(-wait)` and `ethora-source-doc-upload` (file the content under that agent; without it, the app's default agent), and on `ethora-source-site-list` / `ethora-source-doc-list` (only that agent's items); `force` on the crawl tools re-crawls an already-indexed URL instead of getting 409.
+- `includeKnowledge` on `ethora-agent-clone` copies the source's crawled pages, documents and embeddings; `visibility` (`mine` | `public`), `category`, `limit` and `offset` on `ethora-agent-list`.
+
 ### Changed
+- Agent `categories` is a fixed list (`customer-support`, `persona`, `entertainment`, `worker`), matching the API, instead of free text the API now rejects.
+- Agents belong to the account and only their owner can change them: `ethora-agent-update` says a public agent (e.g. the platform's Support Agent) answers 403 and is cloned instead; `ethora-agent-clone` works in user auth and on public agents.
+- `ethora-agent-soul-set` / `-append` describe the agent's Memory (the admin panel's new name for SOUL.MD); titles were "Agent Prompt", which was wrong.
+- `ethora-widget-snippet-get` notes that the saved appearance applies by itself and that cosmetic attributes on the tag override it.
+
+### Fixed
+- `ethora-agent-create` suggested `ethora-source-site-crawl-wait { agentId }`, but the crawl tool had no `agentId`, so the argument was dropped and pages went to the app's default agent.
+- `ethora-source-site-crawl-wait` said re-running a URL re-indexes it; the API answers 409 for an indexed URL unless `force` is set.
 - Directory review findings: `ethora-app-update`, `ethora-agent-update`, `ethora-bot-update` and `ethora-agent-soul-set` are marked `destructiveHint: true` and say what they overwrite; `ethora-app-select` and `ethora-tools-enable` are read-only (session-only, no account data); `ethora-source-site-crawl-wait` says it adds to the knowledge base without deleting anything.
 - The `admin` OAuth scope is now required by irreversible operations (delete, revoke, rotate, credential reveal) by name, not by the destructive hint, so a read+write grant can still edit agents and apps.
 

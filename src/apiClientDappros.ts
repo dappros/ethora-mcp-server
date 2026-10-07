@@ -566,10 +566,11 @@ export function botUpdateForAppV2(appId: string, payload: {
 // Agents: the app-scoped `/v2/apps/:appId/agents` routes accept a user token
 // or a B2B token (tenantActor) and land the agent in that app; the bare
 // `/v2/agents` routes are user-only and default to the token's own app.
-export function agentsListV2(appId?: string) {
+export function agentsListV2(appId?: string, params?: { visibility?: "mine" | "public" | "all"; category?: string; limit?: number; offset?: number }) {
   const id = String(appId || "").trim()
-  if (id) return httpClientDappros.get(`/v2/apps/${id}/agents`)
-  return httpClientDappros.get(`/v2/agents`)
+  const config = params && Object.keys(params).length ? { params } : undefined
+  if (id) return httpClientDappros.get(`/v2/apps/${id}/agents`, config)
+  return httpClientDappros.get(`/v2/agents`, config)
 }
 
 export function agentsGetV2(agentId: string) {
@@ -633,6 +634,7 @@ export function agentsCloneV2(agentId: string, payload?: {
   name?: string
   slug?: string
   summary?: string
+  includeKnowledge?: boolean
 }) {
   return httpClientDappros.post(`/v2/agents/${String(agentId || "").trim()}/clone`, payload || {})
 }
@@ -709,6 +711,22 @@ export function botInstanceStatusV2(id: string, status: "on" | "off") {
 }
 
 // --- Agents: full-lifecycle completions (2607 API parity) ---
+
+// Agent Settings "Try it": one test turn against the agent's prompt and
+// knowledge, no chat room involved. `history` carries the earlier turns.
+export function agentsTryV2(idOrAddress: string, payload: { text: string; history?: Array<{ role: "user" | "assistant"; content: string }> }) {
+  return httpClientDappros.post(`/v2/agents/${String(idOrAddress || "").trim()}/try`, payload)
+}
+
+// Knowledge health: pages, documents and chunks searchable, and what is
+// stored but missing from the search index.
+export function agentsKnowledgeGetV2(idOrAddress: string) {
+  return httpClientDappros.get(`/v2/agents/${String(idOrAddress || "").trim()}/knowledge`)
+}
+
+export function agentsKnowledgeRebuildV2(idOrAddress: string, payload?: { onlyMissing?: boolean }) {
+  return httpClientDappros.post(`/v2/agents/${String(idOrAddress || "").trim()}/knowledge/rebuild`, payload || {})
+}
 
 export function agentsDeleteV2(idOrAddress: string) {
   return httpClientDappros.delete(`/v2/agents/${String(idOrAddress || "").trim()}`)
@@ -836,11 +854,11 @@ export function sourcesDocsDelete(appId: string, docId: string) {
 }
 
 // sources (v2 app-token endpoints)
-export function sourcesSiteCrawlV2(payload: { url: string; followLink?: boolean; knowledgeScope?: "app" | "saved_agent"; savedAgentId?: string }, opts?: { timeoutMs?: number }) {
+export function sourcesSiteCrawlV2(payload: { url: string; followLink?: boolean; agentId?: string; force?: boolean; knowledgeScope?: "app" | "saved_agent"; savedAgentId?: string }, opts?: { timeoutMs?: number }) {
   return httpClientDappros.post(`/v2/sources/site-crawl`, payload, { timeout: opts?.timeoutMs })
 }
 
-export function sourcesSiteCrawlForAppV2(appId: string, payload: { url: string; followLink?: boolean }, opts?: { timeoutMs?: number }) {
+export function sourcesSiteCrawlForAppV2(appId: string, payload: { url: string; followLink?: boolean; agentId?: string; force?: boolean }, opts?: { timeoutMs?: number }) {
   return httpClientDappros.post(`/v2/apps/${String(appId || "").trim()}/sources/site-crawl`, payload, { timeout: opts?.timeoutMs })
 }
 
@@ -848,8 +866,8 @@ export function sourcesSiteListV2(params?: { knowledgeScope?: "app" | "saved_age
   return httpClientDappros.get(`/v2/sources/site-crawl`, { params: params || {} })
 }
 
-export function sourcesSiteListForAppV2(appId: string) {
-  return httpClientDappros.get(`/v2/apps/${String(appId || "").trim()}/sources/site-crawl`)
+export function sourcesSiteListForAppV2(appId: string, params?: { agentId?: string }) {
+  return httpClientDappros.get(`/v2/apps/${String(appId || "").trim()}/sources/site-crawl`, params?.agentId ? { params } : undefined)
 }
 
 export function sourcesSiteReindexV2(payload: { urlId: string; knowledgeScope?: "app" | "saved_agent"; savedAgentId?: string }, opts?: { timeoutMs?: number }) {
@@ -868,6 +886,25 @@ export function sourcesSiteCrawlJobV2(jobId: string) {
 
 export function sourcesSiteCrawlJobForAppV2(appId: string, jobId: string) {
   return httpClientDappros.get(`/v2/apps/${String(appId || "").trim()}/sources/site-crawl-jobs/${String(jobId || "").trim()}`)
+}
+
+// Stop a running crawl. Pages already indexed stay.
+export function sourcesSiteCrawlCancelV2(jobId: string, appId?: string) {
+  const id = String(appId || "").trim()
+  const job = String(jobId || "").trim()
+  if (id) return httpClientDappros.post(`/v2/apps/${id}/sources/site-crawl-jobs/${job}/cancel`, {})
+  return httpClientDappros.post(`/v2/sources/site-crawl-jobs/${job}/cancel`, {})
+}
+
+// Website widget appearance saved on the App: the embed's data-* attributes
+// (non-defaults only). Live embeds read it at load, beneath URL params and
+// attributes written on the snippet.
+export function widgetAppearanceGetV2(appId: string) {
+  return httpClientDappros.get(`/v2/apps/${String(appId || "").trim()}/widget/appearance`)
+}
+
+export function widgetAppearanceSetV2(appId: string, appearance: Record<string, string>) {
+  return httpClientDappros.put(`/v2/apps/${String(appId || "").trim()}/widget/appearance`, { appearance })
 }
 
 export function sourcesSiteTagsUpdateV2(sourceId: string, tags: string[], extra?: { knowledgeScope?: "app" | "saved_agent"; savedAgentId?: string }) {
@@ -906,8 +943,8 @@ export function sourcesDocsListV2(params?: { knowledgeScope?: "app" | "saved_age
   return httpClientDappros.get(`/v2/sources/docs`, { params: params || {} })
 }
 
-export function sourcesDocsListForAppV2(appId: string) {
-  return httpClientDappros.get(`/v2/apps/${String(appId || "").trim()}/sources/docs`)
+export function sourcesDocsListForAppV2(appId: string, params?: { agentId?: string }) {
+  return httpClientDappros.get(`/v2/apps/${String(appId || "").trim()}/sources/docs`, params?.agentId ? { params } : undefined)
 }
 
 export function sourcesDocsTagsUpdateV2(docId: string, tags: string[], extra?: { knowledgeScope?: "app" | "saved_agent"; savedAgentId?: string }) {
