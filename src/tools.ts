@@ -26,6 +26,12 @@ import {
     botInstanceStatusV2,
     // 2607 API parity additions
     agentsDeleteV2,
+    agentsTryV2,
+    agentsKnowledgeGetV2,
+    agentsKnowledgeRebuildV2,
+    sourcesSiteCrawlCancelV2,
+    widgetAppearanceGetV2,
+    widgetAppearanceSetV2,
     agentsExportV2,
     agentsImportV2,
     agentBotInstanceDiagV2,
@@ -2101,7 +2107,7 @@ function appUpdateTool(server: McpServer) {
     server.registerTool(
         'ethora-app-update',
         {
-            description: "Overwrites the fields you pass; previous values are not kept and cannot be restored from the API, so confirm changes to the prompt, name or settings with the user first. Update mutable fields on an app the caller owns (displayName, domainName, appTagline, primaryColor, botStatus). Partial update — omitted fields are left unchanged.\nRequires: an `appId` from `ethora-app-list` or `ethora-app-create`.\nAuth: user-auth mode, active session; the caller must own the app. Errors: 401 not logged in; 403 not owner; 404 unknown `appId`; 422 validation (e.g. `domainName` taken, `primaryColor` not `#RRGGBB`).",
+            description: "Overwrites the fields you pass; previous values are not kept and cannot be restored from the API, so confirm changes to the prompt, name or settings with the user first. Update mutable fields on an app the caller owns (displayName, domainName, appTagline, primaryColor, botStatus). Partial update - omitted fields are left unchanged.\nRequires: an `appId` from `ethora-app-list` or `ethora-app-create`.\nAuth: user-auth mode, active session; the caller must own the app. Errors: 401 not logged in; 403 not owner; 404 unknown `appId`; 422 validation (e.g. `domainName` taken, `primaryColor` not `#RRGGBB`).",
             annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("24-char hex ObjectId of the app to update. Optional — defaults to the app most recently passed to `ethora-app-select`."),
@@ -2363,7 +2369,7 @@ function botUpdateV2Tool(server: McpServer) {
     server.registerTool(
         "ethora-bot-update",
         {
-            description: "Overwrites the fields you pass; previous values are not kept and cannot be restored from the API, so confirm changes to the prompt, name or settings with the user first. Configure the AI bot for an app — prompt, LLM, trigger, greeting, RAG behavior, identity, and public widget settings. Partial update — omitted fields are left unchanged. `status: \"on\"` activates the bot (best-effort; needs a prompt + LLM and a backend AI service).\nRequires: an app with a legacy per-app aiBot (dashboard-created). API-created apps have none: use `ethora-agent-create` -> `ethora-agent-invite` -> `ethora-agent-activate` instead.\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth; 404 unknown `appId`; 422 validation (e.g. an `llmProvider`/`llmModel` not enabled). Related: `ethora-bot-get`, `ethora-agent-activate`.",
+            description: "Overwrites the fields you pass; previous values are not kept and cannot be restored from the API, so confirm changes to the prompt, name or settings with the user first. Configure the AI bot for an app - prompt, LLM, trigger, greeting, RAG behavior, identity, and public widget settings. Partial update - omitted fields are left unchanged. `status: \"on\"` activates the bot (best-effort; needs a prompt + LLM and a backend AI service).\nRequires: an app with a legacy per-app aiBot (dashboard-created). API-created apps have none: use `ethora-agent-create` -> `ethora-agent-invite` -> `ethora-agent-activate` instead.\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth; 404 unknown `appId`; 422 validation (e.g. an `llmProvider`/`llmModel` not enabled). Related: `ethora-bot-get`, `ethora-agent-activate`.",
             annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("24-char hex appId. Required in B2B mode unless already set via `ethora-app-select`; ignored in app-token mode."),
@@ -2404,18 +2410,23 @@ function agentsListV2Tool(server: McpServer) {
     server.registerTool(
         "ethora-agent-list",
         {
-            description: "List the reusable saved agents of an app (`GET /v2/apps/:appId/agents`, or `GET /v2/agents` for the token's own app) — a saved agent is a reusable bot definition. Returns an array of agents with ids, names, and config.\nAuth: app-token mode (after `ethora-app-select` + `ethora-auth-mode-set`). Errors: 401/403 not in app-token mode or invalid appToken; empty list if the app has no saved agents.",
+            description: "List AI agents (`GET /v2/apps/:appId/agents`, or `GET /v2/agents`): by default your own agents plus the public ones. Agents belong to your account, not to one app, so the same agent can answer in several of your apps. Public agents (e.g. the platform's Support Agent, sample personas) can be tried with `ethora-agent-try` and copied with `ethora-agent-clone`, not edited. Returns agents with ids, names, owner, visibility, categories and config.\nAuth: user session or B2B token. Errors: 401/403 wrong auth; empty list when nothing matches.",
             annotations: { readOnlyHint: true, openWorldHint: true },
             inputSchema: {
-                appId: z.string().optional().describe("24-char hex appId whose agents to list (`GET /v2/apps/:appId/agents`). Defaults to the app selected with `ethora-app-select`; without either, lists the agents of the token's own app."),
+                appId: z.string().optional().describe("24-char hex appId for the app-scoped route (`GET /v2/apps/:appId/agents`, needed with a B2B token). Defaults to the app selected with `ethora-app-select`."),
+                visibility: z.enum(["mine", "public"]).optional().describe("`mine` = only your own agents, `public` = only public agents (the directory to clone from). Omit for both."),
+                category: z.enum(["customer-support", "persona", "entertainment", "worker"]).optional().describe("Only agents tagged with this category."),
+                limit: z.number().int().min(1).max(200).optional().describe("Page size (max 200)."),
+                offset: z.number().int().min(0).optional().describe("Number of agents to skip, for paging."),
             },
         },
-        async function ({ appId }) {
+        async function ({ appId, visibility, category, limit, offset }) {
             const meta = getDefaultMeta("ethora-agent-list")
             try {
                 ensureTenantActorAuth()
                 const ctx = resolveAppScopedV2Context(appId)
-                const res = await agentsListV2(ctx.appId)
+                const params = Object.fromEntries(Object.entries({ visibility, category, limit, offset }).filter(([, v]) => v !== undefined)) as any
+                const res = await agentsListV2(ctx.appId, params)
                 return asToolResult(ok(res.data, meta))
             } catch (error) {
                 return asToolResult(fail(error, meta))
@@ -2452,7 +2463,7 @@ function agentsCreateV2Tool(server: McpServer) {
     server.registerTool(
         "ethora-agent-create",
         {
-            description: "Create a reusable AI agent (POST /v2/apps/:appId/agents). Works in user auth mode (the normal hosted mode) or B2B mode; app-token mode is not accepted by the backend. Each agent is a persona — name, avatar, system prompt, LLM config, plus response-gate settings (responseMode, cooldownSec) that control when it speaks in a room. For multi-agent scenarios (two or more personas conversing in one chat) create each one separately, then `ethora-agent-invite` them into the same room. See the `ethora-agents-quickstart` prompt for the end-to-end recipe.\nRequires: a selected app (`ethora-app-select`) or an explicit `appId`; the agent is owned by that app.",
+            description: "Create a reusable AI agent (POST /v2/apps/:appId/agents). Works in user auth mode (the normal hosted mode) or B2B mode; app-token mode is not accepted by the backend. Each agent is a persona - name, avatar, system prompt, LLM config, plus response-gate settings (responseMode, cooldownSec) that control when it speaks in a room. For multi-agent scenarios (two or more personas conversing in one chat) create each one separately, then `ethora-agent-invite` them into the same room. See the `ethora-agents-quickstart` prompt for the end-to-end recipe. To start from a ready-made public agent instead, `ethora-agent-list { visibility: \"public\" }` then `ethora-agent-clone`.\nRequires: a selected app (`ethora-app-select`) or an explicit `appId`. The agent belongs to your account (only you can change it) and is homed in that app; it can still be used in your other apps.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("24-char hex appId the agent belongs to (`POST /v2/apps/:appId/agents`). Defaults to the app selected with `ethora-app-select`. Pass it when you just created an app so the agent lands there rather than in the token's own app."),
@@ -2473,7 +2484,7 @@ function agentsCreateV2Tool(server: McpServer) {
                 llmModel: z.string().optional().describe("LLM model override (e.g. 'gpt-4o-mini')."),
                 visibility: z.enum(["private", "public"]).optional().describe("'private' (only invitable inside the owning app) or 'public' (cross-app invitable)."),
                 isPublished: z.boolean().optional().describe("Convenience alias for setting visibility='public'."),
-                categories: z.array(z.string().min(1)).optional().describe("Free-form category tags for agent directory listings."),
+                categories: z.array(z.enum(["customer-support", "persona", "entertainment", "worker"])).max(4).optional().describe("Directory categories, any of: `customer-support` (customer-facing assistants), `persona` (a character or historical figure), `entertainment` (quizzes, games, scenarios), `worker` (internal work). Used to filter `ethora-agent-list`. Replaces the agent's current set."),
                 flowsYaml: z.string().optional().describe('Deterministic scripted conversation for this agent, as YAML. Drives the agent through a fixed sequence (opening menu, appointment request, intake questionnaire, survey) instead of leaving every turn to the model. Compiled and validated server-side on save: an invalid script is rejected with code `FLOWS_INVALID` and per-line details, and nothing is stored. A flow named `start` is reserved and fires when a conversation opens. Buttons are authored here (`buttons:` on a `say` step, or `options:` on an `ask` step). Call `fetch` with id `doc:agent-flows` for the full authoring format before writing one. Pass an empty string to clear the script.'),
             },
         },
@@ -2509,7 +2520,7 @@ function agentsUpdateV2Tool(server: McpServer) {
     server.registerTool(
         "ethora-agent-update",
         {
-            description: "Overwrites the fields you pass; previous values are not kept and cannot be restored from the API, so confirm changes to the prompt, name or settings with the user first. Update a saved AI agent (PUT /v2/agents/:agentId). All fields are optional — only what you pass is updated. Common uses: tune the system `prompt` after a test run, switch `responseMode` to control turn-taking in multi-agent rooms, or adjust `cooldownSec`. See `ethora-agents-quickstart` prompt for the end-to-end recipe.\nRequires: an agent id or address from `ethora-agent-list` or `ethora-agent-create`.",
+            description: "Overwrites the fields you pass; previous values are not kept and cannot be restored from the API, so confirm changes to the prompt, name or settings with the user first. Update a saved AI agent (PUT /v2/agents/:agentId). All fields are optional - only what you pass is updated. Common uses: tune the system `prompt` after a test run, switch `responseMode` to control turn-taking in multi-agent rooms, or adjust `cooldownSec`. See `ethora-agents-quickstart` prompt for the end-to-end recipe.\nRequires: an agent id or address from `ethora-agent-list` or `ethora-agent-create`. Only the agent's owner can update it: a public agent from someone else, including the platform's Support Agent, answers 403, so `ethora-agent-clone` it and update the copy.",
             annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 agentId: z.string().min(1).describe("Mongo _id (24 hex chars) of the agent to update."),
@@ -2530,7 +2541,7 @@ function agentsUpdateV2Tool(server: McpServer) {
                 llmModel: z.string().optional().describe("LLM model override."),
                 visibility: z.enum(["private", "public"]).optional().describe("'private' or 'public' (cross-app invitable)."),
                 isPublished: z.boolean().optional().describe("Convenience alias for visibility='public'."),
-                categories: z.array(z.string().min(1)).optional().describe("Category tags for directory listings."),
+                categories: z.array(z.enum(["customer-support", "persona", "entertainment", "worker"])).max(4).optional().describe("Directory categories, any of: `customer-support` (customer-facing assistants), `persona` (a character or historical figure), `entertainment` (quizzes, games, scenarios), `worker` (internal work). Used to filter `ethora-agent-list`. Replaces the agent's current set."),
                 flowsYaml: z.string().optional().describe('Deterministic scripted conversation for this agent, as YAML. Drives the agent through a fixed sequence (opening menu, appointment request, intake questionnaire, survey) instead of leaving every turn to the model. Compiled and validated server-side on save: an invalid script is rejected with code `FLOWS_INVALID` and per-line details, and nothing is stored. A flow named `start` is reserved and fires when a conversation opens. Buttons are authored here (`buttons:` on a `say` step, or `options:` on an `ask` step). Call `fetch` with id `doc:agent-flows` for the full authoring format before writing one. Pass an empty string to clear the script.'),
             },
         },
@@ -2552,13 +2563,14 @@ function agentsCloneV2Tool(server: McpServer) {
     server.registerTool(
         "ethora-agent-clone",
         {
-            description: "Duplicate an existing saved agent into a new agent, optionally overriding its name/slug/summary (`POST /v2/agents/:agentId/clone`). The source agent is unchanged; the new clone becomes the session's current agent context.\nRequires: an agent id or address from `ethora-agent-list` or `ethora-agent-create`.\nAuth: app-token mode (after `ethora-app-select` + `ethora-auth-mode-set`). Errors: 401/403 wrong auth; 404 source `agentId` not found; 422 overridden `slug` collides.",
+            description: "Copy an agent into a new private agent of your own, optionally overriding its name/slug/summary (`POST /v2/agents/:agentId/clone`). Works on your own agents and on public ones (`ethora-agent-list { visibility: \"public\" }`, e.g. the platform's Support Agent): cloning is how you customise an agent you do not own. With `includeKnowledge: true` the copy also takes the source's crawled pages, documents and their search index. The source is unchanged; the clone becomes the session's current agent context.\nRequires: an agent id or address from `ethora-agent-list`.\nAuth: user session. Errors: 401 not signed in; 404 source not found or private to someone else; 422 overridden `slug` collides. The response's `knowledge` says what was copied when `includeKnowledge` was set.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
             inputSchema: {
                 agentId: z.string().min(1).describe("Id of the source agent to clone. Get it from `ethora-agent-list`."),
                 name: z.string().optional().describe("Name for the clone. Omit to inherit the source agent's name."),
                 slug: z.string().optional().describe("URL-safe unique slug for the clone. Omit to let the server derive one; must not collide with an existing agent."),
                 summary: z.string().optional().describe("Summary for the clone. Omit to inherit the source agent's summary."),
+                includeKnowledge: z.boolean().optional().describe("Also copy the source agent's knowledge base (crawled pages, uploaded documents and their embeddings), e.g. a persona's indexed works. Default false: the clone starts with no knowledge."),
             },
         },
         async function ({ agentId, ...payload }) {
@@ -2661,7 +2673,7 @@ function agentSoulAppendTool(server: McpServer) {
     server.registerTool(
         "ethora-agent-soul-append",
         {
-            description: "Append a fragment to an Agent's SOUL.MD (its evolving identity / private notes). Operator-driven; the Agent itself can also self-edit via the same endpoint when called by ai-service.\nRequires: an agent id or address from `ethora-agent-list` or `ethora-agent-create`.",
+            description: "Append a note to an agent's Memory (stored as `soulMd`, formerly called SOUL.MD): standing notes the agent reads on every reply and can add to itself. Operator-driven; the Agent itself can also self-edit via the same endpoint when called by ai-service.\nRequires: an agent id or address from `ethora-agent-list` or `ethora-agent-create`.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
             inputSchema: {
                 agentIdOrAddress: z.string().min(1),
@@ -2685,11 +2697,11 @@ function agentSoulSetTool(server: McpServer) {
     server.registerTool(
         "ethora-agent-soul-set",
         {
-            description: "Replaces the whole SOUL.MD; the previous text is not kept, so confirm with the user first (use -append to add without replacing). Replace an Agent's SOUL.MD with the provided markdown. Operator-driven; alternative to -append.\nRequires: an agent id or address from `ethora-agent-list` or `ethora-agent-create`.",
+            description: "Replaces the agent's whole Memory (stored as `soulMd`, formerly called SOUL.MD); the previous text is not kept, so confirm with the user first (use -append to add without replacing). Replace an agent's Memory with the provided markdown. Operator-driven; alternative to -append.\nRequires: an agent id or address from `ethora-agent-list` or `ethora-agent-create`.",
             annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 agentIdOrAddress: z.string().min(1),
-                soulMd: z.string().min(0).describe("Replace SOUL.MD contents. Pass empty string to clear."),
+                soulMd: z.string().min(0).describe("New Memory contents (markdown). Pass empty string to clear."),
             },
         },
         async function ({ agentIdOrAddress, soulMd }) {
@@ -3829,20 +3841,23 @@ function sourcesSiteCrawlV2AppTool(server: McpServer) {
     server.registerTool(
         "ethora-source-site-crawl",
         {
-            description: "Crawl a website URL and ingest its content into an app's RAG sources (app-token / B2B variant of `ethora-sources-site-crawl`). Async — returns once the job is accepted; `followLink: true` follows in-domain links and can ingest many pages.\nRequires: a selected app (`ethora-app-select`) or an explicit `appId`.\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth; 400 malformed `url`; 404 unknown `appId`. Related: `ethora-source-site-crawl-wait` (block until done).",
+            description: "Crawl a website URL and ingest its content into an agent's knowledge base (app-token / B2B variant of `ethora-sources-site-crawl`). Async - returns once the job is accepted with a `jobId`; `followLink: true` follows in-domain links and can ingest many pages. Stop a running crawl with `ethora-source-site-crawl-cancel`.\nRequires: a selected app (`ethora-app-select`) or an explicit `appId`.\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth (403 `AGENT_NOT_WRITABLE` when `agentId` is someone else's agent); 400 malformed `url`; 404 unknown `appId`; 409 URL already indexed (pass `force: true`). Related: `ethora-source-site-crawl-wait` (block until done).",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("24-char hex appId to ingest into. Required in B2B mode unless already set via `ethora-app-select`; ignored in app-token mode."),
                 url: z.string().min(1).describe("Absolute URL to crawl, e.g. `https://example.com/docs`."),
                 followLink: z.boolean().optional().describe("If true, also crawl in-domain links reachable from `url`. Can ingest many pages — use with care."),
+                agentId: z.string().optional().describe("Agent whose knowledge base gets the content (24-char hex, from `ethora-agent-list` / `ethora-agent-create`). Must be your own agent or one of this app's. Omit to file it under the app's default agent (the one answering its website widget); an app still on the shared Support Agent first gets its own copy of it."),
+                force: z.boolean().optional().describe("Re-crawl a URL that is already indexed and overwrite the stored copy. Without it an already-indexed URL is refused with 409."),
             },
         },
-        async function ({ appId, url, followLink }) {
+        async function ({ appId, url, followLink, agentId, force }) {
             try {
                 const ctx = resolveAppScopedV2Context(appId)
+                const body = { url, followLink, ...(agentId ? { agentId } : {}), ...(force ? { force } : {}) }
                 const res = useAppScopedRoute(ctx)
-                    ? await sourcesSiteCrawlForAppV2(ctx.appId!, { url, followLink })
-                    : await sourcesSiteCrawlV2({ url, followLink })
+                    ? await sourcesSiteCrawlForAppV2(ctx.appId!, body)
+                    : await sourcesSiteCrawlV2(body)
                 return asToolResult(ok(res.data, getDefaultMeta("ethora-source-site-crawl")))
             } catch (error) {
                 return asToolResult(fail(error, getDefaultMeta("ethora-source-site-crawl")))
@@ -3916,24 +3931,27 @@ function sourcesSiteCrawlV2WaitTool(server: McpServer) {
     server.registerTool(
         "ethora-source-site-crawl-wait",
         {
-            description: "Adds the crawled pages to the agent's knowledge base; existing documents are kept and nothing is deleted, and re-running the same URL re-indexes it. Crawl a website URL and wait for the crawl to finish: enqueues the job, then polls it until it reports `completed` or `failed`. Returns `{ done, status, jobId, polls, durationMs, result }`; `done: false` with a `note` means the budget ran out while the job was still running (it usually finishes server-side anyway).\nRequires: a selected app (`ethora-app-select`) or an explicit `appId`.\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth; 400 malformed `url`; 504/timeout if it takes longer than `timeoutMs` (the job may still complete server-side — check with `ethora-source-site-list`).",
+            description: "Adds the crawled pages to an agent's knowledge base (the one named by `agentId`, else the app's default agent); existing documents are kept and nothing is deleted. A URL that is already indexed is refused with 409 unless `force: true` re-crawls it. Crawl a website URL and wait for the crawl to finish: enqueues the job, then polls it until it reports `completed` or `failed`. Returns `{ done, status, jobId, polls, durationMs, result }`; `done: false` with a `note` means the budget ran out while the job was still running (it usually finishes server-side anyway).\nRequires: a selected app (`ethora-app-select`) or an explicit `appId`.\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth (403 `AGENT_NOT_WRITABLE` when `agentId` is someone else's agent); 400 malformed `url`; 409 already indexed; 504/timeout if it takes longer than `timeoutMs` (the job may still complete server-side - check with `ethora-source-site-list`, or stop it with `ethora-source-site-crawl-cancel`). Related: `ethora-agent-knowledge-get` shows what the agent can search afterwards.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("24-char hex appId to ingest into. Required in B2B mode unless already set via `ethora-app-select`; ignored in app-token mode."),
                 url: z.string().min(1).describe("Absolute URL to crawl, e.g. `https://example.com/docs`."),
                 followLink: z.boolean().optional().describe("If true, also crawl in-domain links reachable from `url`. Can ingest many pages — use with care."),
                 timeoutMs: z.number().int().min(1000).max(600000).optional().describe("How long to poll for the crawl to finish, in milliseconds. Default 45000, chosen to stay under the ~60s request timeout most MCP clients enforce. Caps at 600000 (10 min) for clients that allow longer calls."),
+                agentId: z.string().optional().describe("Agent whose knowledge base gets the content (24-char hex, from `ethora-agent-list` / `ethora-agent-create`). Must be your own agent or one of this app's. Omit to file it under the app's default agent (the one answering its website widget); an app still on the shared Support Agent first gets its own copy of it."),
+                force: z.boolean().optional().describe("Re-crawl a URL that is already indexed and overwrite the stored copy. Without it an already-indexed URL is refused with 409."),
             },
         },
-        async function ({ appId, url, followLink, timeoutMs }) {
+        async function ({ appId, url, followLink, timeoutMs, agentId, force }) {
             const meta = getDefaultMeta("ethora-source-site-crawl-wait")
             try {
                 const ctx = resolveAppScopedV2Context(appId)
                 const started = Date.now()
                 const budget = timeoutMs ?? 45_000
+                const body = { url, followLink, ...(agentId ? { agentId } : {}), ...(force ? { force } : {}) }
                 const res = useAppScopedRoute(ctx)
-                    ? await sourcesSiteCrawlForAppV2(ctx.appId!, { url, followLink }, { timeoutMs: budget })
-                    : await sourcesSiteCrawlV2({ url, followLink }, { timeoutMs: budget })
+                    ? await sourcesSiteCrawlForAppV2(ctx.appId!, body, { timeoutMs: budget })
+                    : await sourcesSiteCrawlV2(body, { timeoutMs: budget })
                 const enqueued = res.data?.result ?? res.data?.data ?? res.data
                 const jobId = String(enqueued?.jobId || enqueued?.job?.jobId || "")
                 if (!jobId) {
@@ -3949,7 +3967,7 @@ function sourcesSiteCrawlV2WaitTool(server: McpServer) {
                     polls: waited.polls,
                     durationMs: Date.now() - started,
                     result: waited.job ?? enqueued,
-                    ...(waited.timedOut ? { note: `Still ${waited.status || "in progress"} after ${budget}ms. The crawl usually continues server-side; check \`ethora-source-site-list\` or raise \`timeoutMs\`.` } : {}),
+                    ...(waited.timedOut ? { note: `Still ${waited.status || "in progress"} after ${budget}ms. The crawl usually continues server-side; check \`ethora-source-site-list\`, raise \`timeoutMs\`, or stop it with \`ethora-source-site-crawl-cancel\`.` } : {}),
                 }, meta))
             } catch (error) {
                 return asToolResult(fail(error, meta))
@@ -4009,14 +4027,15 @@ function sourcesSiteListV2Tool(server: McpServer) {
             annotations: { readOnlyHint: true, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("24-char hex appId to list sources for. Required in B2B mode unless already set via `ethora-app-select`; ignored in app-token mode."),
+                agentId: z.string().optional().describe("Only this agent's pages. Omit for every page filed under the app."),
             },
         },
-        async function ({ appId }) {
+        async function ({ appId, agentId }) {
             const meta = getDefaultMeta("ethora-source-site-list")
             try {
                 const ctx = resolveAppScopedV2Context(appId)
                 const res = useAppScopedRoute(ctx)
-                    ? await sourcesSiteListForAppV2(ctx.appId!)
+                    ? await sourcesSiteListForAppV2(ctx.appId!, { agentId })
                     : await sourcesSiteListV2()
                 return asToolResult(ok(res.data, meta))
             } catch (error) {
@@ -4405,7 +4424,7 @@ function sourcesDocsUploadV2AppTool(server: McpServer) {
     server.registerTool(
         "ethora-source-doc-upload",
         {
-            description: "Upload documents (1–5; PDF, text, etc.) into an app's RAG sources (app-token / B2B variant of `ethora-source-doc-upload-legacy`). Async — content becomes queryable once indexing finishes; files passed as base64, 50MB max each.\nRequires: a selected app (`ethora-app-select`) or an explicit `appId`.\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth; 404 unknown `appId`; 413 too large; 422 unsupported document type. Related: `ethora-source-doc-list`, `ethora-source-doc-delete`.",
+            description: "Upload documents (1–5; PDF, text, etc.) into an agent's knowledge base (the one named by `agentId`, else the app's default agent) (app-token / B2B variant of `ethora-source-doc-upload-legacy`). Async - content becomes queryable once indexing finishes; files passed as base64, 50MB max each.\nRequires: a selected app (`ethora-app-select`) or an explicit `appId`.\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth; 404 unknown `appId`; 413 too large; 422 unsupported document type. Related: `ethora-source-doc-list`, `ethora-source-doc-delete`.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("24-char hex appId to ingest into. Required in B2B mode unless already set via `ethora-app-select`; ignored in app-token mode."),
@@ -4414,12 +4433,14 @@ function sourcesDocsUploadV2AppTool(server: McpServer) {
                     mimeType: z.string().min(1).describe("MIME type, e.g. `application/pdf`, `text/plain`, `text/markdown`."),
                     base64: z.string().min(1).describe("Document content, base64-encoded. A `data:...;base64,` prefix is accepted. Max 50MB decoded per file."),
                 })).min(1).max(5).describe("1 to 5 documents to ingest in this call."),
+                agentId: z.string().optional().describe("Agent whose knowledge base gets the content (24-char hex, from `ethora-agent-list` / `ethora-agent-create`). Must be your own agent or one of this app's. Omit to file it under the app's default agent (the one answering its website widget); an app still on the shared Support Agent first gets its own copy of it."),
             },
         },
-        async function ({ appId, files }) {
+        async function ({ appId, files, agentId }) {
             try {
                 const ctx = resolveAppScopedV2Context(appId)
                 const form = new FormData()
+                if (agentId) form.append("agentId", agentId)
                 for (const f of files) {
                     const buf = normalizeBase64ToBuffer(f.base64)
                     if (buf.length > 50 * 1024 * 1024) {
@@ -4472,14 +4493,15 @@ function sourcesDocsListV2Tool(server: McpServer) {
             annotations: { readOnlyHint: true, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("24-char hex appId to list documents for. Required in B2B mode unless already set via `ethora-app-select`; ignored in app-token mode."),
+                agentId: z.string().optional().describe("Only this agent's documents. Omit for every document filed under the app."),
             },
         },
-        async function ({ appId }) {
+        async function ({ appId, agentId }) {
             const meta = getDefaultMeta("ethora-source-doc-list")
             try {
                 const ctx = resolveAppScopedV2Context(appId)
                 const res = useAppScopedRoute(ctx)
-                    ? await sourcesDocsListForAppV2(ctx.appId!)
+                    ? await sourcesDocsListForAppV2(ctx.appId!, { agentId })
                     : await sourcesDocsListV2()
                 return asToolResult(ok(res.data, meta))
             } catch (error) {
@@ -4559,6 +4581,173 @@ async function activateAgentForApp(agentId: string, chatJid: string | undefined,
     }
 }
 
+
+// ----------------------------------------------------------------------------
+// Agents: test without a room, knowledge health. Sources: stop a crawl.
+// Widget: the appearance saved on the App.
+// ----------------------------------------------------------------------------
+
+function agentTryTool(server: McpServer) {
+    server.registerTool(
+        "ethora-agent-try",
+        {
+            description: "Ask an agent a test question and get its answer directly, without a chat room, the same as the Try it tab in Agent settings (`POST /v2/agents/:agentId/try`). Uses the agent's prompt, Memory and knowledge base; nothing is posted anywhere and no visitor or room is created. Returns `{ reply, sources, ragDocsUsed, model }`: `sources` are the knowledge-base URLs the answer drew on. For a multi-turn test pass the earlier turns as `history`. Works on your own agents and on public ones (try before you clone).\nRequires: an agent id from `ethora-agent-list` or `ethora-agent-create`.\nAuth: user session. Errors: 404 agent not found or private to someone else; 422 empty `text`; 503 the AI service is not configured on this deployment.",
+            annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+            inputSchema: {
+                agentId: z.string().min(1).describe("Id or address of the agent to ask."),
+                text: z.string().min(1).max(4000).describe("The test message."),
+                history: z.array(z.object({
+                    role: z.enum(["user", "assistant"]),
+                    content: z.string().max(8000),
+                })).max(20).optional().describe("Earlier turns of this test conversation, oldest first: your messages as `user`, the agent's replies as `assistant`."),
+            },
+        },
+        async function ({ agentId, text, history }) {
+            const meta = getDefaultMeta("ethora-agent-try")
+            try {
+                ensureUserAuthForTool()
+                const res = await agentsTryV2(agentId, { text, history: history || [] })
+                return asToolResult(ok(res.data, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
+function agentKnowledgeGetTool(server: McpServer) {
+    server.registerTool(
+        "ethora-agent-knowledge-get",
+        {
+            description: "Show how much of an agent's knowledge base it can actually search (`GET /v2/agents/:agentId/knowledge`): pages, documents and chunks in the search index, plus pages or documents that are stored but missing from it (with examples) and when it was last indexed. Run it after a crawl or upload to confirm the agent can use the content; if `missing` is not zero, `ethora-agent-knowledge-rebuild` re-indexes those items.\nRequires: an agent id of your own from `ethora-agent-list`.\nAuth: user session, agent owner only. Errors: 403 not your agent; 404 not found.",
+            annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+            inputSchema: {
+                agentId: z.string().min(1).describe("Id or address of your agent."),
+            },
+        },
+        async function ({ agentId }) {
+            const meta = getDefaultMeta("ethora-agent-knowledge-get")
+            try {
+                ensureUserAuthForTool()
+                const res = await agentsKnowledgeGetV2(agentId)
+                return asToolResult(ok(res.data, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
+function agentKnowledgeRebuildTool(server: McpServer) {
+    server.registerTool(
+        "ethora-agent-knowledge-rebuild",
+        {
+            description: "Re-index an agent's stored pages and documents into its search index (`POST /v2/agents/:agentId/knowledge/rebuild`). By default only the items `ethora-agent-knowledge-get` reports as missing; `onlyMissing: false` re-embeds everything, which takes longer and costs embedding calls. Runs in the background (202): check progress with `ethora-agent-knowledge-get`. Stored content is not re-crawled.\nRequires: an agent id of your own from `ethora-agent-list`.\nAuth: user session, agent owner only. Errors: 403 not your agent; 409 `REBUILD_IN_PROGRESS` a rebuild of this agent is already running; 503 the AI service is not configured.",
+            annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+            inputSchema: {
+                agentId: z.string().min(1).describe("Id or address of your agent."),
+                onlyMissing: z.boolean().optional().describe("Default true: re-index only what is missing from the search index. false re-embeds every item."),
+            },
+        },
+        async function ({ agentId, onlyMissing }) {
+            const meta = getDefaultMeta("ethora-agent-knowledge-rebuild")
+            try {
+                ensureUserAuthForTool()
+                const res = await agentsKnowledgeRebuildV2(agentId, onlyMissing === undefined ? {} : { onlyMissing })
+                return asToolResult(ok(res.data, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
+function sourcesSiteCrawlCancelTool(server: McpServer) {
+    server.registerTool(
+        "ethora-source-site-crawl-cancel",
+        {
+            description: "Stop a running website crawl (`POST /v2/apps/:appId/sources/site-crawl-jobs/:jobId/cancel`). Pages already indexed stay in the knowledge base; delete them with `ethora-source-site-url-delete` if unwanted. Stopping a job that already finished is a no-op that reports its final status.\nRequires: the `jobId` returned by `ethora-source-site-crawl` or `ethora-source-site-crawl-wait`, and a selected app (`ethora-app-select`) or an explicit `appId`.\nAuth: user session or B2B token for the app; app-token mode uses the bare route. Errors: 401/403 wrong auth; 404 unknown job.",
+            annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+            inputSchema: {
+                jobId: z.string().min(1).describe("Crawl job id."),
+                appId: z.string().optional().describe("24-char hex appId the crawl runs for. Defaults to the app from `ethora-app-select`."),
+            },
+        },
+        async function ({ jobId, appId }) {
+            const meta = getDefaultMeta("ethora-source-site-crawl-cancel")
+            try {
+                const ctx = resolveAppScopedV2Context(appId)
+                const res = await sourcesSiteCrawlCancelV2(jobId, useAppScopedRoute(ctx) ? ctx.appId : undefined)
+                return asToolResult(ok(res.data, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
+// The attributes the API stores (it validates them again): what the AI Widget
+// tab in App settings edits.
+const WIDGET_APPEARANCE_DOC = "Keys are the widget's data-* attributes: copy `data-title`, `data-greeting-title`, `data-greeting`, `data-greeting-message`, `data-locale`, `data-hide-system-messages`; colours (hex, rgb() or a CSS colour name) `data-primary-color`, `data-secondary-color`, `data-icons-color`, `data-own-bubble-bg`, `data-other-bubble-bg`, `data-input-bg`; fonts `data-font-family`, `data-font-size`, `data-google-font`; layout (CSS sizes like `400px`) `data-position` (left|right), `data-width`, `data-height`, `data-expanded-width`, `data-expanded-height`, `data-expanded-inset`, `data-disable-media`, `data-allow-fullscreen`, `data-start-fullscreen`; launcher `data-launcher-icon` (https URL), `data-launcher-gradient` (CSS linear-gradient), `data-flat-launcher`, `data-launcher-size` (24-160), `data-launcher-glow`; teaser bubble `data-cta-text`, `data-cta-delay` (ms), `data-cta-sparkle`. Booleans are `true`/`false`. Identity attributes (app id, API base) are never stored."
+
+function widgetAppearanceGetTool(server: McpServer) {
+    server.registerTool(
+        "ethora-widget-appearance-get",
+        {
+            description: "Read the website widget appearance saved on an app (`GET /v2/apps/:appId/widget/appearance`): a map of the widget's data-* attributes to values, non-defaults only (`{}` = the widget's defaults). Every embed of the app loads it when it opens. " + WIDGET_APPEARANCE_DOC + "\nRequires: a selected app (`ethora-app-select`) or an explicit `appId`.\nAuth: user session or B2B token with access to the app's settings. Errors: 403/404 no access to the app.",
+            annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+            inputSchema: {
+                appId: z.string().optional().describe("24-char hex appId. Defaults to the app from `ethora-app-select`."),
+            },
+        },
+        async function ({ appId }) {
+            const meta = getDefaultMeta("ethora-widget-appearance-get")
+            try {
+                const target = String(appId || (getClientState() as any).currentAppId || "").trim()
+                if (!target) throw new Error(APP_CONTEXT_MISSING_MESSAGE)
+                const res = await widgetAppearanceGetV2(target)
+                return asToolResult(ok(res.data, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
+function widgetAppearanceSetTool(server: McpServer) {
+    server.registerTool(
+        "ethora-widget-appearance-set",
+        {
+            description: "Change how the app's website chat widget looks (`PUT /v2/apps/:appId/widget/appearance`): colours, fonts, size and position, launcher, teaser bubble and texts. Saved on the app, so every site already embedding the widget picks it up within about a minute, without changing the snippet; attributes written on a site's <script> tag still win over it. By default the values you pass are merged into the saved set; `replace: true` makes them the whole set, and a value of `\"\"` removes one attribute. " + WIDGET_APPEARANCE_DOC + "\nRequires: a selected app (`ethora-app-select`) or an explicit `appId`.\nAuth: user session or B2B token with access to the app's settings. Errors: 403/404 no access to the app; 422 unknown attribute or invalid value (the message names it).",
+            annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+            inputSchema: {
+                appId: z.string().optional().describe("24-char hex appId. Defaults to the app from `ethora-app-select`."),
+                appearance: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).describe("data-* attribute -> value, e.g. `{ \"data-primary-color\": \"#7c3aed\", \"data-cta-text\": \"Questions? Ask me\" }`. `\"\"` removes an attribute (back to the widget default)."),
+                replace: z.boolean().optional().describe("true: the given map becomes the whole saved appearance (`{}` resets the widget to its defaults). Default false: merge into what is saved."),
+            },
+        },
+        async function ({ appId, appearance, replace }) {
+            const meta = getDefaultMeta("ethora-widget-appearance-set")
+            try {
+                const target = String(appId || (getClientState() as any).currentAppId || "").trim()
+                if (!target) throw new Error(APP_CONTEXT_MISSING_MESSAGE)
+                const current: Record<string, string> = replace
+                    ? {}
+                    : { ...(((await widgetAppearanceGetV2(target)).data as any)?.appearance || {}) }
+                for (const [k, v] of Object.entries(appearance || {})) {
+                    const key = k.startsWith("data-") ? k : `data-${k}`
+                    if (v === "" || v === null) delete current[key]
+                    else current[key] = String(v)
+                }
+                const res = await widgetAppearanceSetV2(target, current)
+                return asToolResult(ok({ ...(res.data as any), note: "Live embeds load this within about a minute (the public config is cached for 60s). `ethora-widget-snippet-get` gives the embed tag." }, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
 // ----------------------------------------------------------------------------
 // AI chat widget embed
 // ----------------------------------------------------------------------------
@@ -4566,11 +4755,11 @@ function widgetTools(server: McpServer) {
     server.registerTool(
         "ethora-widget-snippet-get",
         {
-            description: "Generate the <script> tag that embeds the Ethora AI chat widget (the floating launcher + chat panel that website visitors use) for an app, plus the prerequisites that must hold before it answers. No API call; pure generator using this deployment's hosted widget URL and public API base. The widget answers with the app's ACTIVE bot: for API-created apps run `ethora-agent-create` -> `ethora-agent-invite` -> `ethora-agent-activate { agentId, chatJid }` first, otherwise `POST /v2/widget/sessions` returns 422 and the widget stays silent.\nRequires: an activated agent on the app (`ethora-agent-activate`); without it the widget opens but never answers.\nAuth: none required (uses the selected app when `appId` is omitted). Errors: effectively none; when no hosted widget is configured the snippet carries a `<WIDGET_URL>` placeholder. Related: `ethora-agent-activate`, `ethora-bot-widget-get` (legacy per-app bot only).",
+            description: "Generate the <script> tag that embeds the Ethora AI chat widget (the floating launcher + chat panel that website visitors use) for an app, plus the prerequisites that must hold before it answers. No API call; pure generator using this deployment's hosted widget URL and public API base. The widget answers with the app's ACTIVE bot: for API-created apps run `ethora-agent-create` -> `ethora-agent-invite` -> `ethora-agent-activate { agentId, chatJid }` first, otherwise `POST /v2/widget/sessions` returns 422 and the widget stays silent.\nRequires: an activated agent on the app (`ethora-agent-activate`); without it the widget opens but never answers.\nAuth: none required (uses the selected app when `appId` is omitted). Errors: effectively none; when no hosted widget is configured the snippet carries a `<WIDGET_URL>` placeholder. The widget's look (colours, texts, launcher) is saved on the app with `ethora-widget-appearance-set` and loads on every embed by itself, so the snippet only needs `data-app-id`; the cosmetic parameters here write attributes into the tag, which then win over the saved look on that site. Related: `ethora-agent-activate`, `ethora-widget-appearance-set`, `ethora-bot-widget-get` (legacy per-app bot only).",
             annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
             inputSchema: {
                 appId: z.string().optional().describe("App the widget belongs to (24-char hex). Defaults to the app from `ethora-app-select`."),
-                botName: z.string().optional().describe("Display name shown in the widget header (`data-bot-name`), e.g. the agent's name."),
+                botName: z.string().optional().describe("Display name shown in the widget header (`data-bot-name`). Usually leave it out: the widget shows the active agent's name."),
                 botAvatar: z.string().optional().describe("Avatar image URL shown for the bot (`data-bot-avatar`)."),
                 botId: z.string().optional().describe("Legacy `data-bot-id` (bot XMPP address); only for old embeds. Prefer `appId`: the backend picks the active agent from the app."),
                 primaryColor: z.string().optional().describe("Brand colour for launcher and bubbles (`data-primary-color`), e.g. `#0052CC`."),
@@ -4611,7 +4800,8 @@ function widgetTools(server: McpServer) {
                 ]
                 const notes = [
                     base ? `Bundle: ${scriptSrc}` : "No hosted widget is configured on this MCP deployment (ETHORA_MCP_WIDGET_URL empty); replace <WIDGET_URL> with your widget host, or use the admin UI's AI Widget tab which bundles the widget with the web app.",
-                    "Test: paste the snippet into any HTML page, open it, click the launcher and send a message; the active agent should reply within a few seconds. Optional attributes: data-title, data-greeting-title, data-secondary-color, data-launcher-icon, data-launcher-size, data-width, data-height, data-font-size, data-google-font, data-hide-system-messages, data-disable-media, data-start-fullscreen.",
+                    "Test: paste the snippet into any HTML page, open it, click the launcher and send a message; the active agent should reply within a few seconds.",
+                    "Appearance: save it on the app with `ethora-widget-appearance-set` (colours, fonts, size, launcher, teaser, texts); every embed loads it when it opens, so later changes need no new snippet. A data-* attribute written on the tag wins over the saved value on that site, so only pin values there for a site that must not follow later changes.",
                     "Cosmetic attributes can also be overridden per page via URL query `?ethora-<attr>=...`; appId and apiBase cannot.",
                     "Docs: https://github.com/dappros/ethora-mcp-server#readme (Widget embed) and https://github.com/dappros/ethora-ai-chat-widget#readme",
                 ]
@@ -4664,6 +4854,8 @@ export function registerTools(server: McpServer) {
     appCredentialsTool(server);
     feedbackSubmitTool(server);
     widgetTools(server);
+    widgetAppearanceGetTool(server);
+    widgetAppearanceSetTool(server);
     appListTool(server);
     appCreateTool(server);
     appUpdateTool(server);
@@ -4693,6 +4885,10 @@ export function registerTools(server: McpServer) {
     agentsUpdateV2Tool(server);
     agentsCloneV2Tool(server);
     agentsActivateV2Tool(server);
+    agentTryTool(server);
+    agentKnowledgeGetTool(server);
+    agentKnowledgeRebuildTool(server);
+    sourcesSiteCrawlCancelTool(server);
     // Phase 1 (Agents) additions: visibility, soul.md, invite-to-chat, BotInstance lifecycle.
     agentSetVisibilityTool(server);
     agentInviteToChatTool(server);

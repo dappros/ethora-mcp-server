@@ -183,7 +183,8 @@ const INTENTS: Array<{ match: RegExp; ids: string[] }> = [
   // Order matters: the first matching intent leads the results.
   { match: /\b(end[- ]?users?|my users|customers?|sso|single sign|log ?in|sign ?in|token)s?\b.*\b(chat|log|sign|auth)/i, ids: ["doc:sdk-backend-quickstart", "doc:recipes#add-in-app-chat-to-an-existing-app", "doc:auth-map"] },
   { match: /\b(in[- ]?app|existing (app|product|site)|my (app|product|react|next|vue|angular|ios|android|react native|mobile)|chat component|embed(ded)? chat|add chat)\b/i, ids: ["doc:recipes#add-in-app-chat-to-an-existing-app", "doc:chat-component-quickstart", "doc:sdk-backend-quickstart", "tool:ethora-chat-component-app-generate"] },
-  { match: /\b(widget|website|web ?page|wordpress|landing page|floating|launcher)\b/i, ids: ["doc:recipes#ai-chat-widget-on-a-website-user-auth", "tool:ethora-widget-snippet-get", "tool:ethora-agent-activate"] },
+  { match: /\b(look|appearance|style|theme|colou?rs?|font|teaser|launcher (icon|size|colou?r)|bubble)\b.*\bwidget\b|\bwidget\b.*\b(look|appearance|style|theme|colou?rs?|font|teaser|bubble)\b/i, ids: ["tool:ethora-widget-appearance-set", "tool:ethora-widget-appearance-get"] },
+  { match: /\b(widget|website|web ?page|wordpress|landing page|floating|launcher)\b/i, ids: ["doc:recipes#ai-chat-widget-on-a-website-user-auth", "tool:ethora-widget-snippet-get", "tool:ethora-agent-activate", "tool:ethora-widget-appearance-set"] },
   { match: /\b(agents? (talk|chat|speak|debat|convers|reply)|several agents|multiple agents|two agents|each other|multi[- ]?agent|turn[- ]?taking|personas?|round ?table|debate)\b/i, ids: ["doc:recipes#seed-a-room-with-several-ai-agents", "doc:recipes#controlling-turn-taking-multi-agent-rooms", "doc:recipes#ai-agents-end-to-end-phase-1", "tool:ethora-agent-create"] },
   { match: /\b(new (chat )?app|from scratch|brand(ing|ed)?|logo|colou?r|tagline|tenant|my own app|white[- ]?label)\b/i, ids: ["doc:recipes#build-a-new-chat-based-app", "tool:ethora-app-create", "tool:ethora-app-update"] },
   { match: /\b(react native|ios|android|mobile app|flutter|swift|kotlin)\b/i, ids: ["doc:recipes#add-in-app-chat-to-an-existing-app", "doc:not-available#voice-video-file-previews"] },
@@ -191,7 +192,9 @@ const INTENTS: Array<{ match: RegExp; ids: string[] }> = [
   { match: /\b(push|apns|fcm|firebase|notification)s?\b/i, ids: ["doc:not-available#push-notifications"] },
   { match: /\b(moderat|ban|block|kick|mute|report|abuse|spam)/i, ids: ["doc:not-available#moderation-bans-and-blocking"] },
   { match: /\b(billing|plan|pricing|subscription|custom domain|dns)\b/i, ids: ["doc:not-available#billing-custom-domains-logo"] },
-  { match: /\b(knowledge|rag|crawl|index|documents?|pdf|faq|train)\b/i, ids: ["tool:ethora-source-site-crawl-wait", "tool:ethora-source-doc-upload", "doc:recipes#sources-ingest-app-token"] },
+  { match: /\b(knowledge|rag|crawl|index|documents?|pdf|faq|train)\b/i, ids: ["tool:ethora-source-site-crawl-wait", "tool:ethora-source-doc-upload", "tool:ethora-agent-knowledge-get", "doc:recipes#sources-ingest-app-token"] },
+  { match: /\b(test|try|preview)\b.*\bagent\b|\bagent\b.*\b(test|try)\b/i, ids: ["tool:ethora-agent-try", "tool:ethora-message-send"] },
+  { match: /\b(clone|copy|duplicate|template|public agents?|directory)\b/i, ids: ["tool:ethora-agent-clone", "tool:ethora-agent-list"] },
   { match: /\b(api key|personal url|connector|claude\.ai|chatgpt|cursor|reconnect)\b/i, ids: ["doc:api-keys", "doc:hosted-guide"] },
 ]
 
