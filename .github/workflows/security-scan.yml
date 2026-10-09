@@ -20,7 +20,7 @@ jobs:
       # install the release binary and call it directly.
       GITLEAKS_VERSION: "8.30.1"
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
@@ -89,7 +89,7 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Run semgrep (report-only)
         uses: semgrep/semgrep-action@713efdd345f3035192eaa63f56867b88e63e4e5d # v1
         with:
