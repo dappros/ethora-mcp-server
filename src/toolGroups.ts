@@ -68,7 +68,7 @@ export const TOOL_GROUPS: Record<string, { summary: string; tools: string[] }> =
     tools: [
       "ethora-agent-get", "ethora-agent-clone", "ethora-agent-delete", "ethora-agent-export", "ethora-agent-import",
       "ethora-agent-visibility-set", "ethora-agent-soul-set", "ethora-agent-soul-append",
-      "ethora-agent-try", "ethora-agent-knowledge-get", "ethora-agent-knowledge-rebuild",
+      "ethora-agent-try", "ethora-agent-model-list", "ethora-agent-knowledge-get", "ethora-agent-knowledge-rebuild",
     ],
   },
   sources: {

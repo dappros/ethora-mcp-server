@@ -10,6 +10,7 @@ import { CallToolResult } from "@modelcontextprotocol/sdk/types"
 import z from "zod"
 import {
     agentsActivateV2,
+    agentModelsListV2,
     agentsCloneV2,
     agentsCreateV2,
     agentsGetV2,
@@ -2385,8 +2386,8 @@ function botUpdateV2Tool(server: McpServer) {
                 botDisplayName: z.string().optional().describe("Bot's display name shown in chat."),
                 botAvatarUrl: z.string().optional().describe("Public URL of the bot's avatar image."),
                 ragTags: z.array(z.string().min(1)).optional().describe("Restrict RAG retrieval to sources tagged with these tags (see `ethora-source-site-tags-update` / `ethora-source-doc-tags-update`)."),
-                llmProvider: z.string().optional().describe("LLM provider, e.g. `openai` or `openai-compatible`. Must be enabled in your Ethora backend's AI service config."),
-                llmModel: z.string().optional().describe("LLM model id, e.g. `gpt-4o-mini`. Must be available for the chosen `llmProvider`."),
+                llmProvider: z.string().optional().describe("Leave empty. The deployment has one AI endpoint (OpenAI-compatible); `openai` and `openai-compatible` are accepted as synonyms, anything else is rejected with LLM_PROVIDER_UNSUPPORTED."),
+                llmModel: z.string().optional().describe("Model id served by this deployment's AI endpoint; omit for the platform default. `ethora-agent-model-list` returns the supported ids. An id the endpoint does not serve is rejected at creation with LLM_MODEL_UNSUPPORTED and the supported list, instead of failing later on every reply."),
                 widgetPublicEnabled: z.boolean().optional().describe("If true, expose the bot through a public embeddable chat widget."),
                 widgetPublicUrl: z.string().optional().describe("Public URL for the embeddable widget. Usually read via `ethora-bot-widget-get` rather than set here."),
             },
@@ -2483,8 +2484,8 @@ function agentsCreateV2Tool(server: McpServer) {
                 botAvatarUrl: z.string().optional().describe("URL of the avatar image shown next to bot messages."),
                 isRAG: z.boolean().optional().describe("Enable retrieval-augmented generation from indexed sources."),
                 ragTags: z.array(z.string().min(1)).optional().describe("Optional RAG tag filter — restrict retrieval to sources matching these tags."),
-                llmProvider: z.string().optional().describe("LLM provider override (e.g. 'openai'). Defaults to the app's configured provider."),
-                llmModel: z.string().optional().describe("LLM model override (e.g. 'gpt-4o-mini')."),
+                llmProvider: z.string().optional().describe("Leave empty. The deployment has one AI endpoint (OpenAI-compatible); `openai` and `openai-compatible` are accepted as synonyms, anything else is rejected with LLM_PROVIDER_UNSUPPORTED."),
+                llmModel: z.string().optional().describe("Model id served by this deployment's AI endpoint; omit for the platform default. `ethora-agent-model-list` returns the supported ids; an unsupported id is rejected with LLM_MODEL_UNSUPPORTED and that list."),
                 visibility: z.enum(["private", "public"]).optional().describe("'private' (only invitable inside the owning app) or 'public' (cross-app invitable)."),
                 isPublished: z.boolean().optional().describe("Convenience alias for setting visibility='public'."),
                 categories: z.array(z.enum(["customer-support", "persona", "entertainment", "worker"])).max(4).optional().describe("Directory categories, any of: `customer-support` (customer-facing assistants), `persona` (a character or historical figure), `entertainment` (quizzes, games, scenarios), `worker` (internal work). Used to filter `ethora-agent-list`. Replaces the agent's current set."),
@@ -4561,13 +4562,22 @@ async function activateAgentForApp(agentId: string, chatJid: string | undefined,
             const items: any[] = Array.isArray(d) ? d : (d.items || d.botInstances || d.results || d.data?.items || [])
             const match = items.find((bi: any) => String(bi.agentId || bi.agent?._id || bi.agent?.id || "") === id && (!bi.appId || String(bi.appId) === appId)) || items.find((bi: any) => String(bi.agentId || "") === id) || (items.length === 1 ? items[0] : null)
             if (!match) {
-                throw new Error(`No bot instance of agent ${id} exists in app ${appId} yet. Call \`ethora-agent-invite { agentIdOrAddress: "${id}", chatJid: "${chatJid || "<ROOM_JID>"}" }\` first, then retry.`)
+                // A precondition, not an auth problem: the agent has no bot instance in
+                // this app because it was never invited into one of its rooms. Reported
+                // with its own code and never retried over the app-token route, which
+                // could only answer 403 and used to leave callers reading a permissions
+                // error for a missing step.
+                const notInvited: any = new Error(`Agent ${id} has not been invited into a room of app ${appId} yet, so it has no bot instance to activate. Call \`ethora-agent-invite { agentId: "${id}", chatJid: "${chatJid || "<ROOM_JID>"}" }\` first (create the room with \`ethora-chat-create\` if needed), then call \`ethora-agent-activate\` again.`)
+                notInvited.code = "AGENT_NOT_INVITED"
+                notInvited.httpStatus = 409
+                throw notInvited
             }
             const botInstanceId = String(match._id || match.id)
             const upd = await appUpdate(appId, { defaultBotInstanceId: botInstanceId, botStatus: "on" })
             selectAgent({ agentId: id })
             return { method: "app-update", appId, agentId: id, defaultBotInstanceId: botInstanceId, botInstanceStatus: match.status, appUpdate: upd.data }
         } catch (e: any) {
+            if (e?.code === "AGENT_NOT_INVITED") throw e
             userPathError = e
             if (!appTokenFor(appId)) throw e
         }
@@ -4589,6 +4599,28 @@ async function activateAgentForApp(agentId: string, chatJid: string | undefined,
 // Agents: test without a room, knowledge health. Sources: stop a crawl.
 // Widget: the appearance saved on the App.
 // ----------------------------------------------------------------------------
+
+function agentModelListTool(server: McpServer) {
+    server.registerTool(
+        "ethora-agent-model-list",
+        {
+            description: "List the LLM model ids this deployment's AI endpoint serves, and the platform default, so `llmModel` on `ethora-agent-create` / `ethora-agent-update` can be chosen from real options (`GET /v2/agents/models`). The deployment has one OpenAI-compatible endpoint; a model id outside this list is rejected at creation with LLM_MODEL_UNSUPPORTED. Omitting `llmModel` always works and uses the default.\nAuth: user session. Errors: AI_SERVICE_UNAVAILABLE (503) when the AI service cannot list its models right now.",
+            annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+            inputSchema: {},
+        },
+        async function () {
+            const meta = getDefaultMeta("ethora-agent-model-list")
+            try {
+                ensureUserAuthForTool()
+                const res = await agentModelsListV2()
+                const d: any = res.data || {}
+                return asToolResult(ok({ default: d.default, models: d.models || [], note: "Pass one of `models` as `llmModel`, or omit it to use `default`." }, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
 
 function agentTryTool(server: McpServer) {
     server.registerTool(
@@ -4888,6 +4920,7 @@ export function registerTools(server: McpServer) {
     agentsUpdateV2Tool(server);
     agentsCloneV2Tool(server);
     agentsActivateV2Tool(server);
+    agentModelListTool(server);
     agentTryTool(server);
     agentKnowledgeGetTool(server);
     agentKnowledgeRebuildTool(server);
