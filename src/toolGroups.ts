@@ -75,6 +75,7 @@ export const TOOL_GROUPS: Record<string, { summary: string; tools: string[] }> =
     summary: "Knowledge-base maintenance: async crawl and reindex jobs, stop a crawl, list and tag sites and documents, delete URLs and documents.",
     tools: [
       "ethora-source-site-crawl", "ethora-source-site-crawl-cancel", "ethora-source-site-reindex", "ethora-source-site-reindex-wait", "ethora-source-site-list",
+      "ethora-source-site-watch-list", "ethora-source-site-watch-update", "ethora-source-site-refresh",
       "ethora-source-site-tags-update", "ethora-source-site-url-delete", "ethora-source-site-url-delete-batch",
       "ethora-source-doc-list", "ethora-source-doc-tags-update", "ethora-source-doc-delete",
     ],

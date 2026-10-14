@@ -900,6 +900,40 @@ export function sourcesSiteReindexForAppV2(appId: string, payload: { urlId: stri
   return httpClientDappros.post(`/v2/apps/${String(appId || "").trim()}/sources/site-crawl-reindex`, payload, { timeout: opts?.timeoutMs })
 }
 
+// Sites the Web Index keeps up to date (re-crawled on a schedule), their
+// schedule, and refreshing a site or some of its pages now.
+export function sourcesSiteWatchesV2(params?: { agentId?: string }) {
+  return httpClientDappros.get(`/v2/sources/site-watches`, params?.agentId ? { params } : undefined)
+}
+
+export function sourcesSiteWatchesForAppV2(appId: string, params?: { agentId?: string }) {
+  return httpClientDappros.get(`/v2/apps/${String(appId || "").trim()}/sources/site-watches`, params?.agentId ? { params } : undefined)
+}
+
+export function sourcesSiteWatchUpdateV2(watchId: string, schedule: string) {
+  return httpClientDappros.patch(`/v2/sources/site-watches/${String(watchId || "").trim()}`, { schedule })
+}
+
+export function sourcesSiteWatchUpdateForAppV2(appId: string, watchId: string, schedule: string) {
+  return httpClientDappros.patch(`/v2/apps/${String(appId || "").trim()}/sources/site-watches/${String(watchId || "").trim()}`, { schedule })
+}
+
+export function sourcesSiteWatchRefreshV2(watchId: string) {
+  return httpClientDappros.post(`/v2/sources/site-watches/${String(watchId || "").trim()}/refresh`)
+}
+
+export function sourcesSiteWatchRefreshForAppV2(appId: string, watchId: string) {
+  return httpClientDappros.post(`/v2/apps/${String(appId || "").trim()}/sources/site-watches/${String(watchId || "").trim()}/refresh`)
+}
+
+export function sourcesSiteRefreshUrlsV2(urls: string[]) {
+  return httpClientDappros.post(`/v2/sources/site-refresh-urls`, { urls })
+}
+
+export function sourcesSiteRefreshUrlsForAppV2(appId: string, urls: string[]) {
+  return httpClientDappros.post(`/v2/apps/${String(appId || "").trim()}/sources/site-refresh-urls`, { urls })
+}
+
 // Crawl and reindex answer as soon as the job is enqueued; these read its
 // progress so the `-wait` tools can poll instead of claiming completion.
 export function sourcesSiteCrawlJobV2(jobId: string) {

@@ -103,6 +103,14 @@ import {
     sourcesSiteListForAppV2,
     sourcesSiteListV2,
     sourcesSiteReindexForAppV2,
+    sourcesSiteWatchesV2,
+    sourcesSiteWatchesForAppV2,
+    sourcesSiteWatchUpdateV2,
+    sourcesSiteWatchUpdateForAppV2,
+    sourcesSiteWatchRefreshV2,
+    sourcesSiteWatchRefreshForAppV2,
+    sourcesSiteRefreshUrlsV2,
+    sourcesSiteRefreshUrlsForAppV2,
     sourcesSiteReindexV2,
     sourcesSiteTagsUpdateForAppV2,
     sourcesSiteTagsUpdateV2,
@@ -3895,6 +3903,93 @@ function sourcesSiteReindexV2AppTool(server: McpServer) {
     )
 }
 
+// Websites the knowledge base keeps up to date. Every crawl start URL is
+// re-crawled on a schedule (weekly by default): changed pages are re-indexed,
+// new pages added, pages that are gone removed.
+function sourcesSiteWatchListTool(server: McpServer) {
+    server.registerTool(
+        "ethora-source-site-watch-list",
+        {
+            description: "List the websites the app's knowledge base keeps up to date: one entry per crawled start URL with its refresh `schedule` (weekly / daily / off), `nextRunAt`, and the outcome of the last refresh (`lastResult`: pages changed, new, removed). `agentId` narrows the list to one agent.\nRequires: a selected app (`ethora-app-select`) or an explicit `appId`.\nRelated: `ethora-source-site-watch-update` changes a schedule; `ethora-source-site-refresh` refreshes a site or pages now.",
+            annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+            inputSchema: {
+                appId: z.string().optional().describe("24-char hex appId. Defaults to the selected app."),
+                agentId: z.string().optional().describe("Only the sites of this agent."),
+            },
+        },
+        async function ({ appId, agentId }) {
+            const meta = getDefaultMeta("ethora-source-site-watch-list")
+            try {
+                const ctx = resolveAppScopedV2Context(appId)
+                const res = useAppScopedRoute(ctx)
+                    ? await sourcesSiteWatchesForAppV2(ctx.appId!, { agentId })
+                    : await sourcesSiteWatchesV2({ agentId })
+                return asToolResult(ok(res.data, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
+function sourcesSiteWatchUpdateTool(server: McpServer) {
+    server.registerTool(
+        "ethora-source-site-watch-update",
+        {
+            description: "Set how often a crawled website is re-crawled to keep the knowledge base current: `weekly` (default), `daily` or `off`. Also resumes a site paused after repeated failed refreshes.\nRequires: a `watchId` from `ethora-source-site-watch-list`.",
+            annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+            inputSchema: {
+                appId: z.string().optional().describe("24-char hex appId. Defaults to the selected app."),
+                watchId: z.string().min(1).describe("Site id from `ethora-source-site-watch-list`."),
+                schedule: z.enum(["weekly", "daily", "off"]).describe("Refresh schedule."),
+            },
+        },
+        async function ({ appId, watchId, schedule }) {
+            const meta = getDefaultMeta("ethora-source-site-watch-update")
+            try {
+                const ctx = resolveAppScopedV2Context(appId)
+                const res = useAppScopedRoute(ctx)
+                    ? await sourcesSiteWatchUpdateForAppV2(ctx.appId!, watchId, schedule)
+                    : await sourcesSiteWatchUpdateV2(watchId, schedule)
+                return asToolResult(ok(res.data, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
+function sourcesSiteRefreshTool(server: McpServer) {
+    server.registerTool(
+        "ethora-source-site-refresh",
+        {
+            description: "Refresh website knowledge now instead of waiting for the schedule. Pass `watchId` to re-crawl a whole site (from `ethora-source-site-watch-list`), or `urls` (up to 20) to re-check specific pages, e.g. ones just published or edited: each url is matched to the watched site that covers it, changed text is re-indexed, a new page is added, a page that now returns 404 is removed. A url no watched site covers comes back as `not_watched` (crawl it first with `ethora-source-site-crawl`). Async: returns job ids; `ethora-source-site-watch-list` shows the outcome once a site refresh finishes.\nRequires: a selected app (`ethora-app-select`) or an explicit `appId`. Errors: 409 `SITE_REFRESH_IN_PROGRESS` when that site is already refreshing.",
+            annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+            inputSchema: {
+                appId: z.string().optional().describe("24-char hex appId. Defaults to the selected app."),
+                watchId: z.string().optional().describe("Refresh this whole site."),
+                urls: z.array(z.string().url()).min(1).max(20).optional().describe("Re-check these pages of watched sites."),
+            },
+        },
+        async function ({ appId, watchId, urls }) {
+            const meta = getDefaultMeta("ethora-source-site-refresh")
+            try {
+                if (!watchId === !urls?.length) {
+                    return asToolResult(fail(new Error("Pass either `watchId` (whole site) or `urls` (pages), not both"), meta))
+                }
+                const ctx = resolveAppScopedV2Context(appId)
+                const scoped = useAppScopedRoute(ctx)
+                const res = watchId
+                    ? (scoped ? await sourcesSiteWatchRefreshForAppV2(ctx.appId!, watchId) : await sourcesSiteWatchRefreshV2(watchId))
+                    : (scoped ? await sourcesSiteRefreshUrlsForAppV2(ctx.appId!, urls!) : await sourcesSiteRefreshUrlsV2(urls!))
+                return asToolResult(ok(res.data, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
 // The crawl and reindex routes answer as soon as the job is enqueued, so the
 // `-wait` tools used to return `done: true` with `status: "queued"` after ~60ms.
 // Poll the job row until it reaches a terminal state or the budget runs out.
@@ -4866,6 +4961,9 @@ export function registerTools(server: McpServer) {
     sourcesDocsDeleteTool(server);
     sourcesSiteCrawlV2AppTool(server);
     sourcesSiteReindexV2AppTool(server);
+    sourcesSiteWatchListTool(server);
+    sourcesSiteWatchUpdateTool(server);
+    sourcesSiteRefreshTool(server);
     sourcesSiteCrawlV2WaitTool(server);
     sourcesSiteReindexV2WaitTool(server);
     sourcesSiteListV2Tool(server);

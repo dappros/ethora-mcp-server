@@ -5,6 +5,7 @@ All notable changes to this package are documented here. For cross-SDK release n
 ## Unreleased
 
 ### Added
+- `ethora-source-site-watch-list` / `-watch-update` / `ethora-source-site-refresh`: crawled websites are re-crawled on a schedule (weekly by default) so agents answer from current pages; list the sites with their last refresh, set a site's schedule (weekly, daily, off), or refresh a whole site or specific pages (e.g. just published) now.
 - `ethora-widget-appearance-get` / `-set` (new `widget` group): the website widget's look is saved on the app and every embed loads it, so it can be changed without a new snippet. `-set` merges into the saved set by default (`replace: true` for the whole set, `""` removes one attribute).
 - `ethora-agent-try`: one test turn against an agent's prompt, Memory and knowledge without a chat room, with the sources used; works on public agents too.
 - `ethora-agent-knowledge-get` / `-rebuild`: what an agent can actually search (and what is stored but missing from the index), and re-indexing the missing items.
