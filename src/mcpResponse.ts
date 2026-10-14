@@ -68,6 +68,7 @@ function inferCodeFromMessage(msg: string) {
   if (m.includes("aroundStanzaId or aroundMessageId")) return "VALIDATION_ERROR"
   // missing input the schema cannot express
   if (m.includes("No bundle supplied")) return "VALIDATION_ERROR"
+  if (m.includes("Pass either `watchId`")) return "VALIDATION_ERROR"
   // server/session configuration rather than a bad request
   if (/\bETHORA_[A-Z_]+ is (not configured|empty)/.test(m)) return "CONFIG_REQUIRED"
   // credential families. Match the shape rather than each wording, so new
