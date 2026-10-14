@@ -271,6 +271,28 @@ function userIdFromToken(token: string): string | undefined {
   }
 }
 
+// The app a token belongs to: for a user token `data.appId` (the app the
+// account was created in); for the deployment's app JWT, whose payload is the
+// app document itself, `data._id`. Decoded only, never verified; the API
+// verifies every call.
+export function appIdFromToken(token: string): string | undefined {
+  try {
+    const part = String(token || "").replace(/^(?:Bearer|JWT)\s+/i, "").split(".")[1]
+    if (!part) return undefined
+    const json = JSON.parse(Buffer.from(part.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8"))
+    const data = json?.data || {}
+    const id = data.appId || json?.appId || (data.userId ? undefined : data._id)
+    return id ? String(id) : undefined
+  } catch {
+    return undefined
+  }
+}
+
+// Models the deployment's AI endpoint serves (`GET /v2/agents/models`).
+export function agentModelsListV2() {
+  return httpClientDappros.get(`/v2/agents/models`)
+}
+
 export function getClientState() {
   return {
     apiUrl: String(httpClientDappros.defaults.baseURL || ""),

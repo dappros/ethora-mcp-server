@@ -82,6 +82,7 @@ export const TOOL_TITLES: Record<string, string> = {
   "ethora-agent-soul-append": "Append to Agent Memory",
   "ethora-agent-soul-set": "Set Agent Memory",
   "ethora-agent-try": "Try Agent",
+  "ethora-agent-model-list": "List Agent Models",
   "ethora-agent-knowledge-get": "Get Agent Knowledge Health",
   "ethora-agent-knowledge-rebuild": "Rebuild Agent Knowledge Index",
   "ethora-agent-export": "Export Agent",

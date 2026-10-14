@@ -85,6 +85,9 @@ export type SessionContext = {
   // The default-app lookup (only owned app becomes the current app) ran once
   // for this session; it is not repeated whether or not it found one.
   defaultAppChecked?: boolean
+  // The lookup found a base-app account that owns no app: app-scoped tools
+  // answer NO_APP_YET until an app is created or selected.
+  noAppYet?: boolean
 }
 
 export function createSessionContext(id?: string): SessionContext {
