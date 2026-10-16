@@ -6,7 +6,8 @@ import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js"
 import { appConfig } from "./config.js"
 import { createSessionContext, runWithSession, setHostedMode, SessionContext } from "./session.js"
 import { fetchAppJwtByDomainName, usersMe } from "./apiClientDappros.js"
-import { ALL_SCOPES, ADVERTISED_SCOPES, hideOAuthTools, parseScopes } from "./scopeGuard.js"
+import { ALL_SCOPES, ADVERTISED_SCOPES, parseScopes } from "./scopeGuard.js"
+import { applyOAuthSurface } from "./toolGroups.js"
 import { renderLandingPage } from "./landingPage.js"
 import { AccountMemoryStore, identityKeyFor, applyMemory, snapshotSession } from "./accountMemory.js"
 import { enableGroups, enabledGroups } from "./toolGroups.js"
@@ -371,9 +372,11 @@ export async function startHttpServer(opts: HttpServerOptions) {
         const profile = kind === "oauth" ? "oauth" : (pathKey || headerJwt) ? "authenticated" : "open"
         // `?tools=all` on the endpoint URL lists the whole catalogue up front
         // (scripts, power users); the default is the core group.
-        const toolsProfile = String((req.query as any)?.tools || "").toLowerCase() === "all" ? "all" : "core"
+        // OAuth connections list every offered tool up front (directory
+        // scanners require each operation to be its own listed tool).
+        const toolsProfile = kind === "oauth" || String((req.query as any)?.tools || "").toLowerCase() === "all" ? "all" : "core"
         const server = opts.buildServer(profile, toolsProfile)
-        if (kind === "oauth") hideOAuthTools(server)
+        if (kind === "oauth") applyOAuthSurface(server)
         entry = { server, transport, session }
         fresh = true
       } else {

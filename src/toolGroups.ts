@@ -240,6 +240,39 @@ export function enableGroups(server: McpServer, groups: string[], entry: "open" 
   return { enabled, alreadyEnabled, notAvailable }
 }
 
+// Groups never offered on the OAuth entry: they need credentials an OAuth user
+// does not hold (B2B and app tokens, session reconfiguration) or address the
+// pre-agents per-app bot. Everything else is listed up front there.
+export const OAUTH_HIDDEN_GROUPS = ["keys", "session", "b2b", "legacy-bot"]
+
+/**
+ * Shape the registry for an OAuth connection: every tool outside
+ * OAUTH_HIDDEN_GROUPS and OAUTH_HIDDEN_TOOLS is listed up front, and the
+ * rest (plus `ethora-tools-enable`, which has nothing left to enable) is
+ * removed rather than hidden, so no model-callable operation exists that
+ * tools/list does not show. Directory scanners check exactly that.
+ */
+export function applyOAuthSurface(server: McpServer): { listed: string[]; removed: string[] } {
+  const reg = registry(server)
+  const listed: string[] = []
+  const removed: string[] = []
+  for (const [name, t] of Object.entries(reg)) {
+    if (!t) continue
+    const group = GROUP_OF[name]
+    const drop = name === "ethora-tools-enable" || OAUTH_HIDDEN_TOOLS.has(name) || (group && OAUTH_HIDDEN_GROUPS.includes(group))
+    if (drop) {
+      if (typeof t.remove === "function") t.remove()
+      else if (typeof t.disable === "function") t.disable()
+      removed.push(name)
+      continue
+    }
+    if (t.enabled === false && typeof t.enable === "function") t.enable()
+    delete t._hiddenByGroup
+    listed.push(name)
+  }
+  return { listed, removed }
+}
+
 /** Non-core groups that have been enabled on this server instance (any tool of the group listed). */
 export function enabledGroups(server: McpServer): string[] {
   const reg = registry(server)
