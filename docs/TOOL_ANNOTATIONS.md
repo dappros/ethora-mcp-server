@@ -118,7 +118,7 @@ The hosted server (`mcp.chat.ethora.com`) never lists the stdio-only wallet tool
 
 | Tool | Read-only | Destructive | Idempotent | Open world | Why |
 |---|---|---|---|---|---|
-| `ethora-broadcast-job-start` | yes | no | yes | yes | Fetches the status and per-room results of a broadcast job by id (the name is historical); stores nothing. |
+| `ethora-broadcast-job-get` | yes | no | yes | yes | Fetches the status and per-room results of a broadcast job by id; stores nothing. |
 | `ethora-broadcast-job-wait` | yes | no | yes | yes | Polls a broadcast job until it finishes and returns its results; stores nothing. |
 | `ethora-broadcast-send` | no | no | no | yes | Posts one message into many rooms of the app, reaching their members; every call posts again. |
 | `ethora-chat-delete` | no | yes | yes | yes | Deletes a chat room and its messages; deleting twice changes nothing more. |
@@ -143,7 +143,7 @@ The hosted server (`mcp.chat.ethora.com`) never lists the stdio-only wallet tool
 | `ethora-source-doc-list` | yes | no | yes | yes | Lists the knowledge documents of the app or agent; stores nothing. |
 | `ethora-source-doc-tags-update` | no | yes | yes | yes | Replaces the retrieval tags of a document (not additive); the same tags twice give the same result. |
 | `ethora-source-site-crawl` | no | yes | no | yes | Fetches pages from an external website and stores them as agent knowledge; with `force` it replaces the stored copy of an already indexed page, which cannot be undone, and every call starts a new crawl. |
-| `ethora-source-site-crawl-cancel` | no | no | yes | yes | Stops a running crawl job; stopping twice changes nothing more and nothing is deleted. |
+| `ethora-source-site-crawl-cancel` | no | yes | yes | yes | Stops a running crawl job and discards the pages it had not finished storing, which cannot be resumed (a new crawl can be started); cancelling twice changes nothing more. |
 | `ethora-source-site-list` | yes | no | yes | yes | Lists the crawled pages of the app or agent; stores nothing. |
 | `ethora-source-site-refresh` | no | yes | no | yes | Re-crawls a whole site or named pages now and replaces their stored content; every call fetches again. |
 | `ethora-source-site-reindex` | no | yes | no | yes | Re-fetches one indexed URL from its website and replaces its stored content, so the previous copy is gone; every call fetches again. |
@@ -162,7 +162,7 @@ The hosted server (`mcp.chat.ethora.com`) never lists the stdio-only wallet tool
 | `ethora-file-get` | yes | no | yes | yes | Returns a file's metadata and download location; stores nothing. |
 | `ethora-file-upload` | no | no | no | yes | Stores a new file in the app's storage; every call stores another copy. |
 | `ethora-user-batch-create` | no | no | no | yes | Creates several users in the app from a list; every call creates more users (duplicates are reported, not created). |
-| `ethora-user-batch-job-start` | yes | no | yes | yes | Fetches the status and per-user results of a users batch job by id (the name is historical); stores nothing. |
+| `ethora-user-batch-job-get` | yes | no | yes | yes | Fetches the status and per-user results of a users batch job by id; stores nothing. |
 | `ethora-user-batch-job-wait` | yes | no | yes | yes | Polls a users batch job until it finishes; stores nothing. |
 
 ## Group `widget`

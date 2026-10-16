@@ -1569,7 +1569,7 @@ function chatsBroadcastTool(server: McpServer) {
 
 function chatsBroadcastJobTool(server: McpServer) {
     server.registerTool(
-        "ethora-broadcast-job-start",
+        "ethora-broadcast-job-get",
         {
             description: "Fetch the current status and per-room results of a broadcast job by `jobId` (one-shot, no polling). Returns the job object with its `state` (pending/running/completed/failed).\nRequires: a selected app with at least one room (`ethora-chat-create`).\nAuth: app-token mode OR B2B mode with an explicit `appId` — must match the auth used to enqueue the job. Errors: 401/403 wrong auth; 404 unknown `jobId`. Related: `ethora-broadcast-job-wait` for a blocking wait.",
             annotations: { readOnlyHint: true, openWorldHint: true },
@@ -1584,9 +1584,9 @@ function chatsBroadcastJobTool(server: McpServer) {
                 const res = useAppScopedRoute(ctx)
                     ? await chatsBroadcastJobForAppV2(ctx.appId!, jobId)
                     : await chatsBroadcastJobV2(jobId)
-                return asToolResult(ok(res.data, getDefaultMeta("ethora-broadcast-job-start")))
+                return asToolResult(ok(res.data, getDefaultMeta("ethora-broadcast-job-get")))
             } catch (error) {
-                return asToolResult(fail(error, getDefaultMeta("ethora-broadcast-job-start")))
+                return asToolResult(fail(error, getDefaultMeta("ethora-broadcast-job-get")))
             }
         }
     )
@@ -1600,7 +1600,7 @@ function waitBroadcastJobTool(server: McpServer) {
     server.registerTool(
         "ethora-broadcast-job-wait",
         {
-            description: "Block until a broadcast job reaches a terminal state (`completed` or `failed`) or until `timeoutMs` — read-only polling wrapper around `ethora-broadcast-job-start`. Returns `{ done, state, job }`, or `{ done: false, reason: \"timeout\" }` on timeout.\nRequires: a `jobId` returned by `ethora-broadcast-job-start`.\nAuth: app-token mode OR B2B mode with an explicit `appId` — must match the auth used to enqueue the job. Errors: 401/403 wrong auth; 404 unknown `jobId`.",
+            description: "Block until a broadcast job reaches a terminal state (`completed` or `failed`) or until `timeoutMs` — read-only polling wrapper around `ethora-broadcast-job-get`. Returns `{ done, state, job }`, or `{ done: false, reason: \"timeout\" }` on timeout.\nRequires: a `jobId` returned by `ethora-broadcast-job-get`.\nAuth: app-token mode OR B2B mode with an explicit `appId` — must match the auth used to enqueue the job. Errors: 401/403 wrong auth; 404 unknown `jobId`.",
             annotations: { readOnlyHint: true, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("24-char hex appId the job belongs to. Required in B2B mode unless already set via `ethora-app-select`; ignored in app-token mode."),
@@ -4204,7 +4204,7 @@ function usersBatchCreateV2Tool(server: McpServer) {
 
 function usersBatchCreateJobV2Tool(server: McpServer) {
     server.registerTool(
-        "ethora-user-batch-job-start",
+        "ethora-user-batch-job-get",
         {
             description: "Fetch the current status and per-user results of a users batch job by `jobId` (one-shot, no polling). Returns the job object with its `state` (pending/running/completed/failed) and per-user outcomes.\nRequires: a `jobId` returned by `ethora-user-batch-create`.\nAuth: B2B mode (`ethora-auth-mode-set` + a configured `b2bToken`) — must match the auth used to create the job. Errors: 401/403 not in B2B mode; 404 unknown `jobId`. Related: `ethora-user-batch-job-wait` for a blocking wait.",
             annotations: { readOnlyHint: true, openWorldHint: true },
@@ -4214,7 +4214,7 @@ function usersBatchCreateJobV2Tool(server: McpServer) {
             },
         },
         async function ({ jobId, timeoutMs }) {
-            const meta = getDefaultMeta("ethora-user-batch-job-start")
+            const meta = getDefaultMeta("ethora-user-batch-job-get")
             try {
                 ensureB2BAuthForTool()
                 const res = await usersBatchCreateJobV2(jobId, { timeoutMs: timeoutMs ?? 10_000 })
@@ -4230,7 +4230,7 @@ function waitUsersBatchCreateJobV2Tool(server: McpServer) {
     server.registerTool(
         "ethora-user-batch-job-wait",
         {
-            description: "Block until a users batch job reaches a terminal state (`completed` or `failed`) or `timeoutMs` — read-only polling wrapper around `ethora-user-batch-job-start`. Returns `{ done, state, job }`, or `{ done: false, reason: \"timeout\" }` on timeout.\nRequires: a `jobId` returned by `ethora-user-batch-create`.\nAuth: B2B mode (`ethora-auth-mode-set` + a configured `b2bToken`) — must match the auth used to create the job. Errors: 401/403 not in B2B mode; 404 unknown `jobId`.",
+            description: "Block until a users batch job reaches a terminal state (`completed` or `failed`) or `timeoutMs` — read-only polling wrapper around `ethora-user-batch-job-get`. Returns `{ done, state, job }`, or `{ done: false, reason: \"timeout\" }` on timeout.\nRequires: a `jobId` returned by `ethora-user-batch-create`.\nAuth: B2B mode (`ethora-auth-mode-set` + a configured `b2bToken`) — must match the auth used to create the job. Errors: 401/403 not in B2B mode; 404 unknown `jobId`.",
             annotations: { readOnlyHint: true, openWorldHint: true },
             inputSchema: {
                 jobId: z.string().min(1).describe("Job id returned by `ethora-user-batch-create`."),

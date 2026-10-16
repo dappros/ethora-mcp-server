@@ -151,11 +151,11 @@ Three ways to get more:
 | `keys` | List and revoke API keys, reveal an app's credentials, mint and rotate app tokens. | `ethora-api-key-list`, `ethora-api-key-revoke`, `ethora-app-credentials-reveal`, `ethora-app-token-create`, `ethora-app-token-list`, `ethora-app-token-revoke`, `ethora-app-token-rotate` |
 | `session` | Diagnostics, recipes and switching the session's auth mode (app token, B2B token) for server integrations. | `ethora-doctor`, `ethora-recipe-run`, `ethora-session-configure`, `ethora-auth-mode-set`, `ethora-auth-mode-set`, `ethora-auth-mode-set` |
 | `apps-admin` | Delete, export and import whole apps; inspect default rooms. | `ethora-app-delete`, `ethora-app-export`, `ethora-app-import`, `ethora-app-rooms-list`, `ethora-app-rooms-list` |
-| `rooms` | Delete rooms, broadcast to many rooms, search messages, read message context and unread counts. | `ethora-chat-delete`, `ethora-broadcast-send`, `ethora-broadcast-job-start`, `ethora-broadcast-job-wait`, `ethora-message-search`, `ethora-message-context`, `ethora-chat-unread-counts` |
+| `rooms` | Delete rooms, broadcast to many rooms, search messages, read message context and unread counts. | `ethora-chat-delete`, `ethora-broadcast-send`, `ethora-broadcast-job-get`, `ethora-broadcast-job-wait`, `ethora-message-search`, `ethora-message-context`, `ethora-chat-unread-counts` |
 | `agents-admin` | Inspect, clone (with or without its knowledge), delete, export and import agents; try an agent without a room; check and rebuild its knowledge index; edit its Memory and visibility. | `ethora-agent-get`, `ethora-agent-clone`, `ethora-agent-delete`, `ethora-agent-export`, `ethora-agent-import`, `ethora-agent-visibility-set`, `ethora-agent-soul-set`, `ethora-agent-soul-append`, `ethora-agent-try`, `ethora-agent-knowledge-get`, `ethora-agent-knowledge-rebuild` |
 | `sources` | Knowledge-base maintenance: async crawl and reindex jobs, stop a crawl, list and tag sites and documents, delete URLs and documents. | `ethora-source-site-crawl`, `ethora-source-site-crawl-cancel`, `ethora-source-site-reindex`, `ethora-source-site-reindex-wait`, `ethora-source-site-list`, `ethora-source-site-watch-list`, `ethora-source-site-watch-update`, `ethora-source-site-refresh`, `ethora-source-site-tags-update`, `ethora-source-site-url-delete`, `ethora-source-site-url-delete-batch`, `ethora-source-doc-list`, `ethora-source-doc-tags-update`, `ethora-source-doc-delete` |
 | `widget` | Read and change the website widget's saved look (colours, fonts, size, launcher, teaser, texts); live embeds pick it up without a new snippet. | `ethora-widget-appearance-get`, `ethora-widget-appearance-set` |
-| `users-files` | Batch-create users and upload, fetch or delete files. | `ethora-user-batch-create`, `ethora-user-batch-job-start`, `ethora-user-batch-job-wait`, `ethora-file-upload`, `ethora-file-get`, `ethora-file-delete` |
+| `users-files` | Batch-create users and upload, fetch or delete files. | `ethora-user-batch-create`, `ethora-user-batch-job-get`, `ethora-user-batch-job-wait`, `ethora-file-upload`, `ethora-file-get`, `ethora-file-delete` |
 | `legacy-bot` | The per-app bot of apps created in the dashboard before the agents framework, and the pre-v2 document tools. Prefer the agents and sources tools for anything new. | `ethora-bot-get`, `ethora-bot-update`, `ethora-bot-enable`, `ethora-bot-disable`, `ethora-bot-widget-get`, `ethora-bot-history`, `ethora-bot-message-send`, `ethora-bot-instance-list`, `ethora-bot-instance-status-set`, `ethora-bot-instance-diagnose`, `ethora-bot-instance-leave`, `ethora-bot-instance-test`, `ethora-bot-enable-b2b`, `ethora-source-doc-upload-legacy`, `ethora-source-doc-delete-legacy` |
 | `b2b` | Server-to-server provisioning with a B2B token, plus code and config generators for integrations. | `ethora-b2b-app-create`, `ethora-b2b-app-provision`, `ethora-b2b-app-bootstrap-ai`, `ethora-b2b-runbook-generate`, `ethora-env-examples-generate`, `ethora-chat-component-app-generate`, `ethora.b2b.auth.use`, `ethora.b2b.app.create`, `ethora.b2b.bot.enable`, `ethora.b2b.broadcast.wait`, `ethora.b2b.app.bootstrap-ai` |
 | `wallet` | Wallet balance and ERC-20 transfer. Local (stdio) only; never offered on the hosted server. | `ethora-wallet-balance-get`, `ethora-wallet-erc20-transfer` |
@@ -406,7 +406,7 @@ Names used before 27.0 and the tool each one now resolves to. All of them remain
 | `ethora-bot-message-v2` | `ethora-bot-message-send` |
 | `ethora-bot-update-v2` | `ethora-bot-update` |
 | `ethora-bot-widget-v2` | `ethora-bot-widget-get` |
-| `ethora-chats-broadcast-job-v2` | `ethora-broadcast-job-start` |
+| `ethora-chats-broadcast-job-v2`, `ethora-broadcast-job-start` | `ethora-broadcast-job-get` |
 | `ethora-wait-broadcast-job-v2` | `ethora-broadcast-job-wait` |
 | `ethora.b2b.broadcast.wait` | `ethora-broadcast-job-wait` |
 | `ethora-chats-broadcast-v2` | `ethora-broadcast-send` |
@@ -439,7 +439,7 @@ Names used before 27.0 and the tool each one now resolves to. All of them remain
 | `ethora-sources-site-delete-url-v2` | `ethora-source-site-url-delete` |
 | `ethora-sources-site-delete-url-v2-batch` | `ethora-source-site-url-delete-batch` |
 | `ethora-users-batch-create-v2` | `ethora-user-batch-create` |
-| `ethora-users-batch-job-v2` | `ethora-user-batch-job-start` |
+| `ethora-users-batch-job-v2`, `ethora-user-batch-job-start` | `ethora-user-batch-job-get` |
 | `ethora-wait-users-batch-job-v2` | `ethora-user-batch-job-wait` |
 | `ethora-wallet-get-balance` | `ethora-wallet-balance-get` |
 | `ethora-widget-embed-snippet` | `ethora-widget-snippet-get` |

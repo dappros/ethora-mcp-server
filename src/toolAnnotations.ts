@@ -102,14 +102,14 @@ export const TOOL_ANNOTATIONS: Record<string, ToolAnnotation> = {
   "ethora-message-context": READ("Returns the messages around one message; stores nothing."),
   "ethora-chat-unread-counts": READ("Returns unread counts per room; stores nothing."),
   "ethora-broadcast-send": A(false, false, false, true, "Posts one message into many rooms of the app, reaching their members; every call posts again."),
-  "ethora-broadcast-job-start": READ("Fetches the status and per-room results of a broadcast job by id (the name is historical); stores nothing."),
+  "ethora-broadcast-job-get": READ("Fetches the status and per-room results of a broadcast job by id; stores nothing."),
   "ethora-broadcast-job-wait": READ("Polls a broadcast job until it finishes and returns its results; stores nothing."),
   "ethora-bot-message-send": A(false, false, false, true, "Legacy alias of ethora-message-send: posts a message into a room; every call posts again."),
   "ethora-bot-history": READ("Legacy alias of ethora-chat-history; stores nothing."),
 
   // Users and files
   "ethora-user-batch-create": CREATE("Creates several users in the app from a list; every call creates more users (duplicates are reported, not created)."),
-  "ethora-user-batch-job-start": READ("Fetches the status and per-user results of a users batch job by id (the name is historical); stores nothing."),
+  "ethora-user-batch-job-get": READ("Fetches the status and per-user results of a users batch job by id; stores nothing."),
   "ethora-user-batch-job-wait": READ("Polls a users batch job until it finishes; stores nothing."),
   "ethora-file-upload": CREATE("Stores a new file in the app's storage; every call stores another copy."),
   "ethora-file-get": READ("Returns a file's metadata and download location; stores nothing."),
@@ -146,7 +146,7 @@ export const TOOL_ANNOTATIONS: Record<string, ToolAnnotation> = {
   // Knowledge sources
   "ethora-source-site-crawl": REPLACE_JOB("Fetches pages from an external website and stores them as agent knowledge; with `force` it replaces the stored copy of an already indexed page, which cannot be undone, and every call starts a new crawl."),
   "ethora-source-site-crawl-wait": REPLACE_JOB("Same as the crawl tool, then waits for the job: fetches an external website and stores its pages; with `force` it replaces the stored copy of an already indexed page, and every call starts a new crawl."),
-  "ethora-source-site-crawl-cancel": TOGGLE("Stops a running crawl job; stopping twice changes nothing more and nothing is deleted."),
+  "ethora-source-site-crawl-cancel": A(false, true, true, true, "Stops a running crawl job and discards the pages it had not finished storing, which cannot be resumed (a new crawl can be started); cancelling twice changes nothing more."),
   "ethora-source-site-reindex": REPLACE_JOB("Re-fetches one indexed URL from its website and replaces its stored content, so the previous copy is gone; every call fetches again."),
   "ethora-source-site-reindex-wait": REPLACE_JOB("Re-fetches one indexed URL, replaces its stored content and waits for the result; every call fetches again."),
   "ethora-source-site-refresh": REPLACE_JOB("Re-crawls a whole site or named pages now and replaces their stored content; every call fetches again."),
