@@ -52,7 +52,8 @@
     "notes": "The reviewer signs in on the Ethora consent page with email and password (Google sign-in also works). The connector requests the openid and email identity scopes; an unverified address shows a one-step verification prompt that can be skipped."
   },
   "demo_video": {
-    "_how": "Record 60-90 seconds in ChatGPT: connect the plugin, then the three default prompts (create app + agent, website widget, two agents debating). Upload to YouTube unlisted and either paste the URL in the dashboard (Review information) or set extensions.com.openai.review.demo_recording_url in plugin.json."
+    "_how": "Record 60-90 seconds in ChatGPT: connect the plugin, then the three default prompts (create app + agent, website widget, two agents debating). Upload to YouTube unlisted and either paste the URL in the dashboard (Review information) or set extensions.com.openai.review.demo_recording_url in plugin.json.",
+    "url": "https://www.youtube.com/watch?v=3XRbBzYM5hA"
   },
   "error_handling_cases": {
     "_note": "Formerly listed as negative cases. OpenAI defines negative cases as prompts where the plugin should NOT trigger; these three are error-handling cases that do trigger it, kept here as manual checks.",
