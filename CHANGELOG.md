@@ -2,9 +2,10 @@
 
 All notable changes to this package are documented here. For cross-SDK release notes, see [ethora/RELEASE-NOTES.md](https://github.com/dappros/ethora/blob/main/RELEASE-NOTES.md).
 
-## Unreleased
+## 26.10.1 - 2026-10-16
 
 ### Added
+- Every tool carries all four MCP annotation hints (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) as explicit booleans from one reviewed table (`src/toolAnnotations.ts`), each with a reason; `docs/TOOL_ANNOTATIONS.md` is generated from it (`scripts/tool-annotations-doc.mjs`). Before, `idempotentHint` was unset on 22 tools and a heuristic marked every API call open-world.
 - `ethora-source-site-watch-list` / `-watch-update` / `ethora-source-site-refresh`: crawled websites are re-crawled on a schedule (weekly by default) so agents answer from current pages; list the sites with their last refresh, set a site's schedule (weekly, daily, off), or refresh a whole site or specific pages (e.g. just published) now.
 - `ethora-widget-appearance-get` / `-set` (new `widget` group): the website widget's look is saved on the app and every embed loads it, so it can be changed without a new snippet. `-set` merges into the saved set by default (`replace: true` for the whole set, `""` removes one attribute).
 - `ethora-agent-try`: one test turn against an agent's prompt, Memory and knowledge without a chat room, with the sources used; works on public agents too.
@@ -14,6 +15,8 @@ All notable changes to this package are documented here. For cross-SDK release n
 - `includeKnowledge` on `ethora-agent-clone` copies the source's crawled pages, documents and embeddings; `visibility` (`mine` | `public`), `category`, `limit` and `offset` on `ethora-agent-list`.
 
 ### Changed
+- Hint corrections: `ethora-broadcast-job-start` / `ethora-user-batch-job-start` are reads (they fetch a job by id); `ethora-agent-try` is not read-only (a model run per call); `openWorldHint` is true only for tools that fetch external websites or deliver messages to other people, and false for tools that only touch the account's own data.
+- The agent-flows reference (`doc:agent-flows`) and the ChatGPT plugin skills use a demo-request example instead of an appointment one, name the `ask` types, and say that flows are for contact and business details only, never health, government-id, payment-card or biometric data. The plugin description carries the same data statement.
 - Agent `categories` is a fixed list (`customer-support`, `persona`, `entertainment`, `worker`), matching the API, instead of free text the API now rejects.
 - Agents belong to the account and only their owner can change them: `ethora-agent-update` says a public agent (e.g. the platform's Support Agent) answers 403 and is cloned instead; `ethora-agent-clone` works in user auth and on public agents.
 - `ethora-agent-soul-set` / `-append` describe the agent's Memory (the admin panel's new name for SOUL.MD); titles were "Agent Prompt", which was wrong.

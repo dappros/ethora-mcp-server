@@ -31,7 +31,9 @@ Most work follows the same order, and skipping a step is the usual cause of conf
 
 **Auth modes are the most common source of errors.** A session is in user, app-token or B2B mode, and routes disagree about which they accept: agent and room routes want user auth, provisioning routes want B2B. The error tells you which to switch to, and `ethora-auth-mode-set` / `-app` / `-b2b` switch. `ethora-status` shows where you are.
 
-**Session state is per connection.** `ethora-app-select` and any credentials set with `ethora-session-configure` live in memory for the session. On reconnect they are gone. Most tools take an explicit `appId` if you would rather not depend on it.
+**The selected app follows the account.** `ethora-app-select` (and `ethora-app-create`, which selects the new app) is remembered for the signed-in account for 24 hours, so it survives a reconnect or a client that opens a new session per call. An account with exactly one app has it selected automatically. Most tools also take an explicit `appId`.
+
+**Data handled.** The tools work with the account's own apps, rooms, users, agents, files and messages. Do not use them to collect or store health or medical information, government identifiers, payment card numbers, biometric data or other sensitive personal data, in agent flows or otherwise.
 
 **Read the error before retrying.** Errors carry a `code`, a `message` naming the thing to fix, and a `hint` with the next step. A retry without changing anything will fail identically.
 

@@ -1,6 +1,6 @@
 ---
 name: ethora-agent-flows
-description: Write or edit a scripted conversation flow for an Ethora AI agent, as flowsYaml. Use when the user wants an agent to follow a fixed sequence such as an opening menu, an appointment request, an intake questionnaire, a survey or a lead-capture form, rather than letting the model improvise every turn.
+description: Write or edit a scripted conversation flow for an Ethora AI agent, as flowsYaml. Use when the user wants an agent to follow a fixed sequence such as an opening menu, a demo or callback request, a product survey or a lead-capture form, rather than letting the model improvise every turn.
 ---
 
 # Authoring Ethora agent flows
@@ -23,20 +23,20 @@ flows:
     steps:
       - say: "Hi! How can I help?"
         buttons:
-          - { label: "Book an appointment", goto: appointment }
+          - { label: "Request a demo", goto: demo }
           - { label: "Something else", end: true }
-  appointment:
-    description: "Collect an appointment request"
-    trigger: { phrases: ["appointment", "book a visit"] }
+  demo:
+    description: "Collect a product demo request"
+    trigger: { phrases: ["demo", "see it in action"] }
     steps:
-      - ask: "Which location suits you?"
-        id: location
-        options: [Downtown, Westside]
-      - ask: "Best phone number to reach you?"
-        id: phone
-        type: phone
-        retry: "That doesn't look like a phone number, could you check it?"
-      - say: "Thanks, we'll call {phone} to confirm a slot at {location}."
+      - ask: "Which plan are you interested in?"
+        id: plan
+        options: [Starter, Business]
+      - ask: "Which work email should we send the invite to?"
+        id: email
+        type: email
+        retry: "That doesn't look like an email address, could you check it?"
+      - say: "Thanks, the {plan} demo invite goes to {email}."
       - end: true
 ```
 
@@ -47,7 +47,12 @@ flows:
 - **Buttons are authored here**, as `buttons:` on a `say` step or `options:` on an `ask` step. There
   is no separate tool for them. Tapping one posts its value as an ordinary message.
 - **`ask` stores into a slot** named by its `id`. Refer to it later as `{id}` in any text. `type`
-  validates the answer and `retry` is what the agent says when validation fails.
+  validates the answer (`text`, `number`, `date`, `phone`, `email`, `choice`) and `retry` is what the
+  agent says when validation fails.
+- **Ask only for what the task needs.** Flows collect contact and business details: a name, a work
+  email, a plan, a preferred time. Never write a flow that asks for health or medical information,
+  government identifiers, payment card numbers, biometric data or other sensitive personal data, and
+  have the opening message say what the answers are used for.
 - **`when: "slot == value"`** on any step skips it when the condition is false.
 - Keep `say` text short. It renders as chat bubbles, not a page.
 

@@ -4,6 +4,7 @@
 // The map is hand-written for readability; a tool without an entry gets a
 // generated title and a stderr warning, and the verification script fails.
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
+import { annotationsFor } from "./toolAnnotations.js"
 
 export const TOOL_TITLES: Record<string, string> = {
   "ethora-session-configure": "Configure Connection",
@@ -140,8 +141,10 @@ function generatedTitle(name: string): string {
     .join(" ")
 }
 
+// Fallback for a tool missing from TOOL_ANNOTATIONS (the test suite fails on
+// one, so this only runs for an unreleased tool during development).
 function looksDestructive(name: string): boolean {
-  return /delete|revoke|transfer|leave-chat|purge/.test(name)
+  return /delete|revoke|transfer|leave|purge|rotate/.test(name)
 }
 
 export function titleFor(name: string): { title: string; known: boolean } {
@@ -151,13 +154,16 @@ export function titleFor(name: string): { title: string; known: boolean } {
 
 /**
  * Normalise every registered tool so tools/list carries a top-level `title`,
- * `annotations.title`, and explicit boolean readOnlyHint / destructiveHint /
- * openWorldHint (idempotentHint kept when the tool declared it). Existing
- * values win; only missing fields are filled. Safe to call more than once.
+ * `annotations.title`, and all four hints as explicit booleans. The hints come
+ * from TOOL_ANNOTATIONS (the reviewed table with a reason per tool) and win
+ * over anything the registration declared, so there is one source of truth; a
+ * tool missing from the table gets a conservative fill and a stderr warning.
+ * Safe to call more than once.
  */
-export function applyToolMeta(server: McpServer): { total: number; unknownTitles: string[] } {
+export function applyToolMeta(server: McpServer): { total: number; unknownTitles: string[]; unknownAnnotations: string[] } {
   const reg: Record<string, any> = (server as any)._registeredTools || {}
   const unknownTitles: string[] = []
+  const unknownAnnotations: string[] = []
   let total = 0
   for (const [name, tool] of Object.entries(reg)) {
     if (!tool) continue
@@ -165,9 +171,16 @@ export function applyToolMeta(server: McpServer): { total: number; unknownTitles
     const { title, known } = titleFor(name)
     if (!known) unknownTitles.push(name)
     const a = { ...(tool.annotations || {}) }
-    if (typeof a.readOnlyHint !== "boolean") a.readOnlyHint = false
-    if (typeof a.destructiveHint !== "boolean") a.destructiveHint = a.readOnlyHint ? false : looksDestructive(name)
-    if (typeof a.openWorldHint !== "boolean") a.openWorldHint = true
+    const table = annotationsFor(name)
+    if (table) {
+      Object.assign(a, table)
+    } else {
+      unknownAnnotations.push(name)
+      if (typeof a.readOnlyHint !== "boolean") a.readOnlyHint = false
+      if (typeof a.destructiveHint !== "boolean") a.destructiveHint = a.readOnlyHint ? false : looksDestructive(name)
+      if (typeof a.idempotentHint !== "boolean") a.idempotentHint = a.readOnlyHint || a.destructiveHint
+      if (typeof a.openWorldHint !== "boolean") a.openWorldHint = false
+    }
     // The hand-written map wins over any ad-hoc title in the registration so
     // listings stay consistent; generated titles only fill gaps.
     if (known || !a.title) a.title = title
@@ -177,7 +190,10 @@ export function applyToolMeta(server: McpServer): { total: number; unknownTitles
   if (unknownTitles.length) {
     console.error(`[tool-meta] ${unknownTitles.length} tool(s) have no entry in TOOL_TITLES (generated titles used): ${unknownTitles.join(", ")}`)
   }
-  return { total, unknownTitles }
+  if (unknownAnnotations.length) {
+    console.error(`[tool-meta] ${unknownAnnotations.length} tool(s) have no entry in TOOL_ANNOTATIONS (fallback hints used): ${unknownAnnotations.join(", ")}`)
+  }
+  return { total, unknownTitles, unknownAnnotations }
 }
 
 /** Remove tools that must not be exposed on the hosted surface. */
