@@ -8,7 +8,9 @@
  * that passes here does not bounce on the obvious things: manifest shape and
  * field limits, every referenced asset present and inside the package, the
  * MCP server reachable over HTTPS with the plugin's OAuth entry point, no
- * `apps` references or hooks (not accepted for submission), no secrets.
+ * `apps` references or hooks (not accepted for submission), no secrets, and
+ * the review block (5 positive + 3 negative test cases, no credentials) that
+ * the dashboard imports from the ZIP.
  */
 import { readFileSync, existsSync, mkdirSync, rmSync, statSync, readdirSync } from "node:fs";
 import { join, dirname, resolve } from "node:path";
@@ -43,6 +45,18 @@ for (const k of ["logo", "composerIcon", "logoDark", "composerIconDark"]) {
 }
 for (const p of ui.screenshots || []) if (!existsSync(resolve(src, p))) warn(`screenshot ${p} is missing`);
 if (manifest.extensions?.["com.openai"]?.apps || existsSync(join(src, ".app.json"))) warn("`apps` / .app.json references cannot be submitted");
+const review = manifest.extensions?.["com.openai"]?.review;
+if (review) {
+  for (const k of ["test_credentials", "reviewer_instructions"]) if (k in review) warn(`review.${k} is rejected in ZIP metadata; enter reviewer access in the dashboard`);
+  const pos = review.test_cases?.positive || [], neg = review.test_cases?.negative || [];
+  if (pos.length !== 5) warn(`review.test_cases.positive: initial MCP review needs exactly 5 cases (${pos.length})`);
+  if (neg.length !== 3) warn(`review.test_cases.negative: initial MCP review needs exactly 3 cases (${neg.length})`);
+  pos.forEach((c, i) => { for (const k of ["description", "prompt", "tools_triggered", "expected_behavior"]) if (!c[k]) warn(`positive case ${i + 1} lacks ${k}`); if (String(c.description).length > 4000) warn(`positive case ${i + 1} description over 4000 chars`); });
+  neg.forEach((c, i) => { for (const k of ["description", "prompt"]) if (!c[k]) warn(`negative case ${i + 1} lacks ${k}`); });
+  if (review.demo_recording_url && !/^https:\/\//.test(review.demo_recording_url)) warn("review.demo_recording_url must be https");
+}
+const publication = manifest.extensions?.["com.openai"]?.publication;
+if (publication?.countries && !publication.countries.every((c) => /^[A-Z]{2}$/.test(c))) warn("publication.countries must be uppercase two-letter codes");
 if (manifest.extensions?.["com.openai"]?.hooks || existsSync(join(src, "hooks"))) warn("lifecycle hooks cannot be submitted");
 
 const mcp = JSON.parse(readFileSync(join(src, "mcp.json"), "utf8"));

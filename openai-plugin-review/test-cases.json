@@ -1,5 +1,5 @@
 {
-  "_note": "Review materials for the ChatGPT plugin directory submission. Not part of the plugin ZIP. OpenAI asks for exactly five positive and three negative test cases; paste these into the dashboard's Review details. tools_triggered names the canonical tool.",
+  "_note": "Review materials for the ChatGPT plugin directory submission. The five positive and three negative cases are also embedded in openai-plugin/plugin.json under extensions.com.openai.review.test_cases, which the dashboard imports from the ZIP (imported cases are read-only there; edit here, mirror into plugin.json, rebuild). tools_triggered names the canonical tool.",
   "positive": [
     {
       "description": "Create a new chat app and make it the current app.",
@@ -58,6 +58,6 @@
     "notes": "The reviewer signs in on the Ethora consent page with email and password (Google sign-in also works). The connector requests the openid and email identity scopes; an unverified address shows a one-step verification prompt that can be skipped."
   },
   "demo_video": {
-    "_how": "Record 60-90 seconds in ChatGPT: connect the plugin, then the three default prompts (create app + agent, website widget, two agents debating). Upload to YouTube unlisted and paste the URL in the dashboard."
+    "_how": "Record 60-90 seconds in ChatGPT: connect the plugin, then the three default prompts (create app + agent, website widget, two agents debating). Upload to YouTube unlisted and either paste the URL in the dashboard (Review information) or set extensions.com.openai.review.demo_recording_url in plugin.json."
   }
 }

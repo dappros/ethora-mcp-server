@@ -40,8 +40,9 @@ verified there; the ZIP carries the manifest, icons and skills.
    checks: metadata, skills, MCP tool metadata, domain verification, package
    structure. Required findings must be fixed and a new ZIP uploaded;
    informational ones can go to the review team as they are.
-3. **Review information.** Paste the five positive and three negative test
-   cases from `../openai-plugin-review/test-cases.json`, the demo video URL,
+3. **Review information.** The five positive and three negative test cases
+   are embedded in `plugin.json` (`extensions.com.openai.review.test_cases`)
+   and imported from the ZIP; enter the demo video URL,
    and the reviewer account's credentials (enter them in the dashboard only;
    never commit them). Create that account on production beforehand with one
    app, a room and an agent so the positive cases have data.
