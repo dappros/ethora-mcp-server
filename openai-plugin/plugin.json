@@ -98,7 +98,8 @@
             }
           ]
         },
-        "commerce": false
+        "commerce": false,
+        "demo_recording_url": "https://www.youtube.com/watch?v=3XRbBzYM5hA"
       },
       "publication": {
         "release_notes": "26.10.1: every tool sets readOnlyHint, destructiveHint, idempotentHint and openWorldHint explicitly, from a reviewed table with a stated reason per tool (docs/TOOL_ANNOTATIONS.md in the repository). The agent-flows guidance uses a demo-request example and states that flows and tools are for contact and business details only, never health, government-id, payment-card or biometric data. New since 26.10.0: scheduled website re-crawl tools, widget appearance tools, agent try and knowledge-health tools, remembered app selection across sessions."
