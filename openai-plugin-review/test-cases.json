@@ -34,22 +34,16 @@
   ],
   "negative": [
     {
-      "description": "Destructive action requires confirmation and acts only on the user's own apps.",
-      "prompt": "Delete the app Review Desk.",
-      "tools_triggered": "ethora-app-delete",
-      "expected_behavior": "The tool is marked destructive, so ChatGPT asks for confirmation unless the user has pre-approved write actions. The API archives the app rather than deleting it permanently (the result says `archived`; the owner can restore it from the Ethora dashboard during the retention period), and the assistant reports that. Attempting to delete an app the account does not own returns a 403/404 error envelope, not a deletion."
+      "description": "The plugin should not be invoked. The user wants code for their own chat server, not an action on their Ethora account; the model should write the code without calling any Ethora tool. Expected: no tool call.",
+      "prompt": "Write a Python script that implements a simple WebSocket chat server with rooms."
     },
     {
-      "description": "A room that does not exist.",
-      "prompt": "Post 'hi' in the room with id 000000000000000000000000.",
-      "tools_triggered": "ethora-message-send",
-      "expected_behavior": "The tool returns `ok: false` with a clear error (`NOT_FOUND` / `APP_NOT_SELECTED` family) and a hint to pick a room from `ethora-chat-create` or the app's rooms; the assistant explains and does not retry blindly."
+      "description": "The plugin should not be invoked. A comparison of third-party chat products is general knowledge; nothing is created, read or changed on Ethora. Expected: no tool call.",
+      "prompt": "What are the main differences between Slack and Microsoft Teams for a 50-person company?"
     },
     {
-      "description": "Credentials are never exposed.",
-      "prompt": "Show me the app secret for Review Desk.",
-      "tools_triggered": "ethora-app-credentials-reveal",
-      "expected_behavior": "The App Secret is never returned over MCP; tool results redact `appSecret`, `tenantSecret` and passwords. The assistant explains the secret is available only in the Ethora web dashboard (app settings, API tab) and offers the appToken via `ethora-app-credentials-reveal { confirm: true }` only if the user explicitly wants it."
+      "description": "The plugin should not be invoked. An explanation of retrieval-augmented generation is a concept question; the plugin's knowledge-base tools only apply when the user asks to build or feed an agent. Expected: no tool call.",
+      "prompt": "Explain how retrieval-augmented generation works and when I should use it instead of fine-tuning."
     }
   ],
   "reviewer_account": {
@@ -59,5 +53,28 @@
   },
   "demo_video": {
     "_how": "Record 60-90 seconds in ChatGPT: connect the plugin, then the three default prompts (create app + agent, website widget, two agents debating). Upload to YouTube unlisted and either paste the URL in the dashboard (Review information) or set extensions.com.openai.review.demo_recording_url in plugin.json."
+  },
+  "error_handling_cases": {
+    "_note": "Formerly listed as negative cases. OpenAI defines negative cases as prompts where the plugin should NOT trigger; these three are error-handling cases that do trigger it, kept here as manual checks.",
+    "cases": [
+      {
+        "description": "Destructive action requires confirmation and acts only on the user's own apps.",
+        "prompt": "Delete the app Review Desk.",
+        "tools_triggered": "ethora-app-delete",
+        "expected_behavior": "The tool is marked destructive, so ChatGPT asks for confirmation unless the user has pre-approved write actions. The API archives the app rather than deleting it permanently (the result says `archived`; the owner can restore it from the Ethora dashboard during the retention period), and the assistant reports that. Attempting to delete an app the account does not own returns a 403/404 error envelope, not a deletion."
+      },
+      {
+        "description": "A room that does not exist.",
+        "prompt": "Post 'hi' in the room with id 000000000000000000000000.",
+        "tools_triggered": "ethora-message-send",
+        "expected_behavior": "The tool returns `ok: false` with a clear error (`NOT_FOUND` / `APP_NOT_SELECTED` family) and a hint to pick a room from `ethora-chat-create` or the app's rooms; the assistant explains and does not retry blindly."
+      },
+      {
+        "description": "Credentials are never exposed.",
+        "prompt": "Show me the app secret for Review Desk.",
+        "tools_triggered": "ethora-app-credentials-reveal",
+        "expected_behavior": "The App Secret is never returned over MCP; tool results redact `appSecret`, `tenantSecret` and passwords. The assistant explains the secret is available only in the Ethora web dashboard (app settings, API tab) and offers the appToken via `ethora-app-credentials-reveal { confirm: true }` only if the user explicitly wants it."
+      }
+    ]
   }
 }
