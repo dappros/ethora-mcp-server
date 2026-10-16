@@ -15,20 +15,23 @@
 //                selected app, the listed tools). Anything that creates,
 //                updates, deletes, sends or starts a job is false.
 // destructiveHint true when the call deletes, revokes, rotates or removes
-//                something, or overwrites fields of an existing record
-//                (update / set / replace). Creating a new record, appending,
-//                toggling a reversible flag or starting a job is false.
-//                Always false when readOnlyHint is true.
+//                something, or overwrites existing data (update / set /
+//                replace, including re-crawls that replace stored pages and
+//                re-indexing that replaces an agent's search index). Creating
+//                a new record, appending, toggling a reversible flag or
+//                starting a job that only adds is false. Always false when
+//                readOnlyHint is true.
 // idempotentHint true when repeating the call with the same arguments has no
 //                further effect (reads, selects, sets, updates, deletes,
 //                enable/disable, waits). False when every call does something
 //                new: create, send, upload, start a job, rotate, register,
 //                clone, import, append, run a model turn, send feedback.
-// openWorldHint  true when the call reaches beyond the signed-in account's
-//                own data on the Ethora server: it fetches external websites
-//                or delivers messages to other people (or to the team, for
-//                feedback). Everything that only reads or writes the
-//                account's apps, rooms, users, agents and files is false.
+// openWorldHint  true when the call leaves the MCP server: every call to the
+//                Ethora API (an independently operated system from the
+//                client's point of view), every fetch of an external website,
+//                every message delivered to other people. False only for the
+//                tools that run entirely inside this server: session state,
+//                help, documentation search, text generators.
 
 export type ToolAnnotation = {
   readOnlyHint: boolean
@@ -47,29 +50,32 @@ const A = (readOnlyHint: boolean, destructiveHint: boolean, idempotentHint: bool
   why,
 })
 
-// Shorthands for the recurring shapes.
-const READ = (why: string) => A(true, false, true, false, why)
-const CREATE = (why: string) => A(false, false, false, false, why)
-const UPDATE = (why: string) => A(false, true, true, false, why)
-const DELETE = (why: string) => A(false, true, true, false, why)
-const TOGGLE = (why: string) => A(false, false, true, false, why)
-const JOB = (why: string) => A(false, false, false, false, why)
+// Shorthands for the recurring shapes. Every API-backed shape is open-world.
+const LOCAL = (why: string) => A(true, false, true, false, why)
+const READ = (why: string) => A(true, false, true, true, why)
+const CREATE = (why: string) => A(false, false, false, true, why)
+const UPDATE = (why: string) => A(false, true, true, true, why)
+const DELETE = (why: string) => A(false, true, true, true, why)
+const TOGGLE = (why: string) => A(false, false, true, true, why)
+const JOB = (why: string) => A(false, false, false, true, why)
+// A job that replaces stored content (re-crawl, re-index): destructive, not idempotent.
+const REPLACE_JOB = (why: string) => A(false, true, false, true, why)
 
 export const TOOL_ANNOTATIONS: Record<string, ToolAnnotation> = {
   // Session and discovery
-  "ethora-status": READ("Reports the session's auth mode, selected app and token presence; stores nothing."),
-  "ethora-help": READ("Returns recommended next calls for the current state; stores nothing."),
+  "ethora-status": LOCAL("Reports the session's auth mode, selected app and token presence; stores nothing."),
+  "ethora-help": LOCAL("Returns recommended next calls for the current state; stores nothing."),
   "ethora-doctor": READ("Validates the session configuration and pings the API; stores nothing."),
-  "ethora-tools-enable": READ("Changes which tool groups this conversation lists; nothing on the server changes, and enabling a group twice is the same as once."),
-  "ethora-app-select": READ("Sets which of the caller's apps later calls act on, in this conversation only; no server data changes."),
+  "ethora-tools-enable": LOCAL("Changes which tool groups this conversation lists; nothing on the server changes, and enabling a group twice is the same as once."),
+  "ethora-app-select": LOCAL("Sets which of the caller's apps later calls act on, in this conversation only; no server data changes."),
   "ethora-session-configure": A(false, false, true, false, "Stores API URL and credentials for this session; nothing on the server changes, and the same values set twice are the same session state."),
   "ethora-auth-mode-set": A(false, false, true, false, "Switches the session between user, app-token and B2B credentials; nothing on the server changes."),
-  "ethora-user-login": A(false, false, true, false, "Signs in with email and password and keeps the resulting token in the session; logging in twice yields the same signed-in state."),
-  "ethora-user-register": A(false, false, false, false, "Creates a new Ethora account on the server; a second call with the same email fails as a duplicate."),
+  "ethora-user-login": A(false, false, true, true, "Signs in with email and password against the Ethora API and keeps the resulting token in the session; logging in twice yields the same signed-in state."),
+  "ethora-user-register": A(false, false, false, true, "Creates a new Ethora account on the server; a second call with the same email fails as a duplicate."),
   "ethora-recipe-run": JOB("Runs an ordered sequence of this server's own tools (creates apps, rooms, agents); each run creates new records. `dryRun` only previews."),
-  search: READ("Full-text search over the server's built-in documentation; stores nothing."),
-  fetch: READ("Returns one documentation page or tool reference by id; stores nothing."),
-  "ethora-feedback-submit": A(false, false, false, true, "Sends a report to the Ethora team by email and Slack; every call sends another message, and the recipient is outside the caller's account."),
+  search: LOCAL("Full-text search over the server's built-in documentation; stores nothing."),
+  fetch: LOCAL("Returns one documentation page or tool reference by id; stores nothing."),
+  "ethora-feedback-submit": A(false, false, false, true, "Sends a report to the Ethora team by email and Slack; every call sends another message."),
 
   // Apps
   "ethora-app-list": READ("Lists the apps the caller owns; stores nothing."),
@@ -83,9 +89,9 @@ export const TOOL_ANNOTATIONS: Record<string, ToolAnnotation> = {
   "ethora-b2b-app-create": CREATE("Creates a new app with a B2B token; every call creates another app."),
   "ethora-b2b-app-provision": CREATE("Creates an app plus its default room, users and agent in one call; every call creates new records."),
   "ethora-b2b-app-bootstrap-ai": CREATE("Creates an app with an AI agent and knowledge sources in one call; every call creates new records."),
-  "ethora-b2b-runbook-generate": READ("Generates a text runbook from the session's values; stores nothing."),
-  "ethora-env-examples-generate": READ("Generates .env example text; stores nothing."),
-  "ethora-chat-component-app-generate": READ("Generates React source text for the chat component; stores nothing."),
+  "ethora-b2b-runbook-generate": LOCAL("Generates a text runbook from the session's values; stores nothing."),
+  "ethora-env-examples-generate": LOCAL("Generates .env example text; stores nothing."),
+  "ethora-chat-component-app-generate": LOCAL("Generates React source text for the chat component; stores nothing."),
 
   // Rooms and messages
   "ethora-chat-create": CREATE("Creates a new chat room in the app; every call creates another room."),
@@ -115,7 +121,7 @@ export const TOOL_ANNOTATIONS: Record<string, ToolAnnotation> = {
   "ethora-api-key-revoke": DELETE("Revokes an API key so it stops working; revoking twice changes nothing more."),
   "ethora-app-token-list": READ("Lists an app's server tokens (never their secret values); stores nothing."),
   "ethora-app-token-create": CREATE("Issues a new app token; every call issues another token."),
-  "ethora-app-token-rotate": A(false, true, false, false, "Replaces an app token with a new one, invalidating the old value; every call rotates again."),
+  "ethora-app-token-rotate": A(false, true, false, true, "Replaces an app token with a new one, invalidating the old value; every call rotates again."),
   "ethora-app-token-revoke": DELETE("Revokes an app token; revoking twice changes nothing more."),
 
   // Agents
@@ -133,20 +139,20 @@ export const TOOL_ANNOTATIONS: Record<string, ToolAnnotation> = {
   "ethora-agent-activate": TOGGLE("Sets which agent answers the app's website widget (one field on the app); setting the same agent twice changes nothing."),
   "ethora-agent-visibility-set": TOGGLE("Sets the agent's visibility flag (private or public); reversible, and the same value twice changes nothing."),
   "ethora-agent-soul-set": UPDATE("Replaces the agent's Memory text; the same text set twice gives the same result."),
-  "ethora-agent-soul-append": A(false, false, false, false, "Appends text to the agent's Memory; nothing existing is removed, and every call appends again."),
+  "ethora-agent-soul-append": A(false, false, false, true, "Appends text to the agent's Memory; nothing existing is removed, and every call appends again."),
   "ethora-agent-knowledge-get": READ("Reports what the agent's knowledge index contains and what is missing from it; stores nothing."),
-  "ethora-agent-knowledge-rebuild": JOB("Starts a re-indexing job over the agent's stored pages and documents; the stored content is kept, and each call starts another job."),
+  "ethora-agent-knowledge-rebuild": REPLACE_JOB("Re-indexes the agent's stored pages and documents, replacing the search index entries it rebuilds (the stored content is kept); each call starts another job."),
 
   // Knowledge sources
-  "ethora-source-site-crawl": A(false, false, false, true, "Fetches pages from an external website the caller names and stores them as agent knowledge; every call starts a new crawl."),
-  "ethora-source-site-crawl-wait": A(false, false, false, true, "Same as the crawl tool, then waits for the job: fetches an external website and stores its pages; every call starts a new crawl."),
+  "ethora-source-site-crawl": REPLACE_JOB("Fetches pages from an external website and stores them as agent knowledge; with `force` it replaces the stored copy of an already indexed page, which cannot be undone, and every call starts a new crawl."),
+  "ethora-source-site-crawl-wait": REPLACE_JOB("Same as the crawl tool, then waits for the job: fetches an external website and stores its pages; with `force` it replaces the stored copy of an already indexed page, and every call starts a new crawl."),
   "ethora-source-site-crawl-cancel": TOGGLE("Stops a running crawl job; stopping twice changes nothing more and nothing is deleted."),
-  "ethora-source-site-reindex": A(false, false, false, true, "Re-fetches one indexed URL from its website and replaces its stored content; every call fetches again."),
-  "ethora-source-site-reindex-wait": A(false, false, false, true, "Re-fetches one indexed URL and waits for the result; every call fetches again."),
-  "ethora-source-site-refresh": A(false, false, false, true, "Re-crawls a whole site or named pages from their website now; every call fetches again."),
+  "ethora-source-site-reindex": REPLACE_JOB("Re-fetches one indexed URL from its website and replaces its stored content, so the previous copy is gone; every call fetches again."),
+  "ethora-source-site-reindex-wait": REPLACE_JOB("Re-fetches one indexed URL, replaces its stored content and waits for the result; every call fetches again."),
+  "ethora-source-site-refresh": REPLACE_JOB("Re-crawls a whole site or named pages now and replaces their stored content; every call fetches again."),
   "ethora-source-site-list": READ("Lists the crawled pages of the app or agent; stores nothing."),
   "ethora-source-site-watch-list": READ("Lists the watched websites with their refresh schedule and last result; stores nothing."),
-  "ethora-source-site-watch-update": A(false, false, true, false, "Sets a watched site's refresh schedule (weekly, daily, off) and resumes a paused site; the same schedule set twice changes nothing. The scheduled crawl itself runs later on the server."),
+  "ethora-source-site-watch-update": A(false, false, true, true, "Sets a watched site's refresh schedule (weekly, daily, off) and resumes a paused site; the same schedule set twice changes nothing. The scheduled crawl itself runs later on the server."),
   "ethora-source-site-tags-update": UPDATE("Replaces the retrieval tags of a crawled page (not additive); the same tags twice give the same result."),
   "ethora-source-site-url-delete": DELETE("Deletes one crawled page from the knowledge base; deleting twice changes nothing more."),
   "ethora-source-site-url-delete-batch": DELETE("Deletes several crawled pages from the knowledge base; deleting twice changes nothing more."),

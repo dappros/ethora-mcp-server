@@ -45,13 +45,21 @@ const AUTHENTICATED_COMMON = [
   "Each MCP session is private: nothing from another client's session is visible here. The selected app (`ethora-app-create` selects the new app by itself) and the enabled tool groups are remembered for the signed-in account for 24 hours, so they survive a reconnect or a client that opens a new session per call; an account with exactly one app has it selected automatically.",
   "App credentials are never included in tool results: appSecret, tenantSecret, appToken and passwords come back as [redacted]. When a snippet or config needs the appToken, call `ethora-app-credentials-reveal { appId, confirm: true }`; the App Secret is only available in the web dashboard API tab.",
   "If a tool fails in a way the user should know about, or something is missing or wrong, offer to report it with `ethora-feedback-submit`; it reaches the Ethora team and attaches this session's recent errors automatically.",
-  TOOL_GROUPS_LINE,
 ]
+
+// OAuth connections (ChatGPT, Claude.ai directory listings) list every tool
+// up front: directory scanners want each model-callable operation exposed as
+// its own tool with a description, schema and annotations, not loaded on
+// request. The server-integration groups (keys, session, b2b, legacy-bot) are
+// not offered on this entry at all.
+export const OAUTH_TOOLS_LINE =
+  "Every available tool is listed; there is nothing to enable. Read-only tools (list, get, history, search) are safe to call freely; tools marked destructive overwrite or delete the user's data, so confirm first."
 
 export const OAUTH_INSTRUCTIONS = [
   "Ethora MCP Server: create and manage Ethora chat/messaging apps, users, chats, AI agents and bots through the Ethora API.",
   "This connection is authenticated through OAuth. The Ethora user's credentials are supplied by the MCP client; never ask the user for an Ethora password or API key, and do not look for login or register tools, they are not available on this connection.",
   ...AUTHENTICATED_COMMON,
+  OAUTH_TOOLS_LINE,
   "If a tool is refused with INSUFFICIENT_SCOPE, the user granted fewer permissions when connecting; explain that and stop rather than retrying.",
 ].join("\n")
 
@@ -60,6 +68,7 @@ export const AUTHENTICATED_INSTRUCTIONS = [
   "This connection is already authenticated: the client supplied an API key (personal connector URL or Bearer header). Never ask the user for an Ethora password or API key and do not call login or register tools.",
   ...AUTHENTICATED_COMMON,
   "Keys can be managed with `ethora-api-key-create`, `ethora-api-key-list` and `ethora-api-key-revoke` when the user asks; never print key values unless the user explicitly asks.",
+  TOOL_GROUPS_LINE,
 ].join("\n")
 
 export type InstructionProfile = "stdio" | "open" | "authenticated" | "oauth"
