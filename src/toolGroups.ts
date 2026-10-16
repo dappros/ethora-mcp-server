@@ -59,7 +59,7 @@ export const TOOL_GROUPS: Record<string, { summary: string; tools: string[] }> =
   rooms: {
     summary: "Delete rooms, broadcast to many rooms, search messages, read message context and unread counts.",
     tools: [
-      "ethora-chat-delete", "ethora-broadcast-send", "ethora-broadcast-job-start", "ethora-broadcast-job-wait",
+      "ethora-chat-delete", "ethora-broadcast-send", "ethora-broadcast-job-get", "ethora-broadcast-job-wait",
       "ethora-message-search", "ethora-message-context", "ethora-chat-unread-counts",
     ],
   },
@@ -86,7 +86,7 @@ export const TOOL_GROUPS: Record<string, { summary: string; tools: string[] }> =
   },
   "users-files": {
     summary: "Batch-create users and upload, fetch or delete files.",
-    tools: ["ethora-user-batch-create", "ethora-user-batch-job-start", "ethora-user-batch-job-wait", "ethora-file-upload", "ethora-file-get", "ethora-file-delete"],
+    tools: ["ethora-user-batch-create", "ethora-user-batch-job-get", "ethora-user-batch-job-wait", "ethora-file-upload", "ethora-file-get", "ethora-file-delete"],
   },
   "legacy-bot": {
     summary: "The per-app bot of apps created in the dashboard before the agents framework, and the pre-v2 document tools. Prefer the agents and sources tools for anything new.",
@@ -126,8 +126,8 @@ export function groupOf(name: string): string | undefined {
 const VARIANT_NOTES: Record<string, string> = {
   "ethora-source-site-crawl": "Async variant: returns a job id to poll. Prefer `ethora-source-site-crawl-wait` unless the crawl is expected to exceed its wait budget.",
   "ethora-source-site-reindex": "Async variant: returns a job id to poll. Prefer `ethora-source-site-reindex-wait` unless the job is expected to exceed its wait budget.",
-  "ethora-broadcast-job-start": "Async variant of `ethora-broadcast-send`; pair with `ethora-broadcast-job-wait`.",
-  "ethora-user-batch-job-start": "Async variant of `ethora-user-batch-create`; pair with `ethora-user-batch-job-wait`.",
+  "ethora-broadcast-job-get": "Read-only: the current state of a broadcast job started by `ethora-broadcast-send`; `ethora-broadcast-job-wait` polls it to completion.",
+  "ethora-user-batch-job-get": "Read-only: the current state of a users batch job started by `ethora-user-batch-create`; `ethora-user-batch-job-wait` polls it to completion.",
   "ethora-source-doc-upload-legacy": "Legacy pre-v2 upload for the per-app bot. For agents use `ethora-source-doc-upload`.",
   "ethora-source-doc-delete-legacy": "Legacy pre-v2 delete for the per-app bot. For agents use `ethora-source-doc-delete`.",
   "ethora.b2b.auth.use": "Legacy dotted name kept for old integrations; use `ethora-auth-mode-set`.",

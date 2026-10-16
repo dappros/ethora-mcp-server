@@ -27,7 +27,7 @@ test("the core group is small and lists one variant per operation", () => {
   const pairs = [
     ["ethora-source-site-crawl", "ethora-source-site-crawl-wait"],
     ["ethora-source-doc-upload-legacy", "ethora-source-doc-upload"],
-    ["ethora-broadcast-send", "ethora-broadcast-job-start"],
+    ["ethora-broadcast-send", "ethora-broadcast-job-get"],
   ]
   for (const [a, b] of pairs) assert.ok(!(core.includes(a) && core.includes(b)), `${a} and ${b} both in core`)
   for (const t of core) assert.ok(!t.startsWith("ethora-bot-"), `legacy bot tool ${t} in core`)

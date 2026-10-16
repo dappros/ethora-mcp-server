@@ -7,7 +7,8 @@ All notable changes to this package are documented here. For cross-SDK release n
 ### Changed
 - OAuth connections (`/mcp/oauth`: ChatGPT, Claude.ai) list every offered tool up front and no longer carry `ethora-tools-enable`; the server-integration groups (keys, session, b2b, legacy-bot) are not offered there at all. Directory scanners require each model-callable operation to be its own listed tool. The open and personal-URL entries keep the compact core plus `ethora-tools-enable`.
 - `openWorldHint` is true for every tool that calls the Ethora API (an independently operated system from the client's point of view) or fetches a website, and false only for the tools that run inside the server (status, help, app-select, search, fetch, session configuration, text generators).
-- `destructiveHint` is true for the crawl, re-index, refresh and knowledge-rebuild tools: they replace stored pages or index entries (the crawl tools only with `force`).
+- `destructiveHint` is true for the crawl, re-index, refresh and knowledge-rebuild tools: they replace stored pages or index entries (the crawl tools only with `force`); and for `ethora-source-site-crawl-cancel`, which discards the unfinished part of a crawl.
+- `ethora-broadcast-job-start` and `ethora-user-batch-job-start` are renamed `ethora-broadcast-job-get` and `ethora-user-batch-job-get`: they fetch a job's state by id and never started anything. The old names stay as aliases.
 
 ## 26.10.1 - 2026-10-16
 

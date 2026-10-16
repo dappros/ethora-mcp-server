@@ -14,7 +14,7 @@ test("every listed name follows ethora-<resource>-<verb>[-<qualifier>]", () => {
   assert.deepEqual(versioned, [], `API version suffixes leaked into names: ${versioned}`)
   const verbFirst = canonical.filter((n) => /^ethora-(wait|generate|get|run|set|create|delete|list)-/.test(n))
   assert.deepEqual(verbFirst, [], `verb-first names: ${verbFirst}`)
-  const qualifierMisplaced = canonical.filter((n) => /-(wait|batch|legacy|b2b)-/.test(n) && !/-(url-delete-batch|batch-(create|job-start|job-wait)|b2b-(app|runbook))/.test(n))
+  const qualifierMisplaced = canonical.filter((n) => /-(wait|batch|legacy|b2b)-/.test(n) && !/-(url-delete-batch|batch-(create|job-get|job-wait)|b2b-(app|runbook))/.test(n))
   assert.deepEqual(qualifierMisplaced, [], `qualifier before the verb: ${qualifierMisplaced}`)
 })
 
