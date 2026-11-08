@@ -5,6 +5,7 @@ All notable changes to this package are documented here. For cross-SDK release n
 ## 26.11.0 - 2026-11-08
 
 ### Added
+- `ETHORA_MCP_DOTENV_OVERRIDE=true` inside `.env` makes the file win over inherited environment variables (hosted installs under PM2, where the process keeps the variables captured at the first start). Default unchanged: the environment wins, as a stdio client's config expects.
 - Usage events: the hosted server posts one event per session open and per tool call (tool, outcome code, HTTP status, duration, client, entry, auth mode, user, app) to the API's `POST /internal/mcp/events` when `ETHORA_MCP_INTERNAL_SECRET` is set (the deploy passes the API's `INTERNAL_REQUESTS_SECRET`). Batched, fire-and-forget, never on the tool call's path. `/healthz` reports the queue. The weekly activity report's MCP section reads from these.
 - Starter prompts: the connector landing page lists three paste-ready first prompts, and the server instructions tell the model to offer them when a request is too vague to act on.
 
