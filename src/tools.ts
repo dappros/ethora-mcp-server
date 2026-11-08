@@ -1936,18 +1936,19 @@ function appCredentialsTool(server: McpServer) {
     server.registerTool(
         "ethora-app-credentials-reveal",
         {
-            title: "Reveal App Token",
-            description: "Reveal the appToken of an app the caller owns, for a chat-component snippet or a widget config. Every other tool redacts appToken, appSecret and tenantSecret from its results because tool output enters the model's context and client logs; this tool returns exactly { appId, appToken, note } and nothing else. The App Secret is never returned over MCP: it is shown only in the web dashboard (app settings, API tab), and backend integrations should use revocable server tokens from that tab instead of the secret.\nRequires: an app you own (`ethora-app-create` or `ethora-app-list`) and `confirm: true`.\nAuth: user auth (app owner). Errors: 401 not logged in; 403 not the owner; 404 unknown `appId`; validation error unless `confirm` is `true`.",
+            title: "Reveal App Credentials",
+            description: "Reveal the credentials of an app the caller owns. By default returns the appToken (for a chat-component snippet or a widget config); with `secret: true` it also returns the App Secret, which the backend SDK needs as `ETHORA_CHAT_APP_SECRET` to sign your own users in and to mint server (B2B) tokens. Every other tool redacts appToken, appSecret and tenantSecret from its results because tool output enters the model's context and client logs; this tool returns exactly what is asked for, once, and only to the app's owner. Ask for the secret only when the user is wiring a backend; the appToken is enough for widgets and the chat component.\nRequires: an app the caller owns (`ethora-app-select` or `appId`).\nAuth: user mode (owner). Errors: 401/403 not the owner; 422 unknown app.",
             annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("24-char hex app id. Defaults to the app selected with `ethora-app-select`."),
-                confirm: z.literal(true).describe("Must be `true`: acknowledges that the token is a credential and will appear in this conversation."),
+                confirm: z.literal(true).describe("Must be `true`: acknowledges that the values are credentials and will appear in this conversation."),
+                secret: z.boolean().optional().describe("Also return the App Secret (`appSecret`), the signing key the backend SDK and server-token minting need. Default false: only the appToken is returned."),
             },
         },
-        async function ({ appId, confirm }) {
+        async function ({ appId, confirm, secret }) {
             const meta = getDefaultMeta("ethora-app-credentials-reveal")
             try {
-                if (confirm !== true) throw new Error("Pass `confirm: true` to reveal the app token.")
+                if (confirm !== true) throw new Error("Pass `confirm: true` to reveal app credentials.")
                 const id = String(appId || (getClientState() as any).currentAppId || "").trim()
                 if (!id) throw new Error(APP_CONTEXT_MISSING_MESSAGE)
                 const resp = await appGet(id)
@@ -1956,11 +1957,16 @@ function appCredentialsTool(server: McpServer) {
                 const token = app?.appToken || appTokenFor(id)
                 if (!token) throw new Error("The API did not return an appToken for this app. Only the owner can read it; check `ethora-status` for the active auth mode.")
                 rememberAppToken(id, String(token))
-                return asToolResult(ok({
-                    appId: id,
-                    appToken: String(token),
-                    note: "Credential: use it as the appToken in chat-component or widget configs and keep it out of repositories. Rotate it with `ethora-app-token-rotate` if it leaks. The App Secret is only shown in the web dashboard API tab.",
-                }, meta))
+                const out: Record<string, any> = { appId: id, appToken: String(token) }
+                if (secret === true) {
+                    const appSecret = app?.appSecret
+                    if (!appSecret) throw new Error("The API did not return an appSecret for this app. Only the owner can read it; check `ethora-status` for the active auth mode.")
+                    out.appSecret = String(appSecret)
+                    out.note = "Credentials: `appToken` goes into chat-component or widget configs; `appSecret` is the app's signing key for the backend SDK (`ETHORA_CHAT_APP_SECRET`) and must stay server-side, never in a browser bundle or a repository. Anything holding the secret can act as the app. Rotate the appToken with `ethora-app-token-rotate`; the secret is rotated in the web dashboard (app settings, API tab)."
+                } else {
+                    out.note = "Credential: use it as the appToken in chat-component or widget configs and keep it out of repositories. Rotate it with `ethora-app-token-rotate` if it leaks. For the backend SDK call this tool again with `secret: true` to get the App Secret."
+                }
+                return asToolResult(ok(out, meta))
             } catch (error) {
                 return asToolResult(fail(error, meta))
             }

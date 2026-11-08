@@ -111,7 +111,7 @@ npm install @ethora/sdk-backend
 \`\`\`bash
 ETHORA_CHAT_API_URL=https://api.chat.ethora.com
 ETHORA_CHAT_APP_ID=<appId>          # from ethora-app-create (created.id)
-ETHORA_CHAT_APP_SECRET=<app secret> # web dashboard, app settings, API tab (never returned over MCP)
+ETHORA_CHAT_APP_SECRET=<app secret> # ethora-app-credentials-reveal { appId, confirm: true, secret: true } (owner only), or the dashboard API tab
 \`\`\`
 The SDK signs a B2B server token from these and sends it as \`x-custom-token\` on every call.
 
