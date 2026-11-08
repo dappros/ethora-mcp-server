@@ -24,6 +24,9 @@ import { getSession } from "./session.js"
 import { appList, appIdFromToken } from "./apiClientDappros.js"
 import { appConfig } from "./config.js"
 import { fail } from "./mcpResponse.js"
+import { usageSink, userIdFromIdentityKey, outcomeFromToolResult, type UsageEvent } from "./usageEvents.js"
+import { MCP_VERSION } from "./config.js"
+import { isHostedMode } from "./session.js"
 
 // Tools that work without an app, or that pick one: no lookup, no refusal.
 // Agent tools that address an agent by id (list, get, try, update, delete,
@@ -96,6 +99,38 @@ export async function ensureDefaultApp(toolName: string): Promise<void> {
   }
 }
 
+// One usage event per tool call, including the ones refused before any API
+// request and the ones that threw. Hosted mode only; best effort.
+function recordToolCall(name: string, session: ReturnType<typeof getSession>, result: any, thrown: any, durationMs: number) {
+  if (!isHostedMode()) return
+  const sink = usageSink()
+  if (!sink) return
+  try {
+    const outcome: { ok: boolean; code?: string; httpStatus?: number } = thrown
+      ? { ok: false, code: typeof thrown?.code === "string" ? thrown.code : "THROWN" }
+      : outcomeFromToolResult(result)
+    const event: UsageEvent = {
+      kind: "tool_call",
+      ts: new Date().toISOString(),
+      serverVersion: MCP_VERSION,
+      sessionId: session.id,
+      entry: session.entry === "oauth" ? "oauth" : (session.identityKey ? "key" : "open"),
+      client: session.client || "",
+      userId: userIdFromIdentityKey(session.identityKey),
+      appId: session.context.currentAppId || "",
+      authMode: session.context.authMode,
+      tool: name,
+      ok: outcome.ok,
+      code: outcome.code,
+      httpStatus: outcome.httpStatus,
+      durationMs,
+    }
+    sink.record(event)
+  } catch {
+    /* never let bookkeeping break a tool result */
+  }
+}
+
 export function applyToolContext(server: McpServer): string[] {
   const reg: Record<string, any> = (server as any)._registeredTools || {}
   const wrapped: string[] = []
@@ -109,6 +144,9 @@ export function applyToolContext(server: McpServer): string[] {
       // previous value anyway so a future wrapper cannot be surprised.
       const previous = session.currentTool
       session.currentTool = name
+      const startedAt = Date.now()
+      let result: any
+      let thrown: any
       try {
         try {
           await ensureDefaultApp(name)
@@ -117,12 +155,18 @@ export function applyToolContext(server: McpServer): string[] {
           // Same envelope every tool returns on failure, so the caller gets the
           // code and hint rather than a transport-level error.
           const env = fail(e, { tool: name })
-          return { content: [{ type: "text", text: JSON.stringify(env, null, 2) }], isError: true }
+          result = { content: [{ type: "text", text: JSON.stringify(env, null, 2) }], isError: true }
+          return result
         }
-        return await inner(...args)
+        result = await inner(...args)
+        return result
+      } catch (e) {
+        thrown = e
+        throw e
       } finally {
         session.currentTool = previous
         try { session.afterTool?.() } catch { /* memory is best effort */ }
+        recordToolCall(name, session, result, thrown, Date.now() - startedAt)
       }
     }
     tool.__toolContext = true
