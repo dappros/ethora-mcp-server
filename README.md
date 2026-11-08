@@ -217,6 +217,8 @@ A `.env` file in the working directory is loaded at startup; real environment va
 | `GET /healthz` | `{ ok, sessions, version, appJwtReady, oauth }` |
 | `GET /.well-known/mcp` and `GET /` | Discovery JSON: endpoint, transport, auth options, OAuth metadata |
 | `GET /.well-known/oauth-protected-resource[/mcp/oauth]` | RFC 9728 protected-resource metadata |
+| `GET /mcp/server-card` (also `/.well-known/mcp/server-card.json`) | MCP Server Card (extension SEP-2127): name, version, the three entry points as remotes, `application/mcp-server-card+json`, ETag and 304 |
+| `GET /.well-known/ai-catalog.json` | AI Catalog entry point that points at the server card |
 
 ### Response envelope
 

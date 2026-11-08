@@ -1,4 +1,5 @@
 import express, { Request, Response } from "express"
+import { createHash } from "node:crypto"
 import cors from "cors"
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js"
@@ -12,6 +13,7 @@ import { renderLandingPage } from "./landingPage.js"
 import { AccountMemoryStore, identityKeyFor, applyMemory, snapshotSession } from "./accountMemory.js"
 import { usageSink, userIdFromIdentityKey } from "./usageEvents.js"
 import { enableGroups, enabledGroups } from "./toolGroups.js"
+import { buildServerCard, buildAiCatalog, SERVER_CARD_MEDIA_TYPE, AI_CATALOG_MEDIA_TYPE } from "./serverCard.js"
 
 type Entry = {
   server: McpServer
@@ -180,6 +182,8 @@ export async function startHttpServer(opts: HttpServerOptions) {
     // may talk to the API over loopback, which must not leak here.
     apiUrl: appConfig.publicApiUrl || appConfig.apiUrl,
     docs: "https://github.com/dappros/ethora-mcp-server#readme",
+    // MCP Server Card (SEP-2127), see serverCard.ts.
+    serverCard: `${publicBase}/mcp/server-card`,
   })
 
   const protectedResourceMetadata = () => ({
@@ -194,7 +198,7 @@ export async function startHttpServer(opts: HttpServerOptions) {
   const app = express()
   app.disable("x-powered-by")
   if (trustProxy) app.set("trust proxy", true)
-  app.use(cors({ origin: "*", exposedHeaders: ["Mcp-Session-Id", "WWW-Authenticate"], allowedHeaders: ["Content-Type", "Authorization", "Mcp-Session-Id", "Mcp-Protocol-Version", "Last-Event-ID"] }))
+  app.use(cors({ origin: "*", exposedHeaders: ["Mcp-Session-Id", "WWW-Authenticate", "ETag"], allowedHeaders: ["Content-Type", "Authorization", "Mcp-Session-Id", "Mcp-Protocol-Version", "Last-Event-ID", "If-None-Match"] }))
   app.use(express.json({ limit: "4mb" }))
 
   // The root negotiates: a browser (Accept: text/html first) gets a page that
@@ -251,6 +255,33 @@ export async function startHttpServer(opts: HttpServerOptions) {
   })
   app.get("/.well-known/oauth-protected-resource", prmHandler)
   app.get("/.well-known/oauth-protected-resource/mcp/oauth", prmHandler)
+
+  // MCP Server Card (extension SEP-2127) and the AI Catalog that points at it.
+  // Served where the extension recommends (<streamable-http-url>/server-card)
+  // and at the pre-SEP path directory validators such as mcp-verify still probe
+  // (/.well-known/mcp/server-card.json). Public, read-only data: open CORS,
+  // one-hour cache, ETag with 304 on If-None-Match, as docs/discovery.md asks.
+  const sendCardJson = (req: Request, res: Response, mediaType: string, body: unknown) => {
+    const text = JSON.stringify(body)
+    const etag = `"${createHash("sha256").update(text).digest("base64url").slice(0, 27)}"`
+    res.set("Cache-Control", "public, max-age=3600")
+    res.set("ETag", etag)
+    const inm = String(req.headers["if-none-match"] || "").split(",").map((v) => v.trim().replace(/^W\//, ""))
+    if (inm.includes(etag)) { res.status(304).end(); return }
+    res.type(mediaType).send(text)
+  }
+  const serverCardHandler = (req: Request, res: Response) =>
+    sendCardJson(req, res, SERVER_CARD_MEDIA_TYPE, buildServerCard({
+      title: opts.name,
+      version: opts.version,
+      publicBase,
+      endpoint,
+      oauthEndpoint: authIssuer ? oauthEndpoint : undefined,
+    }))
+  app.get("/mcp/server-card", serverCardHandler)
+  app.get("/.well-known/mcp/server-card.json", serverCardHandler)
+  app.get("/.well-known/mcp/server-card", serverCardHandler)
+  app.get("/.well-known/ai-catalog.json", (req, res) => sendCardJson(req, res, AI_CATALOG_MEDIA_TYPE, buildAiCatalog({ publicBase })))
 
   // `name/version` from clientInfo, printable ASCII only and capped, since it
   // is client-supplied text going into a log line.
