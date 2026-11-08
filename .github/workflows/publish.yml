@@ -69,7 +69,7 @@ jobs:
         run: |
           npm run sync-version
           if ! git diff --quiet; then
-            echo "::error::server.json, .plugin/plugin.json or src/index.ts disagree with package.json. Run 'npm run sync-version' and commit the result."
+            echo "::error::server.json, src/index.ts or a plugin manifest disagrees with package.json. Run 'npm run sync-version' and commit the result."
             git --no-pager diff --stat
             exit 1
           fi
