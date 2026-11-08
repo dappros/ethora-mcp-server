@@ -4,6 +4,10 @@ All notable changes to this package are documented here. For cross-SDK release n
 
 ## 26.11.0 - 2026-11-08
 
+### Added
+- Usage events: the hosted server posts one event per session open and per tool call (tool, outcome code, HTTP status, duration, client, entry, auth mode, user, app) to the API's `POST /internal/mcp/events` when `ETHORA_MCP_INTERNAL_SECRET` is set (the deploy passes the API's `INTERNAL_REQUESTS_SECRET`). Batched, fire-and-forget, never on the tool call's path. `/healthz` reports the queue. The weekly activity report's MCP section reads from these.
+- Starter prompts: the connector landing page lists three paste-ready first prompts, and the server instructions tell the model to offer them when a request is too vague to act on.
+
 ### Changed
 - `ethora-app-credentials-reveal` returns the App Secret as well when called with `secret: true` (owner only, `confirm: true` still required), so a script can provision an app and configure the backend SDK (`ETHORA_CHAT_APP_SECRET`) end to end without the dashboard. Without the flag it returns the appToken as before. Redacted `appSecret` values now name the call that reveals them.
 

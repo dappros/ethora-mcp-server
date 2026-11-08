@@ -10,6 +10,7 @@ import { ALL_SCOPES, ADVERTISED_SCOPES, parseScopes } from "./scopeGuard.js"
 import { applyOAuthSurface } from "./toolGroups.js"
 import { renderLandingPage } from "./landingPage.js"
 import { AccountMemoryStore, identityKeyFor, applyMemory, snapshotSession } from "./accountMemory.js"
+import { usageSink, userIdFromIdentityKey } from "./usageEvents.js"
 import { enableGroups, enabledGroups } from "./toolGroups.js"
 
 type Entry = {
@@ -219,7 +220,7 @@ export async function startHttpServer(opts: HttpServerOptions) {
     res.json(discovery())
   })
   app.get("/.well-known/mcp", (_req, res) => { res.json(discovery()) })
-  app.get("/healthz", (_req, res) => { res.json({ ok: true, sessions: sessions.size, accounts: memory.size, version: opts.version, appJwtReady: Boolean(appConfig.appJwt), oauth: Boolean(authIssuer) }) })
+  app.get("/healthz", (_req, res) => { const u = usageSink(); res.json({ ok: true, sessions: sessions.size, accounts: memory.size, version: opts.version, appJwtReady: Boolean(appConfig.appJwt), oauth: Boolean(authIssuer), usage: u ? { ...u.stats, pending: u.pending } : null }) })
   // A missing robots.txt means "allow", but it answers as an HTML 404 page,
   // which is a poor first impression on a host we want crawled and indexed.
   // Say allow explicitly and point at the discovery document.
@@ -415,6 +416,22 @@ export async function startHttpServer(opts: HttpServerOptions) {
     // Before connect(), so restored tool groups are listed from the first
     // tools/list without a list_changed round trip.
     if (fresh && (headerJwt || pathKey)) await attachAccountMemory(entry, kind, headerJwt || pathKey || "")
+
+    // One usage event per session, once identity is settled (so a session
+    // that never calls a tool is still visible in the weekly figures).
+    if (fresh) {
+      usageSink()?.record({
+        kind: "session_open",
+        ts: new Date().toISOString(),
+        serverVersion: opts.version,
+        sessionId: session.id,
+        entry: kind === "oauth" ? "oauth" : (pathKey || headerJwt) ? "key" : "open",
+        client: session.client || "",
+        userId: userIdFromIdentityKey(session.identityKey),
+        appId: session.context.currentAppId || "",
+        authMode: session.context.authMode,
+      })
+    }
 
     if (fresh) await server.connect(transport)
 

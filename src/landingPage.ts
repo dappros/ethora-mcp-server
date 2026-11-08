@@ -87,7 +87,12 @@ export function renderLandingPage(i: LandingInput): string {
     </div>
     <div>
       <h2>3. Ask for something</h2>
-      <p>For example: <em>"Create an Ethora app called Support Desk, add an AI agent that answers questions from our docs site, and give me the website widget snippet."</em></p>
+      <p>Paste one of these as your first message:</p>
+      <ul>
+        <li><em>"Create an Ethora app called Support Desk with a room and an AI agent that answers from our website."</em></li>
+        <li><em>"Put a chat widget on my website that answers questions about our product."</em></li>
+        <li><em>"Set up a room with two AI agents who debate a topic with me."</em></li>
+      </ul>
     </div>
   </div>
 

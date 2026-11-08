@@ -33,6 +33,10 @@ export const appConfig = {
   // For B2B/server flows Ethora expects x-custom-token (JWT with type=server).
   b2bToken: process.env.ETHORA_B2B_TOKEN ?? "",
 
+  // Shared secret for the API's internal routes (the deploy passes the API's
+  // INTERNAL_REQUESTS_SECRET). Used to post usage events; empty disables them.
+  internalSecret: process.env.ETHORA_MCP_INTERNAL_SECRET ?? "",
+
   // Safety rail: deny-by-default for destructive actions.
   // Enable explicitly for power users / CI automation.
   enableDangerousTools:

@@ -47,6 +47,14 @@ const AUTHENTICATED_COMMON = [
   "If a tool fails in a way the user should know about, or something is missing or wrong, offer to report it with `ethora-feedback-submit`; it reaches the Ethora team and attaches this session's recent errors automatically.",
 ]
 
+// What to suggest when the person has not asked for anything specific yet.
+// The human never sees server instructions, so this only helps when they open
+// with "what can you do" or a vague request; the same three prompts are shown
+// on the consent page, the dashboard's AI Assistants tab and the connector
+// landing page, where people do read them.
+export const STARTER_PROMPTS_LINE =
+  "If the user asks what Ethora can do here, or their request is too vague to act on, offer these three starters and run the one they pick: (1) Create an Ethora app called Support Desk with a room and an AI agent that answers from our website. (2) Put a chat widget on my website that answers questions about our product. (3) Set up a room with two AI agents who debate a topic with me."
+
 // OAuth connections (ChatGPT, Claude.ai directory listings) list every tool
 // up front: directory scanners want each model-callable operation exposed as
 // its own tool with a description, schema and annotations, not loaded on
@@ -59,6 +67,7 @@ export const OAUTH_INSTRUCTIONS = [
   "Ethora MCP Server: create and manage Ethora chat/messaging apps, users, chats, AI agents and bots through the Ethora API.",
   "This connection is authenticated through OAuth. The Ethora user's credentials are supplied by the MCP client; never ask the user for an Ethora password or API key, and do not look for login or register tools, they are not available on this connection.",
   ...AUTHENTICATED_COMMON,
+  STARTER_PROMPTS_LINE,
   OAUTH_TOOLS_LINE,
   "If a tool is refused with INSUFFICIENT_SCOPE, the user granted fewer permissions when connecting; explain that and stop rather than retrying.",
 ].join("\n")
@@ -68,6 +77,7 @@ export const AUTHENTICATED_INSTRUCTIONS = [
   "This connection is already authenticated: the client supplied an API key (personal connector URL or Bearer header). Never ask the user for an Ethora password or API key and do not call login or register tools.",
   ...AUTHENTICATED_COMMON,
   "Keys can be managed with `ethora-api-key-create`, `ethora-api-key-list` and `ethora-api-key-revoke` when the user asks; never print key values unless the user explicitly asks.",
+  STARTER_PROMPTS_LINE,
   TOOL_GROUPS_LINE,
 ].join("\n")
 
