@@ -85,7 +85,7 @@ export const TOOL_ANNOTATIONS: Record<string, ToolAnnotation> = {
   "ethora-app-rooms-list": READ("Lists the rooms of an app; stores nothing."),
   "ethora-app-export": READ("Returns the app as a portable bundle; stores nothing."),
   "ethora-app-import": CREATE("Creates a new app from a bundle; every call creates another app."),
-  "ethora-app-credentials-reveal": READ("Returns the appToken of an app the caller owns (every other tool redacts it); stores nothing."),
+  "ethora-app-credentials-reveal": READ("Returns the appToken of an app the caller owns and, with `secret: true`, its App Secret (every other tool redacts both); stores nothing."),
   "ethora-b2b-app-create": CREATE("Creates a new app with a B2B token; every call creates another app."),
   "ethora-b2b-app-provision": CREATE("Creates an app plus its default room, users and agent in one call; every call creates new records."),
   "ethora-b2b-app-bootstrap-ai": CREATE("Creates an app with an AI agent and knowledge sources in one call; every call creates new records."),

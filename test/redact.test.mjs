@@ -1,6 +1,6 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import { redactSecrets, isSecretKey, REDACTED, REDACTED_APP_CREDENTIAL } from "../dist/redact.js"
+import { redactSecrets, isSecretKey, REDACTED, REDACTED_APP_CREDENTIAL, REDACTED_APP_SECRET } from "../dist/redact.js"
 
 test("redacts credential keys at any depth, keeps ids, does not mutate", () => {
   const input = {
@@ -15,7 +15,7 @@ test("redacts credential keys at any depth, keeps ids, does not mutate", () => {
   const out = redactSecrets(input)
   assert.deepEqual(input, copy, "input mutated")
   assert.equal(out._id, input._id); assert.equal(out.appId, input.appId)
-  assert.equal(out.appSecret, REDACTED); assert.equal(out.tenantSecret, REDACTED)
+  assert.equal(out.appSecret, REDACTED_APP_SECRET); assert.equal(out.tenantSecret, REDACTED)
   assert.equal(out.appToken, REDACTED_APP_CREDENTIAL)
   assert.equal(out.systemChatAccount.password, REDACTED); assert.equal(out.systemChatAccount.username, "sys")
   assert.equal(out.nested[0].walletPrivateKey, REDACTED); assert.equal(out.nested[0].mnemonic, REDACTED); assert.equal(out.nested[0].label, "keep")

@@ -88,7 +88,7 @@ The hosted server (`mcp.chat.ethora.com`) never lists the stdio-only wallet tool
 |---|---|---|---|---|---|
 | `ethora-api-key-list` | yes | no | yes | yes | Lists the caller's API keys (never their secret values); stores nothing. |
 | `ethora-api-key-revoke` | no | yes | yes | yes | Revokes an API key so it stops working; revoking twice changes nothing more. |
-| `ethora-app-credentials-reveal` | yes | no | yes | yes | Returns the appToken of an app the caller owns (every other tool redacts it); stores nothing. |
+| `ethora-app-credentials-reveal` | yes | no | yes | yes | Returns the appToken of an app the caller owns and, with `secret: true`, its App Secret (every other tool redacts both); stores nothing. |
 | `ethora-app-token-create` | no | no | no | yes | Issues a new app token; every call issues another token. |
 | `ethora-app-token-list` | yes | no | yes | yes | Lists an app's server tokens (never their secret values); stores nothing. |
 | `ethora-app-token-revoke` | no | yes | yes | yes | Revokes an app token; revoking twice changes nothing more. |

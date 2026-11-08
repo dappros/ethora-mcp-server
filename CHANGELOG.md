@@ -2,6 +2,11 @@
 
 All notable changes to this package are documented here. For cross-SDK release notes, see [ethora/RELEASE-NOTES.md](https://github.com/dappros/ethora/blob/main/RELEASE-NOTES.md).
 
+## 26.11.0 - 2026-11-08
+
+### Changed
+- `ethora-app-credentials-reveal` returns the App Secret as well when called with `secret: true` (owner only, `confirm: true` still required), so a script can provision an app and configure the backend SDK (`ETHORA_CHAT_APP_SECRET`) end to end without the dashboard. Without the flag it returns the appToken as before. Redacted `appSecret` values now name the call that reveals them.
+
 ## 26.10.2 - 2026-10-16
 
 ### Changed

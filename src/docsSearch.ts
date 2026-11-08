@@ -45,8 +45,11 @@ Never included in tool results (they show \`[redacted]\`). Reveal it on purpose 
 \`ethora-app-credentials-reveal { appId, confirm: true }\`; rotate it with \`ethora-app-token-rotate\`.
 
 ## App Secret and tenant secret
-Signing keys for the app's tokens. Never returned over MCP. Available only to the app owner
-in the web dashboard (app settings, API tab). Anything holding the secret can act as the app.
+Signing keys for the app's tokens. The App Secret is what the backend SDK needs
+(\`ETHORA_CHAT_APP_SECRET\`). The owner can reveal it with
+\`ethora-app-credentials-reveal { appId, confirm: true, secret: true }\` or read it in the web
+dashboard (app settings, API tab); every other tool redacts it. Anything holding the secret can
+act as the app, so it stays server-side.
 
 ## User API key
 A long-lived user token for assistants and agents (\`ethora-api-key-create\`, \`-list\`,

@@ -4,10 +4,12 @@
 // tenantSecret, appToken, system-chat passwords ...). An MCP tool result goes
 // into the model's context and the client vendor's logs, so those values must
 // not leave the server unless a tool exists specifically to reveal them
-// (`ethora-app-credentials-reveal`, the login/register/api-key tools).
+// (`ethora-app-credentials-reveal` for the appToken and, on request, the App
+// Secret; the login/register/api-key tools for their own tokens).
 
 export const REDACTED = "[redacted]"
 export const REDACTED_APP_CREDENTIAL = "[redacted - call ethora-app-credentials-reveal to reveal appToken]"
+export const REDACTED_APP_SECRET = "[redacted - call ethora-app-credentials-reveal { confirm: true, secret: true } to reveal appSecret]"
 
 // Exact key names (case-insensitive) that always carry a credential.
 const EXACT_KEYS = /^(appSecret|tenantSecret|appToken|appJwt|b2bToken|token|authToken|idToken|serverToken|password|secret|privateKey|mnemonic|seed|refreshToken|accessToken|jwt|apiKey|api_key|clientSecret)$/i
@@ -19,7 +21,9 @@ export function isSecretKey(key: string): boolean {
 }
 
 function replacementFor(key: string): string {
-  return /^appToken$/i.test(key) ? REDACTED_APP_CREDENTIAL : REDACTED
+  if (/^appToken$/i.test(key)) return REDACTED_APP_CREDENTIAL
+  if (/^appSecret$/i.test(key)) return REDACTED_APP_SECRET
+  return REDACTED
 }
 
 // Deep-copies `value`, replacing the value of every credential-named key at any

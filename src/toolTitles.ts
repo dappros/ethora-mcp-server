@@ -57,7 +57,7 @@ export const TOOL_TITLES: Record<string, string> = {
   "ethora-widget-appearance-set": "Set Widget Appearance",
   "ethora-app-list": "List Apps",
   "ethora-app-create": "Create App",
-  "ethora-app-credentials-reveal": "Reveal App Token",
+  "ethora-app-credentials-reveal": "Reveal App Credentials",
   "ethora-feedback-submit": "Send Feedback",
   "ethora-app-update": "Update App",
   "ethora-app-rooms-list": "List App Rooms",
