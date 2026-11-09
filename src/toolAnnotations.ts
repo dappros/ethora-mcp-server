@@ -116,7 +116,7 @@ export const TOOL_ANNOTATIONS: Record<string, ToolAnnotation> = {
   "ethora-file-delete": DELETE("Deletes a stored file; deleting twice changes nothing more."),
 
   // Credentials
-  "ethora-api-key-create": CREATE("Issues a new personal API key; every call issues another key."),
+  "ethora-api-key-create": CREATE("Issues a new personal API key (admin permission and an explicit confirm on an OAuth connection); every call issues another key."),
   "ethora-api-key-list": READ("Lists the caller's API keys (never their secret values); stores nothing."),
   "ethora-api-key-revoke": DELETE("Revokes an API key so it stops working; revoking twice changes nothing more."),
   "ethora-app-token-list": READ("Lists an app's server tokens (never their secret values); stores nothing."),

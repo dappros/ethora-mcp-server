@@ -67,6 +67,7 @@ export const OAUTH_INSTRUCTIONS = [
   "Ethora MCP Server: create and manage Ethora chat/messaging apps, users, chats, AI agents and bots through the Ethora API.",
   "This connection is authenticated through OAuth. The Ethora user's credentials are supplied by the MCP client; never ask the user for an Ethora password or API key, and do not look for login or register tools, they are not available on this connection.",
   ...AUTHENTICATED_COMMON,
+  "To authorise a script, a CI job or another client for the user: they can create an API key in the Ethora dashboard under Account > AI Assistants (the key then never passes through this conversation), or, if they ask you to, call `ethora-api-key-create { confirm: true }` (admin permission required; the key lives 30 days by default, has the account's full access and keeps working until revoked). Show a key once and never repeat it.",
   STARTER_PROMPTS_LINE,
   OAUTH_TOOLS_LINE,
   "If a tool is refused with INSUFFICIENT_SCOPE, the user granted fewer permissions when connecting; explain that and stop rather than retrying.",
