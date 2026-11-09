@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "ethora",
-  "version": "26.10.2",
+  "version": "26.11.1",
   "description": "Build and run chat apps, messaging rooms and AI agents on Ethora from ChatGPT: create an app, open rooms, add users, create agents with a knowledge base, put a chat widget on a website.",
   "author": {
     "name": "Dappros Ltd",

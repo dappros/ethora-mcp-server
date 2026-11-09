@@ -2,10 +2,13 @@
 
 All notable changes to this package are documented here. For cross-SDK release notes, see [ethora/RELEASE-NOTES.md](https://github.com/dappros/ethora/blob/main/RELEASE-NOTES.md).
 
-## Unreleased
+## 26.11.1 - 2026-11-08
 
 ### Added
 - MCP Server Card (extension SEP-2127) at `GET /mcp/server-card`, also answered at the pre-SEP path `/.well-known/mcp/server-card.json` that directory validators still probe, plus the AI Catalog entry point `/.well-known/ai-catalog.json` that points at it. Both carry the extension's media types, open CORS, a one-hour cache and an ETag with 304 on `If-None-Match`. The discovery document gains a `serverCard` field. Built from `src/serverCard.ts` from the same values as `server.json`'s remotes, and the protocol versions come from the SDK.
+
+### Fixed
+- The monthly release workflow committed the version bump without the two plugin manifests that `npm run sync-version` also stamps (`claude-plugin/.claude-plugin/plugin.json`, `openai-plugin/plugin.json`), so the publish step's manifest check failed and 26.10.2 and 26.11.0 never reached npm (latest there stayed 26.10.1). The bump commit now carries every synced file.
 
 ## 26.11.0 - 2026-11-08
 
