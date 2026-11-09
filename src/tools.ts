@@ -184,6 +184,32 @@ export function asToolResult(envelope: any): CallToolResult {
 
 // On the hosted server the client talks to the API over loopback; the address
 // a person or agent can use is the public one, so that is what goes out.
+/**
+ * The dashboard page where a person creates and revokes their API keys
+ * (Account > AI Assistants), derived from the public API URL. Undefined when
+ * the deployment's API host does not follow the `api.` / `app.` naming, so a
+ * wrong link is never offered.
+ */
+// What to do next about credentials, by how this session is authenticated.
+// On an OAuth connection the login tools do not exist, and the way to
+// authorise a script is a key: from the dashboard, or minted here on request.
+function hostedAuthAction(hasUserToken: boolean, state: any): string {
+  if (getSession().entry === "oauth") {
+    const manage = accountKeysUrl(publicApiUrlFor(state))
+    return `You are authenticated through OAuth. To authorise a script or another client, the user can create an API key in the dashboard${manage ? ` (${manage})` : " under Account > AI Assistants"}, or you can call \`ethora-api-key-create { confirm: true }\` after asking them (needs the admin permission; 30-day key).`
+  }
+  return hasUserToken
+    ? "You are authenticated. Use `ethora-api-key-create` for a reusable key."
+    : "Call `ethora-user-login` (existing account) or `ethora-user-register` (new account)."
+}
+
+export function accountKeysUrl(publicApiUrl: string): string | undefined {
+  const api = String(publicApiUrl || "").trim()
+  if (!/^https?:\/\/api\./i.test(api)) return undefined
+  const base = api.replace(/^https?:\/\/api\./i, "https://app.").replace(/\/v\d+\/?$/, "").replace(/\/+$/, "")
+  return `${base}/app/account?tab=AI%20Assistants`
+}
+
 export function publicApiUrlFor(state: any): string {
     return state?.hosted && appConfig.publicApiUrl ? String(appConfig.publicApiUrl) : String(state?.apiUrl || "")
 }
@@ -903,8 +929,10 @@ function helpTool(server: McpServer) {
                         notes: [
                             "apiUrl is fixed per deployment; `ethora-session-configure` cannot change it here.",
                             "Sessions are private: nothing from another client's session is visible to you.",
-                            "Manage keys with `ethora-api-key-create` / `ethora-api-key-list` / `ethora-api-key-revoke`.",
+                            "Manage keys with `ethora-api-key-create` / `ethora-api-key-list` / `ethora-api-key-revoke`, or in the dashboard under Account > AI Assistants.",
                         ],
+                        // Where a person creates and revokes API keys without a key value passing through a chat.
+                        ...(accountKeysUrl(publicApiUrlFor(state)) ? { apiKeysDashboardUrl: accountKeysUrl(publicApiUrlFor(state)) } : {}),
                     } : undefined,
                     availableAuthModes,
                     authModes,
@@ -1451,8 +1479,10 @@ function doctorTool(server: McpServer) {
                 if (state.hosted) {
                     suggestions.push({
                         severity: "info",
-                        message: "Hosted MCP server: identity comes from the `Authorization: Bearer` header or from `ethora-user-login` / `ethora-user-register` in this session.",
-                        action: checks.hasUserToken ? "You are authenticated. Use `ethora-api-key-create` for a reusable key." : "Call `ethora-user-login` (existing account) or `ethora-user-register` (new account).",
+                        message: getSession().entry === "oauth"
+                            ? "Hosted MCP server, OAuth connection: identity comes from the client's OAuth token; there is nothing to log in to."
+                            : "Hosted MCP server: identity comes from the `Authorization: Bearer` header or from `ethora-user-login` / `ethora-user-register` in this session.",
+                        action: hostedAuthAction(checks.hasUserToken, state),
                     })
                 }
                 return asToolResult(ok({ state, checks, ping, suggestions }, meta))
@@ -1978,18 +2008,35 @@ function apiKeyTools(server: McpServer) {
     server.registerTool(
         "ethora-api-key-create",
         {
-            description: "Mint a long-lived, revocable API key for the currently logged-in user. The key is a user token: send it as `Authorization: Bearer <key>` to the hosted MCP endpoint (or set it in the stdio client) to skip `ethora-user-login`. Shown once.\nAuth: user auth (logged in). Errors: 401 not logged in; 404 on backends without API key support.",
+            description: "Mint a revocable API key for the signed-in user, to authorise a script, a CI job or another AI client. The key is a user token with the account's full access: send it as `Authorization: Bearer <key>` to the Ethora API or the hosted MCP endpoint (or set it in the stdio client). Shown once; store it somewhere safe and do not repeat it in later messages. On an OAuth connection (Claude.ai, ChatGPT) this needs the admin permission and `confirm: true`, the key lives 30 days by default and 90 at most, and it keeps working after the connector is disconnected until it expires or is revoked with `ethora-api-key-revoke`. The user can also create and revoke keys in the dashboard under Account > AI Assistants.\nRequires: a signed-in user.\nAuth: user mode. Errors: 401 not signed in; 403 `INSUFFICIENT_SCOPE` without the admin permission on an OAuth connection; 409 `API_KEY_LIMIT_REACHED` at 20 active keys; 422 `ttlDays` out of range.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
             inputSchema: {
-                name: z.string().optional().describe("Label to recognise the key later (e.g. `ci-runner`, `claude-desktop`)."),
-                ttlDays: z.number().int().min(1).max(365).optional().describe("Lifetime in days. Server default applies when omitted."),
+                name: z.string().optional().describe("Label to recognise the key later (e.g. `ci-runner`, `import-script`). Defaults to a label naming the client that created it."),
+                ttlDays: z.number().int().min(1).max(365).optional().describe("Lifetime in days. Default 90 (30 on an OAuth connection, where the maximum is 90)."),
+                confirm: z.boolean().optional().describe("Required (`true`) on an OAuth connection: acknowledges that the key value will appear in this conversation and is not limited by this connection's permissions."),
             },
         },
-        async function ({ name, ttlDays }) {
+        async function ({ name, ttlDays, confirm }) {
             const meta = getDefaultMeta("ethora-api-key-create")
             try {
-                const key = await issueApiKey(name, ttlDays)
-                return asToolResult(ok(withConnectorUrl({ apiKey: key, usage: API_KEY_USAGE_HINT }, key.token), meta))
+                const session = getSession()
+                const viaOAuth = session.entry === "oauth"
+                if (viaOAuth && confirm !== true) {
+                    const err: any = new Error("Pass `confirm: true` to create an API key from this connection: the key value will appear in this conversation, has the account's full access and keeps working after the connector is disconnected. Ask the user first.")
+                    err.code = "CONFIRM_REQUIRED"
+                    throw err
+                }
+                // A key made in a chat should say where it came from when the
+                // user later sees it in the dashboard's key list.
+                const label = String(name || "").trim() || (viaOAuth ? `via ${String(session.client || "assistant").split("/")[0].slice(0, 40)}` : undefined)
+                const key = await issueApiKey(label, ttlDays)
+                const data: any = withConnectorUrl({ apiKey: key, usage: API_KEY_USAGE_HINT }, key.token)
+                if (viaOAuth) {
+                    data.note = "Show this key to the user once and do not repeat it. It has the account's full access, is not limited by this connection's permissions, and stays valid until it expires or is revoked (`ethora-api-key-revoke`, or the dashboard under Account > AI Assistants)."
+                    const manage = accountKeysUrl(publicApiUrlFor(getClientState()))
+                    if (manage) data.manageUrl = manage
+                }
+                return asToolResult(ok(data, meta))
             } catch (error) {
                 return asToolResult(fail(error, meta))
             }

@@ -28,24 +28,33 @@ export const SCOPE_EXEMPT_TOOLS = new Set([
   "ethora-tools-enable",
 ])
 
-// Tools hidden on the OAuth entry point: identity there comes from the OAuth
-// token, so session-level credential management makes no sense.
+// Tools hidden on the OAuth entry point. Signing in and reconfiguring the
+// session make no sense there (identity comes from the OAuth token), and the
+// app-token tools need a B2B credential an OAuth user does not hold.
+//
+// The user API key tools are NOT hidden: authorising a script or another
+// client from a chat is a real need. Creating a key is gated instead: it
+// requires the `admin` scope (the key is not limited by this connection's
+// scopes and outlives it) and an explicit `confirm`.
 export const OAUTH_HIDDEN_TOOLS = new Set([
   "ethora-user-login",
   "ethora-user-register",
   "ethora-session-configure",
   "ethora-auth-mode-set",
-  "ethora-auth-mode-set",
-  "ethora-auth-mode-set",
-  "ethora-api-key-create",
-  "ethora-api-key-list",
-  "ethora-api-key-revoke",
+  "ethora-app-token-create",
+  "ethora-app-token-list",
+  "ethora-app-token-revoke",
+  "ethora-app-token-rotate",
 ])
 
 // Per-tool overrides: tools whose annotations understate their sensitivity.
 // Revealing a credential is read-only in API terms but is an admin action.
 export const SCOPE_OVERRIDES: Record<string, Scope> = {
   "ethora-app-credentials-reveal": "admin",
+  // Minting a credential: the new key or token is not bound by this grant's
+  // scopes. The API enforces the same rule on its own routes.
+  "ethora-api-key-create": "admin",
+  "ethora-app-token-create": "admin",
   // Writes nothing the caller owns and must work on a read-only grant:
   // being unable to report a problem because of scope would be perverse.
   "ethora-feedback-submit": "read",

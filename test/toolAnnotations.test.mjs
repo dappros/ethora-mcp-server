@@ -84,4 +84,12 @@ test("the OAuth surface lists every offered tool up front and keeps nothing hidd
     assert.equal(t._hiddenByGroup, undefined, `${name} still marked hidden`)
   }
   assert.ok(removed.includes("ethora-tools-enable"))
+  // The user-auth key tools are offered on OAuth (gated by scope and confirm);
+  // the B2B-only app-token tools are not.
+  for (const n of ["ethora-api-key-create", "ethora-api-key-list", "ethora-api-key-revoke", "ethora-app-credentials-reveal"]) {
+    assert.ok(reg[n], `${n} must be offered on OAuth`)
+  }
+  for (const n of ["ethora-app-token-create", "ethora-app-token-list", "ethora-app-token-revoke", "ethora-app-token-rotate"]) {
+    assert.equal(reg[n], undefined, `${n} is B2B-only and must not exist on OAuth`)
+  }
 })

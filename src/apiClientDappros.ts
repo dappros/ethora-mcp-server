@@ -677,7 +677,9 @@ export function agentsActivateV2(agentId: string, body?: { chatJid?: string; app
 // app-token-only calls for that app work from a user session.
 export function rememberAppToken(appId: string, appToken: string) {
   const id = String(appId || "").trim(); const tok = String(appToken || "").trim()
-  if (!id || !tok) return
+  // The API replaces credentials with a `[redacted ...]` marker for an OAuth
+  // grant without the admin scope; a marker is not a token.
+  if (!id || !tok || tok.startsWith("[redacted")) return
   httpTokens.appToken = tok
   httpTokens.appTokenAppId = id
 }

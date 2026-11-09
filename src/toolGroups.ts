@@ -241,9 +241,12 @@ export function enableGroups(server: McpServer, groups: string[], entry: "open" 
 }
 
 // Groups never offered on the OAuth entry: they need credentials an OAuth user
-// does not hold (B2B and app tokens, session reconfiguration) or address the
-// pre-agents per-app bot. Everything else is listed up front there.
-export const OAUTH_HIDDEN_GROUPS = ["keys", "session", "b2b", "legacy-bot"]
+// does not hold (B2B tokens, session reconfiguration) or address the
+// pre-agents per-app bot. Everything else is listed up front there. The
+// `keys` group is offered: its user-auth tools (API keys, credentials reveal)
+// work for an OAuth user; its B2B-only app-token tools are in
+// OAUTH_HIDDEN_TOOLS.
+export const OAUTH_HIDDEN_GROUPS = ["session", "b2b", "legacy-bot"]
 
 /**
  * Shape the registry for an OAuth connection: every tool outside

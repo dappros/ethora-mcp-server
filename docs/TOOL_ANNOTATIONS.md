@@ -20,7 +20,7 @@ The hosted server (`mcp.chat.ethora.com`) never lists the stdio-only wallet tool
 | `ethora-agent-invite` | no | no | no | yes | Adds the agent to a room by creating its bot instance there; a second call for the same room reports the existing instance. |
 | `ethora-agent-list` | yes | no | yes | yes | Lists the caller's agents and the public ones; stores nothing. |
 | `ethora-agent-update` | no | yes | yes | yes | Overwrites fields of an existing agent (prompt, model, flows, settings); the same values applied twice give the same result. |
-| `ethora-api-key-create` | no | no | no | yes | Issues a new personal API key; every call issues another key. |
+| `ethora-api-key-create` | no | no | no | yes | Issues a new personal API key (admin permission and an explicit confirm on an OAuth connection); every call issues another key. |
 | `ethora-app-create` | no | no | no | yes | Creates a new app (tenant) owned by the caller; every call creates another app. |
 | `ethora-app-list` | yes | no | yes | yes | Lists the apps the caller owns; stores nothing. |
 | `ethora-app-select` | yes | no | yes | no | Sets which of the caller's apps later calls act on, in this conversation only; no server data changes. |
