@@ -462,7 +462,14 @@ function statusTool(server: McpServer) {
         },
         async function () {
             try {
-                return asToolResult(ok(getClientState(), getDefaultMeta("ethora-status")))
+                const state: any = { ...(getClientState() as any) }
+                // On an OAuth connection the doctor and login tools are not offered,
+                // so this is where the model learns how a script gets a credential.
+                if (getSession().entry === "oauth") {
+                    const dashboardUrl = accountKeysUrl(publicApiUrlFor(state))
+                    state.apiKeys = { how: hostedAuthAction(true, state), ...(dashboardUrl ? { dashboardUrl } : {}) }
+                }
+                return asToolResult(ok(state, getDefaultMeta("ethora-status")))
             } catch (error) {
                 return asToolResult(fail(error, getDefaultMeta("ethora-status")))
             }
