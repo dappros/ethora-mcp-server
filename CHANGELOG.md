@@ -13,6 +13,7 @@ All notable changes to this package are documented here. For cross-SDK release n
 ## 26.11.0 - 2026-11-08
 
 ### Added
+- `tags` on `ethora-source-doc-upload`: every document of the call is tagged in the same request, instead of one `ethora-source-doc-tags-update` per document afterwards.
 - API keys on the OAuth connection (Claude.ai, ChatGPT): `ethora-api-key-create`, `-list` and `-revoke` are offered there, so a script or another client can be authorised from a chat. Creating a key needs the admin permission and `confirm: true`; the API gives such a key 30 days by default and 90 at most. `ethora-status` / `ethora-doctor` and `ethora-help` point at the dashboard page (Account > AI Assistants) as the way to create a key without its value passing through a conversation; before, they recommended a tool that did not exist on that connection.
 - `ethora-app-credentials-reveal` is offered on the OAuth connection again (it was removed with the rest of the `keys` group in 26.10.2, although it works for an OAuth user); only the B2B-only app-token tools stay hidden there.
 - `ETHORA_MCP_DOTENV_OVERRIDE=true` inside `.env` makes the file win over inherited environment variables (hosted installs under PM2, where the process keeps the variables captured at the first start). Default unchanged: the environment wins, as a stdio client's config expects.
@@ -20,6 +21,7 @@ All notable changes to this package are documented here. For cross-SDK release n
 - Starter prompts: the connector landing page lists three paste-ready first prompts, and the server instructions tell the model to offer them when a request is too vague to act on.
 
 ### Changed
+- Tags now do what the descriptions said: the platform restricts an agent with `ragTags` to the sources carrying at least one of them (before, tags and `ragTags` were stored and never read at retrieval). The `ragTags` and tags-update descriptions state the rule, including that tags matching no source leave the agent without knowledge.
 - Scopes: creating an API key or an app token requires `admin`, matching the API, which now enforces OAuth scopes on its own routes (403 `INSUFFICIENT_SCOPE`) and withholds app credentials from a grant without `admin`. A `[redacted ...]` marker is never remembered as an app token.
 - `ethora-app-credentials-reveal` returns the App Secret as well when called with `secret: true` (owner only, `confirm: true` still required), so a script can provision an app and configure the backend SDK (`ETHORA_CHAT_APP_SECRET`) end to end without the dashboard. Without the flag it returns the appToken as before. Redacted `appSecret` values now name the call that reveals them.
 

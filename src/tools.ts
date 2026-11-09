@@ -2453,7 +2453,7 @@ function botUpdateV2Tool(server: McpServer) {
                 botLastName: z.string().optional().describe("Bot's last name in its user profile."),
                 botDisplayName: z.string().optional().describe("Bot's display name shown in chat."),
                 botAvatarUrl: z.string().optional().describe("Public URL of the bot's avatar image."),
-                ragTags: z.array(z.string().min(1)).optional().describe("Restrict RAG retrieval to sources tagged with these tags (see `ethora-source-site-tags-update` / `ethora-source-doc-tags-update`)."),
+                ragTags: z.array(z.string().min(1)).optional().describe("Restrict this agent's knowledge to sources carrying at least one of these tags (set tags with `ethora-source-doc-upload { tags }`, `ethora-source-doc-tags-update` or `ethora-source-site-tags-update`). Empty or omitted: the agent uses all its knowledge. If no source carries any of the tags the agent answers without knowledge, so tag the sources first."),
                 llmProvider: z.string().optional().describe("Leave empty. The deployment has one AI endpoint (OpenAI-compatible); `openai` and `openai-compatible` are accepted as synonyms, anything else is rejected with LLM_PROVIDER_UNSUPPORTED."),
                 llmModel: z.string().optional().describe("Model id served by this deployment's AI endpoint; omit for the platform default. `ethora-agent-model-list` returns the supported ids. An id the endpoint does not serve is rejected at creation with LLM_MODEL_UNSUPPORTED and the supported list, instead of failing later on every reply."),
                 widgetPublicEnabled: z.boolean().optional().describe("If true, expose the bot through a public embeddable chat widget."),
@@ -2551,7 +2551,7 @@ function agentsCreateV2Tool(server: McpServer) {
                 botDisplayName: z.string().optional().describe("Display name used inside the chat UI. Defaults to `name`."),
                 botAvatarUrl: z.string().optional().describe("URL of the avatar image shown next to bot messages."),
                 isRAG: z.boolean().optional().describe("Enable retrieval-augmented generation from indexed sources."),
-                ragTags: z.array(z.string().min(1)).optional().describe("Optional RAG tag filter — restrict retrieval to sources matching these tags."),
+                ragTags: z.array(z.string().min(1)).optional().describe("Restrict this agent's knowledge to sources carrying at least one of these tags; `[]` removes the restriction. If no source carries any of the tags the agent answers without knowledge, so tag the sources first."),
                 llmProvider: z.string().optional().describe("Leave empty. The deployment has one AI endpoint (OpenAI-compatible); `openai` and `openai-compatible` are accepted as synonyms, anything else is rejected with LLM_PROVIDER_UNSUPPORTED."),
                 llmModel: z.string().optional().describe("Model id served by this deployment's AI endpoint; omit for the platform default. `ethora-agent-model-list` returns the supported ids; an unsupported id is rejected with LLM_MODEL_UNSUPPORTED and that list."),
                 visibility: z.enum(["private", "public"]).optional().describe("'private' (only invitable inside the owning app) or 'public' (cross-app invitable)."),
@@ -2608,7 +2608,7 @@ function agentsUpdateV2Tool(server: McpServer) {
                 botDisplayName: z.string().optional().describe("Display name in chat UI."),
                 botAvatarUrl: z.string().optional().describe("Avatar image URL."),
                 isRAG: z.boolean().optional().describe("Enable RAG retrieval."),
-                ragTags: z.array(z.string().min(1)).optional().describe("RAG tag filter."),
+                ragTags: z.array(z.string().min(1)).optional().describe("Restrict the bot's knowledge to sources carrying at least one of these tags; `[]` removes the restriction."),
                 llmProvider: z.string().optional().describe("LLM provider override."),
                 llmModel: z.string().optional().describe("LLM model override."),
                 visibility: z.enum(["private", "public"]).optional().describe("'private' or 'public' (cross-app invitable)."),
@@ -4208,7 +4208,7 @@ function sourcesSiteTagsUpdateV2Tool(server: McpServer) {
     server.registerTool(
         "ethora-source-site-tags-update",
         {
-            description: "Set the RAG retrieval tags on a crawled website source — replaces the source's tag set with the provided `tags` array (not additive; pass `[]` to clear all). Tags let the bot's `ragTags` narrow retrieval.\nRequires: an indexed site URL from `ethora-source-site-list` (crawled with `ethora-source-site-crawl`).\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth; 404 unknown `appId` or `sourceId`. Related: get `sourceId` from `ethora-source-site-list`; doc equivalent is `ethora-source-doc-tags-update`.",
+            description: "Set the RAG retrieval tags on a crawled website source — replaces the source's tag set with the provided `tags` array (not additive; pass `[]` to clear all). Tags decide which agents read the source: an agent with `ragTags` answers only from sources carrying at least one of those tags; an agent without `ragTags` uses everything it has. If the tags match no source the agent has no knowledge to answer from, so tag the sources first.\nRequires: an indexed site URL from `ethora-source-site-list` (crawled with `ethora-source-site-crawl`).\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth; 404 unknown `appId` or `sourceId`. Related: get `sourceId` from `ethora-source-site-list`; doc equivalent is `ethora-source-doc-tags-update`.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("24-char hex appId the source belongs to. Required in B2B mode unless already set via `ethora-app-select`; ignored in app-token mode."),
@@ -4583,7 +4583,7 @@ function sourcesDocsUploadV2AppTool(server: McpServer) {
     server.registerTool(
         "ethora-source-doc-upload",
         {
-            description: "Upload documents (1–5; PDF, text, etc.) into an agent's knowledge base (the one named by `agentId`, else the app's default agent) (app-token / B2B variant of `ethora-source-doc-upload-legacy`). Async - content becomes queryable once indexing finishes; files passed as base64, 50MB max each.\nRequires: a selected app (`ethora-app-select`) or an explicit `appId`.\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth; 404 unknown `appId`; 413 too large; 422 unsupported document type. Related: `ethora-source-doc-list`, `ethora-source-doc-delete`.",
+            description: "Upload documents (1–5; PDF, text, etc.) into an agent's knowledge base (the one named by `agentId`, else the app's default agent) (app-token / B2B variant of `ethora-source-doc-upload-legacy`). Async - content becomes queryable once indexing finishes; files passed as base64, 50MB max each. Pass `tags` to tag every document of the call in the same request (no separate `ethora-source-doc-tags-update` per document); the result lists each document's id and tags.\nRequires: a selected app (`ethora-app-select`) or an explicit `appId`.\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth; 404 unknown `appId`; 413 too large; 422 unsupported document type. Related: `ethora-source-doc-list`, `ethora-source-doc-delete`.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("24-char hex appId to ingest into. Required in B2B mode unless already set via `ethora-app-select`; ignored in app-token mode."),
@@ -4593,13 +4593,16 @@ function sourcesDocsUploadV2AppTool(server: McpServer) {
                     base64: z.string().min(1).describe("Document content, base64-encoded. A `data:...;base64,` prefix is accepted. Max 50MB decoded per file."),
                 })).min(1).max(5).describe("1 to 5 documents to ingest in this call."),
                 agentId: z.string().optional().describe("Agent whose knowledge base gets the content (24-char hex, from `ethora-agent-list` / `ethora-agent-create`). Must be your own agent or one of this app's. Omit to file it under the app's default agent (the one answering its website widget); an app still on the shared Support Agent first gets its own copy of it."),
+                tags: z.array(z.string().min(1).max(64)).max(50).optional().describe("Tags to put on every document of this call (up to 50, 64 characters each), e.g. `[\"billing\", \"faq\"]`. An agent with `ragTags` answers only from sources carrying at least one of those tags; an agent without `ragTags` uses everything it has. If the tags match no source the agent has no knowledge to answer from, so tag the sources first. Change them later with `ethora-source-doc-tags-update`."),
             },
         },
-        async function ({ appId, files, agentId }) {
+        async function ({ appId, files, agentId, tags }) {
             try {
                 const ctx = resolveAppScopedV2Context(appId)
                 const form = new FormData()
                 if (agentId) form.append("agentId", agentId)
+                // One JSON field: a multipart form has no arrays.
+                if (Array.isArray(tags) && tags.length) form.append("tags", JSON.stringify(tags))
                 for (const f of files) {
                     const buf = normalizeBase64ToBuffer(f.base64)
                     if (buf.length > 50 * 1024 * 1024) {
@@ -4674,7 +4677,7 @@ function sourcesDocsTagsUpdateV2Tool(server: McpServer) {
     server.registerTool(
         "ethora-source-doc-tags-update",
         {
-            description: "Set the RAG retrieval tags on an ingested document — replaces the document's tag set with the provided `tags` array (not additive; pass `[]` to clear all). Tags let the bot's `ragTags` narrow retrieval.\nRequires: a document id from `ethora-source-doc-list`.\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth; 404 unknown `appId` or `docId`. Related: get `docId` from `ethora-source-doc-list`; website-source equivalent is `ethora-source-site-tags-update`.",
+            description: "Set the RAG retrieval tags on an ingested document — replaces the document's tag set with the provided `tags` array (not additive; pass `[]` to clear all). Tags decide which agents read the source: an agent with `ragTags` answers only from sources carrying at least one of those tags; an agent without `ragTags` uses everything it has. If the tags match no source the agent has no knowledge to answer from, so tag the sources first.\nRequires: a document id from `ethora-source-doc-list`.\nAuth: app-token mode OR B2B mode with an explicit `appId`. Errors: 401/403 wrong auth; 404 unknown `appId` or `docId`. Related: get `docId` from `ethora-source-doc-list`; website-source equivalent is `ethora-source-site-tags-update`.",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("24-char hex appId the document belongs to. Required in B2B mode unless already set via `ethora-app-select`; ignored in app-token mode."),
