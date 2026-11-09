@@ -2,28 +2,9 @@
 import { readFileSync } from "node:fs"
 import { resolve } from "node:path"
 
-// Load a local `.env` (cwd) before anything reads process.env. Real
-// environment variables always win over the file. Tiny parser on purpose: no
-// dotenv dependency for the npm CLI.
-function loadDotEnv() {
-  try {
-    const text = readFileSync(resolve(process.cwd(), ".env"), "utf8")
-    for (const rawLine of text.split(/\r?\n/)) {
-      const line = rawLine.trim()
-      if (!line || line.startsWith("#")) continue
-      const eq = line.indexOf("=")
-      if (eq <= 0) continue
-      const key = line.slice(0, eq).trim().replace(/^export\s+/, "")
-      let value = line.slice(eq + 1).trim()
-      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-        value = value.slice(1, -1)
-      }
-      if (process.env[key] === undefined) process.env[key] = value
-    }
-  } catch {
-    // no .env, fine
-  }
-}
+// Load a local `.env` (cwd) before anything reads process.env. See dotenv.ts
+// for the precedence rule (environment wins unless the file says otherwise).
+import { loadDotEnv } from "./dotenv.js"
 loadDotEnv()
 
 const { McpServer } = await import("@modelcontextprotocol/sdk/server/mcp.js")
