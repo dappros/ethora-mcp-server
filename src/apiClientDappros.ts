@@ -1,6 +1,7 @@
 import axios from "axios"
 import { appConfig, normalizeApiUrl, MCP_VERSION } from "./config.js"
 import { getSession, isHostedMode } from "./session.js"
+import { installRestartRetry } from "./restartRetry.js"
 
 // `httpTokens` / `ethoraContext` keep their historical shape, but every read
 // and write resolves against the *current* session (AsyncLocalStorage). In
@@ -211,6 +212,9 @@ httpClientDappros.interceptors.response.use(null, async (error) => {
     return Promise.reject(error);
   }
 });
+
+// A server restart or update: reads wait and retry, writes report it (src/restartRetry.ts).
+installRestartRetry(httpClientDappros)
 
 export const refreshToken = async () => {
   try {
