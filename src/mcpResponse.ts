@@ -1,3 +1,5 @@
+import { classifyRestart, restartErrorMessage } from "./restartRetry.js"
+
 export type McpEnvelope = {
   ok: boolean
   ts: string
@@ -11,6 +13,8 @@ export type McpEnvelope = {
     requestId?: string
     hint?: string
     details?: any
+    // True when calling again later is expected to work (a server restart or update).
+    retryable?: boolean
   }
 }
 
@@ -148,6 +152,24 @@ export function ok(data: any, meta?: Record<string, any>): McpEnvelope {
 }
 
 export function fail(error: unknown, meta?: Record<string, any>): McpEnvelope {
+  // The server is restarting or updating: say so, and that a later call works.
+  const restart = (error as any)?.ethoraRestart?.code ? { code: (error as any).ethoraRestart.code } : classifyRestart(error)
+  if (restart) {
+    const parsedR = parseAxiosishError(error)
+    return {
+      ok: false,
+      ts: isoNow(),
+      meta,
+      error: {
+        code: restart.code,
+        message: restartErrorMessage(restart.code),
+        httpStatus: parsedR.httpStatus,
+        requestId: parsedR.requestId,
+        hint: "Nothing is wrong with the request. Wait about a minute, then call the same tool again; reads were already retried for up to 45 seconds.",
+        retryable: true,
+      },
+    }
+  }
   const parsed = parseAxiosishError(error)
   const message = humaniseMessage(parsed.message)
   const httpStatus = parsed.httpStatus
