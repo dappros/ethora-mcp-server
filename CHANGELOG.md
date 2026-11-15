@@ -17,6 +17,9 @@ All notable changes to this package are documented here. For cross-SDK release n
 
 ## 26.11.0 - 2026-11-08
 
+### Fixed
+- Usage events: a session counted as authenticated (`entry: key`) whenever an Authorization header was present, valid or not, so scanners sending a junk bearer appeared as authenticated sessions. It now counts only once the bearer has validated.
+
 ### Added
 - `tags` on `ethora-source-doc-upload`: every document of the call is tagged in the same request, instead of one `ethora-source-doc-tags-update` per document afterwards.
 - API keys on the OAuth connection (Claude.ai, ChatGPT): `ethora-api-key-create`, `-list` and `-revoke` are offered there, so a script or another client can be authorised from a chat. Creating a key needs the admin permission and `confirm: true`; the API gives such a key 30 days by default and 90 at most. `ethora-status` / `ethora-doctor` and `ethora-help` point at the dashboard page (Account > AI Assistants) as the way to create a key without its value passing through a conversation; before, they recommended a tool that did not exist on that connection.

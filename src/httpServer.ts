@@ -456,7 +456,10 @@ export async function startHttpServer(opts: HttpServerOptions) {
         ts: new Date().toISOString(),
         serverVersion: opts.version,
         sessionId: session.id,
-        entry: kind === "oauth" ? "oauth" : (pathKey || headerJwt) ? "key" : "open",
+        // "key" only once the bearer has validated (identityKey set by
+        // attachAccountMemory): a scanner sending a junk Authorization header
+        // is an anonymous session, not an authenticated one.
+        entry: kind === "oauth" ? "oauth" : session.identityKey ? "key" : "open",
         client: session.client || "",
         userId: userIdFromIdentityKey(session.identityKey),
         appId: session.context.currentAppId || "",
