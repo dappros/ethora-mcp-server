@@ -7,6 +7,10 @@ All notable changes to this package are documented here. For cross-SDK release n
 ### Added
 - Server restarts and updates: when the Ethora API answers 503 `SERVER_RESTARTING` / `SERVER_UNAVAILABLE` (or a bare 502 / 503 / 504, or a refused / reset connection), reads (GET / HEAD) wait what `Retry-After` asks (3 s by default, 10 s at most) and retry for up to 45 seconds. Writes are not retried; the tool result says "The Ethora server is restarting or updating (SERVER_RESTARTING). Wait about a minute and call the tool again.", carries that code and `retryable: true`, and lands in the recent-failure context `ethora-feedback-submit` attaches. In `src/restartRetry.ts`, installed on the API client.
 
+## Unreleased
+### Fixed
+- Usage events: a session counted as authenticated (`entry: key`) whenever an Authorization header was present, valid or not, so scanners sending a junk bearer appeared as authenticated sessions. It now counts only once the bearer has validated.
+
 ## 26.11.1 - 2026-11-08
 
 ### Added
@@ -16,9 +20,6 @@ All notable changes to this package are documented here. For cross-SDK release n
 - The monthly release workflow committed the version bump without the two plugin manifests that `npm run sync-version` also stamps (`claude-plugin/.claude-plugin/plugin.json`, `openai-plugin/plugin.json`), so the publish step's manifest check failed and 26.10.2 and 26.11.0 never reached npm (latest there stayed 26.10.1). The bump commit now carries every synced file.
 
 ## 26.11.0 - 2026-11-08
-
-### Fixed
-- Usage events: a session counted as authenticated (`entry: key`) whenever an Authorization header was present, valid or not, so scanners sending a junk bearer appeared as authenticated sessions. It now counts only once the bearer has validated.
 
 ### Added
 - `tags` on `ethora-source-doc-upload`: every document of the call is tagged in the same request, instead of one `ethora-source-doc-tags-update` per document afterwards.
