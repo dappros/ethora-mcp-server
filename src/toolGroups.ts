@@ -57,9 +57,9 @@ export const TOOL_GROUPS: Record<string, { summary: string; tools: string[] }> =
     tools: ["ethora-app-delete", "ethora-app-export", "ethora-app-import", "ethora-app-rooms-list"],
   },
   rooms: {
-    summary: "Delete rooms, broadcast to many rooms, search messages, read message context and unread counts.",
+    summary: "Delete rooms, add and remove room members, broadcast to many rooms, search messages, read message context and unread counts.",
     tools: [
-      "ethora-chat-delete", "ethora-broadcast-send", "ethora-broadcast-job-get", "ethora-broadcast-job-wait",
+      "ethora-chat-delete", "ethora-chat-members-add", "ethora-chat-members-remove", "ethora-broadcast-send", "ethora-broadcast-job-get", "ethora-broadcast-job-wait",
       "ethora-message-search", "ethora-message-context", "ethora-chat-unread-counts",
     ],
   },

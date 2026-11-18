@@ -42,6 +42,21 @@ export function ensureTenantActorAuth() {
 }
 
 /**
+ * A room member as the users-access routes want it: the xmppUsername
+ * `${appId}_${userId}`. Accepts that, a bare user id (24 hex, as
+ * `ethora-user-batch-create` returns it) or a full JID.
+ */
+export function toMemberXmppUsername(appId: string, ref: string): string {
+    const local = String(ref || "").trim().split("@")[0]
+    if (!local) throw new Error("A member is empty: pass a user id or an xmppUsername (`${appId}_${userId}`).")
+    if (/^[a-f0-9]{24}$/i.test(local)) return `${appId}_${local}`
+    if (!local.startsWith(`${appId}_`)) {
+        throw new Error(`Member ${local} is not a user of app ${appId}: pass a user id or an xmppUsername starting with \`${appId}_\`.`)
+    }
+    return local
+}
+
+/**
  * Ethora room JIDs are `${appId}_${chatId}` (optionally followed by
  * `@conference.<xmpp host>`). Tools accept either the full JID or the bare
  * chatId; this normalises both.

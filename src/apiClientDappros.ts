@@ -476,14 +476,27 @@ export function appGetDefaultRoomsWithAppId(appId: string) {
   )
 }
 
-export function appCreateChat(appId: string, title: string, pinned: boolean) {
+export function appCreateChat(appId: string, title: string, pinned: boolean, membersOnly = false) {
+  // `membersOnly` is sent only when set: servers before it reject unknown fields.
   return httpClientDappros.post(
     `/apps/create-app-chat/${appId}`,
     {
       title,
-      pinned
+      pinned,
+      ...(membersOnly ? { membersOnly: true } : {}),
     }
   )
+}
+
+// Room members of an app chat - /v2/apps/:appId/chats/users-access (tenantActor).
+// `members` are xmppUsernames (`<appId>_<userId>`); answers carry per-member
+// `details` (added / already-member / removed / not-a-member / not-found ...).
+export function appChatMembersAddV2(appId: string, chatName: string, members: string[]) {
+  return httpClientDappros.post(`/v2/apps/${String(appId || "").trim()}/chats/users-access`, { chatName, members })
+}
+
+export function appChatMembersRemoveV2(appId: string, chatName: string, members: string[]) {
+  return httpClientDappros.delete(`/v2/apps/${String(appId || "").trim()}/chats/users-access`, { data: { chatName, members } })
 }
 
 export function appDeleteChat(appId: string, chatJid: string) {

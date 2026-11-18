@@ -47,6 +47,8 @@ import {
     appCreateV2,
     appGet,
     appCreateChat,
+    appChatMembersAddV2,
+    appChatMembersRemoveV2,
     appDelete,
     appDeleteChat,
     appGetDefaultRooms,
@@ -131,7 +133,7 @@ import { appConfig, MCP_VERSION } from "./config.js"
 import { fail, ok } from "./mcpResponse.js"
 import { redactSecrets } from "./redact.js"
 import { getSession, pushRecentError, isHostedMode } from "./session.js"
-import { ensureTenantActorAuth, splitRoomJid } from "./routeAuth.js"
+import { ensureTenantActorAuth, splitRoomJid, toMemberXmppUsername } from "./routeAuth.js"
 import { connectorUrl, CONNECTOR_URL_NOTE } from "./publicUrl.js"
 
 function errorToText(error: unknown) {
@@ -2254,29 +2256,31 @@ function craeteAppChatTool(server: McpServer) {
     server.registerTool(
         'ethora-chat-create',
         {
-            description: "Create a new chat room (MUC room) inside an app the caller owns. Every room created this way is listed in the app's rooms (`defaultRooms`); `pinned: true` additionally makes new users auto-join it (existing users are not added), `pinned: false` (default) keeps it opt-in. Returns the new room object including its JID.\nRequires: a selected app (`ethora-app-select`) or an explicit `appId`.\nAuth: user-auth mode, active session; the caller must own the app. Errors: 401 not logged in; 403 not owner; 404 unknown `appId`; 422 invalid `title`.",
+            description: "Create a new chat room (MUC room) inside an app the caller owns. Every room created this way is listed in the app's rooms (`defaultRooms`). By default it is an open room every user of the app joins automatically (`pinned: true` also pins it in their lists). `membersOnly: true` makes a private room instead: nobody joins it automatically and only people added with `ethora-chat-members-add` (and invited agents) can enter; that tool is in the `rooms` group, listed after `ethora-tools-enable { group: \"rooms\" }`. Returns the new room object including its JID.\nRequires: a selected app (`ethora-app-select`) or an explicit `appId`.\nAuth: user-auth mode, active session; the caller must own the app. Errors: 401 not logged in; 403 not owner; 404 unknown `appId`; 422 invalid `title` (or `membersOnly` on a server that predates it).",
             annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
             inputSchema: {
                 appId: z.string().optional().describe("24-char hex ObjectId of the app to create the chat room in. Optional — defaults to the app most recently passed to `ethora-app-select`."),
                 title: z.string().describe("Display name for the new chat room. Visible to all members; not required to be unique within the app."),
-                pinned: z.boolean().optional().default(false).describe("If `true`, the room is added to the app's default rooms list — every new user of the app auto-joins it. If `false`, the room exists but users must be added explicitly."),
+                pinned: z.boolean().optional().default(false).describe("If `true`, the room is pinned at the top of users' room lists. Whether users join it automatically is decided by `membersOnly`, not by this flag."),
+                membersOnly: z.boolean().optional().default(false).describe("If `true`, a private members-only room: nobody is added automatically, add people with `ethora-chat-members-add`. If `false` (default), an open room the app's users join automatically."),
             }
         },
-        async function ({ appId, title, pinned }) {
+        async function ({ appId, title, pinned, membersOnly }) {
             try {
                 const state = getClientState() as any
                 const effectiveAppId = appId || state.currentAppId
                 if (!effectiveAppId) {
                     throw new Error(APP_CONTEXT_MISSING_MESSAGE)
                 }
-                let result = await appCreateChat(effectiveAppId, title, pinned)
+                let result = await appCreateChat(effectiveAppId, title, pinned, membersOnly)
                 const roomData: any = result.data || {}
                 const roomObj: any = roomData.result || roomData.chat || roomData
                 const jid = String(roomObj?.jid || roomObj?.roomJid || "")
                 const out = {
                     ...roomData,
-                    created: { kind: "room", id: jid ? jid.split("_").slice(1).join("_") : undefined, jid: jid || undefined, name: roomObj?.title || title },
+                    created: { kind: "room", id: jid ? jid.split("_").slice(1).join("_") : undefined, jid: jid || undefined, name: roomObj?.title || title, membersOnly: Boolean(membersOnly) },
                     next: [
+                        ...(membersOnly ? [{ tool: "ethora-chat-members-add", args: { roomJid: jid || "<ROOM_JID>", members: ["<USER_ID>"] }, why: "A private room starts empty: add the people who may enter it (enable the `rooms` tool group first if the tool is not listed)." }] : []),
                         { tool: "ethora-agent-invite", args: { agentIdOrAddress: "<AGENT_ID>", chatJid: jid || "<ROOM_JID>" }, why: "Put an AI agent in the room (create one with ethora-agent-create first)." },
                         { tool: "ethora-message-send", args: { roomJid: jid || "<ROOM_JID>", text: "Hello", waitForReplySec: 45 }, why: "Post a message and wait for an agent's reply." },
                         { tool: "ethora-chat-history", args: { roomJid: jid || "<ROOM_JID>", limit: 20 }, why: "Read the room; each row has senderName and senderKind." },
@@ -2312,6 +2316,69 @@ function appDeleteChatTool(server: McpServer) {
                 return asToolResult(ok(result.data, getDefaultMeta("ethora-chat-delete")))
             } catch (error) {
                 return asToolResult(fail(error, getDefaultMeta("ethora-chat-delete")))
+            }
+        }
+    )
+}
+
+// users-access of an app chat (/v2/apps/:appId/chats/users-access, tenantActor):
+// the room is the JID ethora-chat-create returned, members are user ids or
+// xmppUsernames. Removal also bans the user from the room in XMPP and keeps
+// login / auto-join from adding them back; adding them again lifts both.
+function chatMembersArgs(roomJid: string, members: string[], appId?: string) {
+    const state = getClientState() as any
+    const room = splitRoomJid(roomJid, appId || state.currentAppId)
+    if (!Array.isArray(members) || members.length === 0) throw new Error("Pass at least one member: a user id or an xmppUsername.")
+    return { appId: room.appId, chatName: room.roomName, members: members.map((m) => toMemberXmppUsername(room.appId, m)) }
+}
+
+function chatMembersAddTool(server: McpServer) {
+    server.registerTool(
+        "ethora-chat-members-add",
+        {
+            description: "Add people to a chat room of an app: they get the room in their list and may enter it, including a private room made with `ethora-chat-create { membersOnly: true }`. Adding someone already in the room changes nothing. Also lifts an earlier `ethora-chat-members-remove`. Returns per-member `details` (`added`, `already-member`, `not-found`, `suspended`, ...).\nRequires: a room from `ethora-chat-create` and users of the app (`ethora-user-batch-create` returns their ids).\nAuth: user-auth mode (app admin) or B2B. Errors: 401 not logged in; 403 no access to the app; 404 room or user not found; 207 when only some members were added.",
+            annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+            inputSchema: {
+                roomJid: z.string().min(1).describe("Room JID `${appId}_${chatId}` (optionally with `@conference.<host>`), the `jid` returned by `ethora-chat-create`."),
+                members: z.array(z.string().min(1)).min(1).max(100).describe("Users to add: user ids (24 hex, as `ethora-user-batch-create` returns them) or xmppUsernames `${appId}_${userId}`. At most 100."),
+                appId: z.string().optional().describe("App of the room. Optional: taken from `roomJid`, else the selected app."),
+            },
+        },
+        async function ({ roomJid, members, appId }) {
+            const meta = getDefaultMeta("ethora-chat-members-add")
+            try {
+                ensureTenantActorAuth()
+                const args = chatMembersArgs(roomJid, members, appId)
+                const res = await appChatMembersAddV2(args.appId, args.chatName, args.members)
+                return asToolResult(ok(res.data, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
+            }
+        }
+    )
+}
+
+function chatMembersRemoveTool(server: McpServer) {
+    server.registerTool(
+        "ethora-chat-members-remove",
+        {
+            description: "Remove people from a chat room of an app. The room leaves their list, they are banned from it in XMPP (kicked if they are in it, refused if they try to enter), and logging in again does not bring them back, open room or not. Their account is untouched. Undo with `ethora-chat-members-add`. Returns per-member `details` (`removed`, `not-a-member`, `not-found`, ...).\nRequires: a room from `ethora-chat-create`.\nAuth: user-auth mode (app admin) or B2B. Errors: 401 not logged in; 403 no access to the app; 404 room or user not found; 207 when only some members were removed.",
+            annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
+            inputSchema: {
+                roomJid: z.string().min(1).describe("Room JID `${appId}_${chatId}` (optionally with `@conference.<host>`), the `jid` returned by `ethora-chat-create`."),
+                members: z.array(z.string().min(1)).min(1).max(100).describe("Users to remove: user ids (24 hex) or xmppUsernames `${appId}_${userId}`. At most 100."),
+                appId: z.string().optional().describe("App of the room. Optional: taken from `roomJid`, else the selected app."),
+            },
+        },
+        async function ({ roomJid, members, appId }) {
+            const meta = getDefaultMeta("ethora-chat-members-remove")
+            try {
+                ensureTenantActorAuth()
+                const args = chatMembersArgs(roomJid, members, appId)
+                const res = await appChatMembersRemoveV2(args.appId, args.chatName, args.members)
+                return asToolResult(ok(res.data, meta))
+            } catch (error) {
+                return asToolResult(fail(error, meta))
             }
         }
     )
@@ -5056,6 +5123,8 @@ export function registerTools(server: McpServer) {
     appCreateTool(server);
     appUpdateTool(server);
     craeteAppChatTool(server);
+    chatMembersAddTool(server);
+    chatMembersRemoveTool(server);
     appDeleteChatTool(server);
     getDefaultRoomsWithAppIdTool(server);
     walletGetBalanceTool(server);

@@ -96,6 +96,8 @@ export const TOOL_ANNOTATIONS: Record<string, ToolAnnotation> = {
   // Rooms and messages
   "ethora-chat-create": CREATE("Creates a new chat room in the app; every call creates another room."),
   "ethora-chat-delete": DELETE("Deletes a chat room and its messages; deleting twice changes nothing more."),
+  "ethora-chat-members-add": TOGGLE("Gives users access to a room; adding someone already in it changes nothing."),
+  "ethora-chat-members-remove": DELETE("Takes users out of a room and bans them from it; removing twice changes nothing more."),
   "ethora-chat-history": READ("Returns messages of a room the caller can access; stores nothing."),
   "ethora-message-send": A(false, false, false, true, "Posts a message into a room where other people and agents read it; every call posts another message."),
   "ethora-message-search": READ("Searches message text in the caller's rooms; stores nothing."),

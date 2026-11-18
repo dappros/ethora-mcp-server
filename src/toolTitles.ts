@@ -63,6 +63,8 @@ export const TOOL_TITLES: Record<string, string> = {
   "ethora-app-rooms-list": "List App Rooms",
   "ethora-chat-create": "Create Chat Room",
   "ethora-chat-delete": "Delete Chat Room",
+  "ethora-chat-members-add": "Add Chat Room Members",
+  "ethora-chat-members-remove": "Remove Chat Room Members",
   "ethora-app-delete": "Delete App",
   "ethora-wallet-balance-get": "Get Wallet Balance",
   "ethora-wallet-erc20-transfer": "Transfer ERC-20 Tokens (stdio only)",
