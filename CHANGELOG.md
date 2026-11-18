@@ -5,6 +5,8 @@ All notable changes to this package are documented here. For cross-SDK release n
 ## Unreleased
 
 ### Added
+- Private rooms: `ethora-chat-create { membersOnly: true }` makes a members-only room that nobody joins automatically; the result's `next` points at `ethora-chat-members-add`. Needs a backend with `membersOnly` on `/apps/create-app-chat` (an older one answers 422). `pinned` is now described as what it is (pinned in users' lists); joining automatically is the room's auto-join, which a members-only room never has.
+- `ethora-chat-members-add` and `ethora-chat-members-remove` (group `rooms`) add people to and remove them from a room of an app through `/v2/apps/:appId/chats/users-access`. Members are user ids (as `ethora-user-batch-create` returns them) or xmppUsernames; the result carries per-member `details`. Removal takes the room out of the user's list and bans them from it, open room or not; adding them again lifts that.
 - Server restarts and updates: when the Ethora API answers 503 `SERVER_RESTARTING` / `SERVER_UNAVAILABLE` (or a bare 502 / 503 / 504, or a refused / reset connection), reads (GET / HEAD) wait what `Retry-After` asks (3 s by default, 10 s at most) and retry for up to 45 seconds. Writes are not retried; the tool result says "The Ethora server is restarting or updating (SERVER_RESTARTING). Wait about a minute and call the tool again.", carries that code and `retryable: true`, and lands in the recent-failure context `ethora-feedback-submit` attaches. In `src/restartRetry.ts`, installed on the API client.
 
 ### Fixed
